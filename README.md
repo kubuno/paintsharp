@@ -10,9 +10,24 @@
 ![React](https://img.shields.io/badge/React-19-61dafb.svg)
 ![Module](https://img.shields.io/badge/Kubuno-module-4D38DB.svg)
 
-**Kubuno PaintSharp — module d'édition 3D**
+**Kubuno PaintSharp — the creative suite.**
 
 A module for [Kubuno](https://github.com/kubuno/core), the self-hosted, libre (AGPLv3) cloud platform.
+
+## Apps
+
+PaintSharp bundles several creative editors, each reachable under `/paintsharp/<app>`:
+
+| App | Path | What it does |
+|---|---|---|
+| 🖌️ **Layer** | `/paintsharp/layer` | Raster / image editor (Photoshop-like) |
+| ✒️ **Apex** | `/paintsharp/apex` | Vector editor (paths, nodes, gradients) |
+| 📦 **Vertex** | `/paintsharp/vertex` | 3D editor |
+| 🎬 **Motion** | `/paintsharp/motion` | Video editor |
+| 🎞️ **Keyframe** | `/paintsharp/keyframe` | 2D animation |
+| 📝 **PdfWriter** | `/paintsharp/pdfwriter` | PDF editor (import & edit content) |
+
+The editors share a common UI library (EditorShell, color tools, navigator…).
 
 ## Architecture
 
