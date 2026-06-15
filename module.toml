@@ -1,0 +1,95 @@
+[module]
+id            = "paintsharp"
+display_name  = "PaintSharp"
+version       = "0.1.0"
+description   = "Suite créative — Layer (raster), Apex (vectoriel), Motion (vidéo), Vertex (3D), Keyframe (animation 2D), PdfWriter (édition PDF)."
+author        = "Kubuno Contributors"
+license       = "AGPL-3.0"
+homepage_url  = "https://github.com/kubuno/kubuno"
+runtime       = "rust"
+dependencies  = []
+settings_path = "/paintsharp/settings"
+
+[process]
+entrypoint = "kubuno-paintsharp"
+args       = []
+
+[server]
+host = "127.0.0.1"
+port = 3106
+
+[routes]
+patterns = [
+    { method = "*", path = "/*" },
+]
+
+# Entrée principale de la suite
+[[sidebar_items]]
+id       = "paintsharp"
+label    = "Paintsharp"
+icon     = "Palette"
+path     = "/paintsharp"
+position = 35
+protected_folder = "PaintSharp"
+section  = "main"
+
+# Sous-modules
+[[sidebar_items]]
+id       = "paintsharp-vertex"
+label    = "Vertex"
+icon     = "Box"
+path     = "/paintsharp/vertex"
+position = 36
+section  = "main"
+
+[[sidebar_items]]
+id       = "paintsharp-layer"
+label    = "Layer"
+icon     = "Image"
+path     = "/paintsharp/layer"
+position = 37
+section  = "main"
+
+[[sidebar_items]]
+id       = "paintsharp-apex"
+label    = "Apex"
+icon     = "PenTool"
+path     = "/paintsharp/apex"
+position = 38
+section  = "main"
+
+[[sidebar_items]]
+id       = "paintsharp-motion"
+label    = "Motion"
+icon     = "Film"
+path     = "/paintsharp/motion"
+position = 39
+section  = "main"
+
+[[sidebar_items]]
+id       = "paintsharp-keyframe"
+label    = "Keyframe"
+icon     = "Clapperboard"
+path     = "/paintsharp/keyframe"
+position = 40
+section  = "main"
+
+[[sidebar_items]]
+id       = "paintsharp-pdfwriter"
+label    = "PdfWriter"
+icon     = "FileEdit"
+path     = "/paintsharp/pdfwriter"
+position = 41
+section  = "main"
+
+[[sidebar_items]]
+id       = "paintsharp-trash"
+label    = "Corbeille"
+icon     = "Trash2"
+path     = "/paintsharp/trash"
+position = 99
+section  = "secondary"
+
+[events]
+subscribed = ["UserDeleted"]
+publishes  = []
