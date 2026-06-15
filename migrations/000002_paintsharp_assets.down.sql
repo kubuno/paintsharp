@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS scene_assets;
+DROP TABLE IF EXISTS assets;

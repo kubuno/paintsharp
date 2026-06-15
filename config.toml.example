@@ -1,0 +1,32 @@
+# ─── Kubuno Paintsharp — Configuration ─────────────────────────────────────────────
+# Suite créative : Layer (raster) · Apex (vectoriel) · Motion (vidéo)
+#                  Vertex (3D) · Keyframe (animation 2D)
+#
+# Copiez ce fichier en config.toml et adaptez les valeurs.
+# Les variables d'environnement préfixées KF__ surchargent ce fichier.
+# Exemple : KF__SERVER__PORT=3106
+
+[server]
+host = "127.0.0.1"
+port = 3106
+
+[core]
+# URL du core Kubuno (pour l'enregistrement du module)
+url             = "http://127.0.0.1:8080"
+# Secret partagé — doit correspondre à server.internal_secret dans le core
+internal_secret = "change_me"
+
+# ── Base de données ───────────────────────────────────────────────────────────
+# Les paramètres de connexion sont injectés par le superviseur Kubuno via
+# KUBUNO_DB_HOST / KUBUNO_DB_PORT / KUBUNO_DB_USER / KUBUNO_DB_PASSWORD / KUBUNO_DB_NAME.
+# Pour un démarrage hors superviseur, exporter ces variables manuellement.
+
+[paintsharp]
+# Taille maximale d'un fichier de scène exporté (en octets). Défaut : 50 Mo
+max_scene_bytes = 52428800
+# Taille maximale d'un asset importé (mesh, texture). Défaut : 100 Mo
+max_asset_bytes = 104857600
+
+[logging]
+level  = "info"
+format = "pretty"
