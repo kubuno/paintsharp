@@ -1,5 +1,5 @@
 import {
-  useRef, useState, useEffect, useCallback, useLayoutEffect, memo,
+  useRef, useState, useEffect, useCallback, useLayoutEffect, memo, lazy, Suspense,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -8,10 +8,28 @@ import {
   Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight,
   Repeat, Download, ZoomIn, ZoomOut, Plus, Eye, EyeOff,
   Trash2, ChevronDown, ChevronRight as ChevronRightIcon,
-  MousePointer, Square, Type, Image as ImageIcon, Layers, GripVertical,
+  MousePointer, Square, Type, Image as ImageIcon, Layers, GripVertical, PenTool, Brush,
+  Undo2, Redo2,
 } from 'lucide-react'
 import clsx from 'clsx'
-import { keyframeApi, type AnimData, type AnimLayer, type AnimProperty, type AnimKeyframe, type EasingDef } from './api'
+import { keyframeApi, type AnimData, type AnimLayer, type AnimProperty, type AnimKeyframe, type EasingDef, type VectorPageData } from './api'
+import { pageDataToSvg } from './apexSvg'
+import { exportFramesToMp4, webCodecsAvailable } from './frameExport'
+
+// The frame-by-frame editors are the REAL Apex / Layer editors mounted in embedded
+// mode (full-screen) — so every feature they gain is instantly available here.
+const ApexEditor  = lazy(() => import('./ApexEditorPage'))
+const LayerEditor = lazy(() => import('./LayerEditorPage'))
+
+// Rasterise an SVG string to a PNG data URL at the given size (for cel display).
+function rasterizeSvg(svg: string, w: number, h: number): Promise<string> {
+  return new Promise(res => {
+    const img = new Image()
+    img.onload = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; const ctx = c.getContext('2d'); if (!ctx) return res(''); ctx.drawImage(img, 0, 0, w, h); res(c.toDataURL('image/png')) }
+    img.onerror = () => res('')
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
+  })
+}
 import { Dropdown } from '@ui'
 import { useFilesDialogStore } from '@kubuno/drive'
 import { C as SHELL_C, EditorShell, DockArea, paintsharpMenus, useContextMenu, type CtxItem } from './ui'
@@ -88,8 +106,8 @@ class SceneRenderer {
   private dpr:    number
   private imgCache = new Map<string, HTMLImageElement>()
 
-  constructor(canvas: HTMLCanvasElement, w: number, h: number) {
-    this.dpr    = Math.min(window.devicePixelRatio || 1, 2)
+  constructor(canvas: HTMLCanvasElement, w: number, h: number, dprOverride?: number) {
+    this.dpr    = dprOverride ?? Math.min(window.devicePixelRatio || 1, 2)
     this.width  = w
     this.height = h
     canvas.width  = w * this.dpr
@@ -98,6 +116,12 @@ class SceneRenderer {
     canvas.style.height = `${h}px`
     this.ctx = canvas.getContext('2d')!
     this.ctx.scale(this.dpr, this.dpr)
+  }
+
+  // Pre-populate the image cache with already-decoded images (used by the exporter
+  // so frames render synchronously instead of waiting on async image loads).
+  setImages(map: Map<string, HTMLImageElement>): void {
+    for (const [k, v] of map) this.imgCache.set(k, v)
   }
 
   render(anim: AnimData, frame: number, bg: string, selectedId?: string | null, onionFrames?: number[]): void {
@@ -204,6 +228,22 @@ class SceneRenderer {
       ctx.textAlign    = d.textAlign as CanvasTextAlign
       ctx.textBaseline = 'top'
       ctx.fillText(d.content, 0, 0)
+    } else if (d.type === 'paint') {
+      // Frame-by-frame cel: draw the most recent frame image at or before `frame`
+      // (hold exposure), so a drawing stays on screen until the next one.
+      const keys = Object.keys(d.frames).map(Number).filter(n => n <= frame)
+      if (!keys.length) return
+      const best = Math.max(...keys)
+      const src = d.frames[String(best)]
+      if (!src) return
+      let img = this.imgCache.get(src)
+      if (!img) {
+        img = new Image()
+        img.onload = () => this.imgCache.set(src, img!)
+        img.src = src
+        this.imgCache.set(src, img)
+      }
+      if (img.complete && img.naturalWidth > 0) ctx.drawImage(img, 0, 0, d.width, d.height)
     } else if (d.type === 'image' || d.type === 'vector') {
       const src = (d as any).storagePath as string | undefined
       if (!src) return
@@ -894,6 +934,9 @@ export default function KeyframeEditorPage() {
   const [tool,    setTool]    = useState<'select' | 'rectangle' | 'text'>('select')
   const [autoKey, setAutoKey] = useState(false)   // enregistre un keyframe à chaque modif
   const [onion,   setOnion]   = useState(false)   // pelure d'oignon
+  // Frame-by-frame drawing: when set, the real Apex/Layer editor is mounted full-screen
+  // to paint the cel layer `layerId` at the current frame.
+  const [drawState, setDrawState] = useState<{ layerId: string; kind: 'vector' | 'raster' } | null>(null)
 
   // Crée le renderer paresseusement (le canevas est garanti monté une fois
   // animData chargé) et le recrée si la taille de composition change ; sinon
@@ -947,6 +990,32 @@ export default function KeyframeEditorPage() {
   }
 
   // ── Keyframe editing ──────────────────────────────────────────────────────
+  // ── Undo / Redo (debounced AnimData snapshots) ──────────────────────────────
+  const histRef = useRef<{ past: string[]; future: string[]; last: string; suppress: boolean }>({ past: [], future: [], last: '', suppress: false })
+  const [, setHistTick] = useState(0)
+  useEffect(() => {
+    if (!animData) return
+    const json = JSON.stringify(animData)
+    const h = histRef.current
+    if (json === h.last) return
+    if (h.suppress) { h.last = json; h.suppress = false; return }
+    const handle = setTimeout(() => {
+      if (h.last) { h.past.push(h.last); if (h.past.length > 60) h.past.shift() }
+      h.future = []; h.last = json; setHistTick(v => v + 1)
+    }, 420)
+    return () => clearTimeout(handle)
+  }, [animData])
+  const undoAnim = useCallback(() => {
+    const h = histRef.current; if (!h.past.length) return
+    h.future.push(h.last); const prev = h.past.pop()!; h.last = prev; h.suppress = true
+    const d = JSON.parse(prev) as AnimData; setAnimData(d); saveMut.mutate(d); setHistTick(v => v + 1)
+  }, [saveMut])
+  const redoAnim = useCallback(() => {
+    const h = histRef.current; if (!h.future.length) return
+    h.past.push(h.last); const next = h.future.pop()!; h.last = next; h.suppress = true
+    const d = JSON.parse(next) as AnimData; setAnimData(d); saveMut.mutate(d); setHistTick(v => v + 1)
+  }, [saveMut])
+
   const updateAnimData = useCallback((updater: (d: AnimData) => AnimData) => {
     setAnimData(prev => {
       if (!prev) return prev
@@ -1082,6 +1151,63 @@ export default function KeyframeEditorPage() {
     updateAnimData(d => ({ ...d, layers: [newLayer, ...d.layers] }))
     setSelectedLayerId(id)
   }, [updateAnimData, comp, t])
+
+  // ── Frame-by-frame (cel) drawing ────────────────────────────────────────────
+  const make0 = (v: number): AnimProperty<number> => ({ staticValue: v, keyframes: [] })
+  const newPaintLayer = useCallback((): string => {
+    const id = crypto.randomUUID()
+    const layer: AnimLayer = {
+      id, type: 'paint', name: t('keyframe_paint_layer', { defaultValue: 'Dessin' }),
+      parentId: null, inPoint: 0, outPoint: comp.duration_frames,
+      solo: false, locked: false, visible: true, blendMode: 'normal',
+      data: { type: 'paint', width: comp.width, height: comp.height, frames: {}, vframes: {} },
+      effects: [],
+      properties: {
+        positionX: make0(0), positionY: make0(0), rotation: make0(0),
+        scaleX: make0(1), scaleY: make0(1), opacity: make0(100), anchorX: make0(0), anchorY: make0(0),
+      },
+    }
+    updateAnimData(d => ({ ...d, layers: [layer, ...d.layers] }))
+    setSelectedLayerId(id)
+    return id
+  }, [updateAnimData, comp, t]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Open the embedded editor (real Apex / Layer) to draw the current frame. Reuses
+  // the selected paint layer or creates one.
+  const openDraw = useCallback((kind: 'vector' | 'raster') => {
+    setIsPlaying(false)
+    // Prefer the selected paint layer, else the topmost existing one, else create.
+    const sel = animData?.layers.find(l => l.id === selectedLayerId && l.data.type === 'paint')
+    const any = animData?.layers.find(l => l.data.type === 'paint')
+    const layerId = sel ? sel.id : (any ? any.id : newPaintLayer())
+    if (any && !sel) setSelectedLayerId(any.id)
+    setDrawState({ layerId, kind })
+  }, [animData, selectedLayerId, newPaintLayer])
+
+  // Store a drawn cel back into the layer at the current frame.
+  const commitVector = useCallback(async (pageData: VectorPageData) => {
+    if (!drawState) return
+    const png = await rasterizeSvg(pageDataToSvg(pageData), comp.width, comp.height)
+    const fk = String(frame)
+    updateAnimData(d => ({
+      ...d,
+      layers: d.layers.map(l => l.id === drawState.layerId && l.data.type === 'paint'
+        ? { ...l, data: { ...l.data, frames: { ...l.data.frames, [fk]: png }, vframes: { ...(l.data.vframes ?? {}), [fk]: pageData } } }
+        : l),
+    }))
+  }, [drawState, comp.width, comp.height, frame, updateAnimData])
+
+  // Store a raster cel (PNG) from the embedded Layer editor at the current frame.
+  const commitRaster = useCallback((png: string) => {
+    if (!drawState) return
+    const fk = String(frame)
+    updateAnimData(d => ({
+      ...d,
+      layers: d.layers.map(l => l.id === drawState.layerId && l.data.type === 'paint'
+        ? { ...l, data: { ...l.data, frames: { ...l.data.frames, [fk]: png } } }
+        : l),
+    }))
+  }, [drawState, frame, updateAnimData])
 
   const handleImportImage = useCallback(async () => {
     const file = await useFilesDialogStore.getState().openFile({
@@ -1347,14 +1473,51 @@ export default function KeyframeEditorPage() {
     resizeDrag.current = null
   }, [saveMut])
 
-  const handleExport = () => {
-    window.open(keyframeApi.exportLottie(id!), '_blank')
+  const handleExportLottie = () => {
+    if (id) window.open(keyframeApi.exportLottie(id), '_blank')
   }
+
+  // ── Video export (frame-by-frame → MP4, deterministic) ──────────────────────
+  const [showExport, setShowExport]     = useState(false)
+  const [videoProgress, setVideoProgress] = useState<number | null>(null)
+  const exportVideo = useCallback(async () => {
+    if (!animData) return
+    setVideoProgress(0)
+    try {
+      // Preload + decode every image (cels + image layers) so frames render sync.
+      const srcs = new Set<string>()
+      for (const l of animData.layers) {
+        if (l.data.type === 'paint') Object.values(l.data.frames).forEach(s => { if (s) srcs.add(s) })
+        else if (l.data.type === 'image' || l.data.type === 'vector') { const s = (l.data as { storagePath?: string }).storagePath; if (s) srcs.add(s) }
+      }
+      const imgs = new Map<string, HTMLImageElement>()
+      await Promise.all([...srcs].map(async s => { const img = new Image(); img.src = s; try { await img.decode() } catch { /* */ } imgs.set(s, img) }))
+      const w = comp.width, h = comp.height
+      const c = document.createElement('canvas')
+      const renderer = new SceneRenderer(c, w, h, 1)
+      renderer.setImages(imgs)
+      const blob = await exportFramesToMp4({
+        width: w, height: h, fps: comp.fps, frameCount: comp.duration_frames,
+        getFrame: (f) => { renderer.render(animData, f, comp.background); return c },
+        onProgress: p => setVideoProgress(p),
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url
+      a.download = `${(titleDraft || 'animation').replace(/[/\\?%*:|"<>]/g, '-')}.mp4`
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      setShowExport(false)
+    } catch (e) { console.error('video export failed', e) }
+    setVideoProgress(null)
+  }, [animData, comp, titleDraft]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName)) return
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName) || drawState) return
+      const mod = e.ctrlKey || e.metaKey
+      if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undoAnim(); return }
+      if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redoAnim(); return }
       if (e.code === 'Space') { e.preventDefault(); handlePlayPause() }
       if (e.code === 'Home')  { setFrame(0) }
       if (e.code === 'End')   { setFrame(comp.duration_frames - 1) }
@@ -1363,7 +1526,7 @@ export default function KeyframeEditorPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [comp.duration_frames, handlePlayPause])
+  }, [comp.duration_frames, handlePlayPause, undoAnim, redoAnim, drawState])
 
   // ─────────────────────────────────────────────────────────────────────────
   if (isLoading || !animData) {
@@ -1402,7 +1565,75 @@ export default function KeyframeEditorPage() {
     ) },
   }
 
+  // Inline frame-by-frame editor: the REAL Apex/Layer editor embedded over the
+  // Keyframe stage region — Keyframe's topbar, transport, tool rail and timeline
+  // stay visible so you draw the current frame in context.
+  const drawEmbed = (() => {
+    if (!drawState) return null
+    const layer = animData.layers.find(l => l.id === drawState.layerId)
+    const data = layer && layer.data.type === 'paint' ? layer.data : null
+    if (!data) return null
+    const fk = String(frame)
+    return (
+      <div className="absolute inset-0" style={{ zIndex: 50, background: '#141414' }}>
+        <Suspense fallback={<div className="h-full flex items-center justify-center text-sm" style={{ color: '#888' }}>{t('common_loading')}</div>}>
+          {drawState.kind === 'vector' && (
+            <ApexEditor embed={{
+              width: comp.width, height: comp.height,
+              initialData: data.vframes?.[fk] ?? null,
+              title: `${t('keyframe_frame', { defaultValue: 'Image' })} ${frame}`,
+              onCommit: commitVector,
+              onClose: () => setDrawState(null),
+            }} />
+          )}
+          {drawState.kind === 'raster' && (
+            <LayerEditor embed={{
+              width: comp.width, height: comp.height,
+              initial: data.frames?.[fk] ?? null,
+              title: `${t('keyframe_frame', { defaultValue: 'Image' })} ${frame}`,
+              onCommit: commitRaster,
+              onClose: () => setDrawState(null),
+            }} />
+          )}
+        </Suspense>
+      </div>
+    )
+  })()
+
   return (
+    <>
+    {showExport && (
+      <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 2147483001, background: 'rgba(0,0,0,0.6)' }}
+           onClick={videoProgress == null ? () => setShowExport(false) : undefined}>
+        <div className="rounded-xl border w-96 p-6" style={{ background: '#1a1a1a', borderColor: '#333', color: '#e0e0e0' }} onClick={e => e.stopPropagation()}>
+          <h2 className="text-base font-semibold mb-1">{t('keyframe_export_title', { defaultValue: 'Exporter l\'animation' })}</h2>
+          <p className="text-xs mb-4" style={{ color: '#9e9e9e' }}>{comp.width}×{comp.height} · {comp.fps} fps · {comp.duration_frames} {t('keyframe_frames', { defaultValue: 'images' })}</p>
+          {videoProgress != null ? (
+            <div className="mb-2">
+              <div className="h-2 rounded-full overflow-hidden" style={{ background: '#2a2a2a' }}>
+                <div className="h-full" style={{ width: `${Math.round(videoProgress * 100)}%`, background: C.accent, transition: 'width .1s' }} />
+              </div>
+              <p className="text-xs mt-1" style={{ color: '#9e9e9e' }}>{t('keyframe_export_rendering', { defaultValue: 'Rendu…' })} {Math.round(videoProgress * 100)}%</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <button onClick={exportVideo} disabled={!webCodecsAvailable()}
+                      className="flex items-center justify-center gap-2 h-9 rounded-lg text-sm font-medium disabled:opacity-40"
+                      style={{ background: C.accent, color: '#fff' }}>
+                <Download size={14} /> {t('keyframe_export_mp4', { defaultValue: 'Vidéo MP4 (H.264)' })}
+              </button>
+              <button onClick={() => { handleExportLottie(); setShowExport(false) }}
+                      className="flex items-center justify-center gap-2 h-9 rounded-lg text-sm border"
+                      style={{ borderColor: '#3a3a3a', color: '#e0e0e0' }}>
+                {t('keyframe_export_lottie', { defaultValue: 'Lottie JSON' })}
+              </button>
+              {!webCodecsAvailable() && <p className="text-[11px]" style={{ color: '#9e9e9e' }}>{t('keyframe_export_unsupported', { defaultValue: 'Export vidéo non supporté par ce navigateur.' })}</p>}
+              <button onClick={() => setShowExport(false)} className="text-xs mt-1" style={{ color: '#9e9e9e' }}>{t('common_cancel', { defaultValue: 'Annuler' })}</button>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
     <EditorShell theme={C}
       chromeless
       topbarHeight={64}
@@ -1424,11 +1655,12 @@ export default function KeyframeEditorPage() {
       }}
       menus={paintsharpMenus(t, {
         onSave:   () => saveMut.mutate(animData),
-        onExport: handleExport, exportLabel: t('common_export'),
+        onExport: () => setShowExport(true), exportLabel: t('common_export'),
         onClose:  () => navigate('/paintsharp/keyframe'),
+        onUndo:   undoAnim, onRedo: redoAnim,
       })}
       topbarActions={
-        <button onClick={handleExport} className="flex items-center gap-1.5 h-6 px-2.5 text-white text-[10px] rounded" style={{ background: C.accent }}>
+        <button onClick={() => setShowExport(true)} className="flex items-center gap-1.5 h-6 px-2.5 text-white text-[10px] rounded" style={{ background: C.accent }}>
           <Download size={11} />{t('common_export')}
         </button>
       }
@@ -1437,6 +1669,10 @@ export default function KeyframeEditorPage() {
           onFrameChange={f => { setIsPlaying(false); setFrame(Math.max(0, Math.min(comp.duration_frames - 1, f))) }}
           onPlayPause={handlePlayPause} onFpsChange={fps => setComp(c => ({ ...c, fps }))} onToggleLoop={() => setLooping(l => !l)} />
         <div className="flex-1" />
+        <button onClick={undoAnim} disabled={!histRef.current.past.length} title="Ctrl+Z"
+                className="h-6 w-6 flex items-center justify-center rounded disabled:opacity-30" style={{ color: '#9e9e9e' }}><Undo2 size={13} /></button>
+        <button onClick={redoAnim} disabled={!histRef.current.future.length} title="Ctrl+Y"
+                className="h-6 w-6 flex items-center justify-center rounded disabled:opacity-30" style={{ color: '#9e9e9e' }}><Redo2 size={13} /></button>
         <button onClick={() => setAutoKey(a => !a)} title={t('keyframe_autokey')}
                 className="flex items-center gap-1 h-6 px-2 rounded text-[10px]"
                 style={{ background: autoKey ? '#e8824a22' : 'transparent', color: autoKey ? '#e8824a' : '#9e9e9e', border: `1px solid ${autoKey ? '#e8824a' : '#3a3a3a'}` }}>
@@ -1453,6 +1689,8 @@ export default function KeyframeEditorPage() {
             { Icon: Square,       title: t('keyframe_tool_rectangle'), onClick: () => setTool('rectangle'), active: tool === 'rectangle' },
             { Icon: Type,         title: t('keyframe_tool_text'),      onClick: () => setTool('text'),      active: tool === 'text' },
             { Icon: ImageIcon,    title: t('keyframe_import_image'),   onClick: handleImportImage,          active: false },
+            { Icon: Brush,        title: t('keyframe_draw_raster', { defaultValue: 'Dessiner cette image (raster)' }), onClick: () => openDraw('raster'), active: false },
+            { Icon: PenTool,      title: t('keyframe_draw_vector', { defaultValue: 'Dessiner cette image (vecteur)' }), onClick: () => openDraw('vector'), active: false },
           ] as { Icon: React.ComponentType<{ size?: number }>; title: string; onClick: () => void; active: boolean }[]).map(({ Icon, title, onClick, active }) => (
             <button key={title} title={title}
                     className="w-7 h-7 flex items-center justify-center rounded transition-colors"
@@ -1612,6 +1850,8 @@ export default function KeyframeEditorPage() {
         </div>
       </div>
       }>
+      <div className="relative flex flex-1 min-w-0 min-h-0">
+      {drawEmbed}
       <DockArea theme={C} storageKey="kubuno:paintsharp:keyframeDockLayout" viewportBg="#141414"
         defaultArrangement={{ right: [['properties']] }} panels={keyframePanels}>
         <div
@@ -1642,7 +1882,9 @@ export default function KeyframeEditorPage() {
           </div>
         </div>
       </DockArea>
+      </div>
       {ctx.menu}
     </EditorShell>
+    </>
   )
 }

@@ -17,6 +17,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { pdfWriterApi, type Annotation, type PdfSignature } from './api'
 import { extractPageElements } from './pdfExtract'
+import { buildAnnotatedPdf, type ExportPage } from './pdfExport'
 import { useAuthStore } from '@kubuno/sdk'
 import { useConfirm } from '@kubuno/sdk'
 import { ConfirmDialog } from '@ui'
@@ -481,6 +482,50 @@ export default function PdfWriterEditorPage() {
   const pxToPoint = (px: number) => px / scale  // canvas px → PDF points
 
   const totalPages = docData?.page_count ?? pdfDoc?.numPages ?? 1
+
+  // ── Export : aplatir toutes les annotations dans un vrai PDF ────────────────
+  const [exporting, setExporting] = useState(false)
+  const handleExport = useCallback(async () => {
+    if (!id || exporting) return
+    setExporting(true)
+    try {
+      // Persist the current page first so its in-memory annotations are included.
+      await pdfWriterApi.savePage(id, currentPage, { annotations: annotationsRef.current })
+
+      // Gather every page's size + annotations (annotations live per-page server-side).
+      const pageList: ExportPage[] = (docData?.pages ?? []).map(p => ({
+        page_number: p.page_number, width: p.width, height: p.height, rotation: p.rotation,
+      }))
+      if (pageList.length === 0) pageList.push({ page_number: 1, width: pageW, height: pageH, rotation: 0 })
+
+      const annotationsByPage = new Map<number, Annotation[]>()
+      await Promise.all(pageList.map(async p => {
+        if (p.page_number === currentPage) { annotationsByPage.set(p.page_number, annotationsRef.current); return }
+        try {
+          const r = await pdfWriterApi.getPage(id, p.page_number)
+          annotationsByPage.set(p.page_number, (r.data.annotations as Annotation[]) ?? [])
+        } catch { annotationsByPage.set(p.page_number, []) }
+      }))
+
+      // Fetch the source PDF bytes (404 = blank document → pdf-lib builds fresh pages).
+      let sourceBytes: ArrayBuffer | null = null
+      try {
+        const resp = await fetch(pdfWriterApi.sourceUrl(id), { headers: { Authorization: `Bearer ${token}` } })
+        if (resp.ok) sourceBytes = await resp.arrayBuffer()
+      } catch { /* no source → blank */ }
+
+      const bytes = await buildAnnotatedPdf({ sourceBytes, pages: pageList, annotationsByPage })
+      const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${(docData?.title || 'document').replace(/[/\\?%*:|"<>]/g, '-')}.pdf`
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 4000)
+    } finally {
+      setExporting(false)
+    }
+  }, [id, exporting, currentPage, docData?.pages, docData?.title, pageW, pageH, token])
 
   // ── Interactions canvas ───────────────────────────────────────────────────
 
@@ -1339,7 +1384,7 @@ export default function PdfWriterEditorPage() {
         }}
         menus={paintsharpMenus(t, {
           onSave:   handleSave,
-          onExport: () => window.open(pdfWriterApi.sourceUrl(id!), '_blank'), exportLabel: t('common_export'),
+          onExport: handleExport, exportLabel: t('common_export'),
           onClose:  () => navigate('/paintsharp/pdfwriter'),
           onZoomIn:  () => setScale(s => Math.min(4.0, +(s + 0.1).toFixed(1))),
           onZoomOut: () => setScale(s => Math.max(0.3, +(s - 0.1).toFixed(1))),
@@ -1419,17 +1464,17 @@ export default function PdfWriterEditorPage() {
           onChange={(e) => { const f = e.target.files?.[0]; if (f) addImageFile(f); e.target.value = '' }}
         />
 
-        {/* Télécharger la source */}
-        <a
-          href={pdfWriterApi.sourceUrl(id!)}
-          target="_blank"
-          rel="noreferrer"
+        {/* Exporter un vrai PDF avec les annotations fusionnées */}
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          title={t('pdf_export_hint')}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-[#212121] rounded-lg
-                     hover:bg-[#454545] text-[#8e8e8e] transition-colors"
+                     hover:bg-[#454545] text-[#8e8e8e] transition-colors disabled:opacity-50"
         >
-          <Download size={14} />
+          {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
           {t('common_export')}
-        </a>
+        </button>
 
         {/* Sauvegarder */}
         <Button

@@ -1,16 +1,18 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useDebouncedAutosave } from './useAutosave'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Canvas, ThreeEvent } from '@react-three/fiber'
+import { Canvas, ThreeEvent, useThree } from '@react-three/fiber'
 import { OrbitControls, Grid, GizmoHelper, GizmoViewport, TransformControls } from '@react-three/drei'
 import * as THREE from 'three'
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import {
   Box, Circle, RotateCw, Move, Maximize2,
   Layers, Settings2, ChevronRight, ChevronDown, Eye, EyeOff, Trash2, Sun,
   Brush, Minus, Plus, Pen, Hand, Wind, Minimize2, Scissors,
-  FlipHorizontal, Grid3x3,
+  FlipHorizontal, Grid3x3, Triangle, Square, Hexagon, Undo2, Redo2,
+  Download, Upload, Crosshair,
   MousePointer2, Waypoints, Palette, Weight, Image as ImageIcon, Star,
 } from 'lucide-react'
 import { paintsharpApi } from './api'
@@ -21,13 +23,30 @@ const C = { ...SHELL_C, bgPanel: SHELL_C.panel, bgToolbar: SHELL_C.toolbar, sele
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TransformMode = 'translate' | 'rotate' | 'scale'
-// Modes façon Blender.
+// Blender-style interaction modes.
 type Mode = 'object' | 'edit' | 'sculpt' | 'vertex_paint' | 'weight_paint' | 'texture_paint'
 type SculptBrush  = 'clay' | 'draw' | 'move' | 'smooth' | 'flatten' | 'inflate' | 'pinch' | 'crease'
-type PrimType     = 'box' | 'sphere' | 'cylinder' | 'torus'
+type PrimType     = 'box' | 'sphere' | 'cylinder' | 'torus' | 'cone' | 'plane' | 'icosphere' | 'custom'
+// Edit Mode selection element (Blender's vertex / edge / face select modes).
+type EditElem     = 'vertex' | 'edge' | 'face'
+// Highlighted Edit-Mode selection: vertex indices (move target) + derived edges/faces (display).
+interface EditSel { v: number[]; e: number[]; f: number[] }
+const EMPTY_SEL: EditSel = { v: [], e: [], f: [] }
 
-// Modes qui peignent/déforment au glissé (LMB) → orbite désactivée, curseur pinceau.
+// Modes that paint/deform on drag (LMB) → orbit disabled, brush cursor shown.
 const PAINT_MODES: Mode[] = ['sculpt', 'vertex_paint', 'weight_paint', 'texture_paint', 'edit']
+
+// Persisted per-mesh data. For primitives only deformed positions / paint buffers
+// are stored (topology is regenerated from `primType`); custom meshes also carry
+// their full topology (index + uvs).
+interface MeshData {
+  positions: number[]            // flat xyz, deformed vertices
+  index?:    number[]            // custom topology only
+  uvs?:      number[]            // custom topology only
+  colors?:   number[]            // vertex-paint colors (flat rgb)
+  weights?:  number[]            // weight-paint values 0..1
+  texture?:  string             // texture-paint canvas as a data URL
+}
 
 interface SceneObject {
   id:       string
@@ -40,19 +59,124 @@ interface SceneObject {
   metalness?: number
   rotation?:  [number, number, number]
   scale?:     [number, number, number]
+  shadeFlat?: boolean            // flat (faceted) vs smooth shading
+  mesh?:      MeshData            // deformed geometry / paint state (persisted)
 }
 
-// ── Géométrie haute résolution pour la sculpture ──────────────────────────────
-function createGeometry(primType: PrimType): THREE.BufferGeometry {
+// ── Geometry ──────────────────────────────────────────────────────────────────
+// High-resolution base primitives so sculpting has vertices to move.
+function createBaseGeometry(primType: PrimType): THREE.BufferGeometry {
   switch (primType) {
-    case 'sphere':   return new THREE.SphereGeometry(0.8, 48, 48)
-    case 'cylinder': return new THREE.CylinderGeometry(0.5, 0.5, 1.5, 32, 12)
-    case 'torus':    return new THREE.TorusGeometry(0.7, 0.25, 32, 64)
-    default:         return new THREE.BoxGeometry(1, 1, 1, 10, 10, 10)
+    case 'sphere':    return new THREE.SphereGeometry(0.8, 48, 48)
+    case 'cylinder':  return new THREE.CylinderGeometry(0.5, 0.5, 1.5, 32, 12)
+    case 'torus':     return new THREE.TorusGeometry(0.7, 0.25, 32, 64)
+    case 'cone':      return new THREE.ConeGeometry(0.6, 1.4, 36, 16)
+    case 'plane':     return new THREE.PlaneGeometry(1.6, 1.6, 28, 28)
+    case 'icosphere': {
+      // Icosahedron faces don't share vertices → merge so sculpting stays watertight.
+      const g = mergeVertices(new THREE.IcosahedronGeometry(0.85, 4))
+      g.computeVertexNormals()
+      return g
+    }
+    default:          return new THREE.BoxGeometry(1, 1, 1, 12, 12, 12)
   }
 }
 
-// ── Application d'un pinceau sur les vertices ─────────────────────────────────
+// Builds the live geometry for an object, including imported (custom) topology.
+function buildGeometry(obj: SceneObject): THREE.BufferGeometry {
+  if (obj.primType === 'custom' && obj.mesh) {
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(obj.mesh.positions, 3))
+    if (obj.mesh.index) g.setIndex(obj.mesh.index)
+    if (obj.mesh.uvs)   g.setAttribute('uv', new THREE.Float32BufferAttribute(obj.mesh.uvs, 2))
+    g.computeVertexNormals()
+    return g
+  }
+  return createBaseGeometry(obj.primType)
+}
+
+// Round a numeric buffer to keep serialized scenes compact.
+function roundArr(arr: ArrayLike<number>, prec = 1e4): number[] {
+  const out = new Array<number>(arr.length)
+  for (let i = 0; i < arr.length; i++) out[i] = Math.round(arr[i] * prec) / prec
+  return out
+}
+
+// Snapshot a mesh's deformed geometry + paint buffers into a serializable payload.
+function serializeMesh(
+  geo: THREE.BufferGeometry, primType: PrimType,
+  vColors: Float32Array | null, weights: Float32Array | null,
+  texCanvas: HTMLCanvasElement | null, prev?: MeshData,
+): MeshData {
+  const pos = geo.attributes.position as THREE.BufferAttribute
+  const out: MeshData = { positions: roundArr(pos.array as ArrayLike<number>) }
+  if (primType === 'custom') {
+    const idx = geo.getIndex()
+    if (idx) out.index = Array.from(idx.array as ArrayLike<number>)
+    const uv = geo.getAttribute('uv') as THREE.BufferAttribute | undefined
+    if (uv) out.uvs = roundArr(uv.array as ArrayLike<number>)
+  }
+  if (vColors && vColors.some(v => v !== 1)) out.colors = roundArr(vColors, 1e3)
+  if (weights && weights.some(w => w > 0)) out.weights = roundArr(weights, 1e3)
+  const tex = texCanvas ? texCanvas.toDataURL('image/png') : prev?.texture
+  if (tex) out.texture = tex
+  return out
+}
+
+// ── Mesh modifiers (Blender-style) ──────────────────────────────────────────────
+// Snapshot a welded geometry into custom-topology MeshData (positions + index + uvs).
+function geometryToMeshData(geo: THREE.BufferGeometry): MeshData {
+  const pos = geo.attributes.position as THREE.BufferAttribute
+  const out: MeshData = { positions: roundArr(pos.array as ArrayLike<number>) }
+  const idx = geo.getIndex()
+  if (idx) out.index = Array.from(idx.array as ArrayLike<number>)
+  const uv = geo.getAttribute('uv') as THREE.BufferAttribute | undefined
+  if (uv) out.uvs = roundArr(uv.array as ArrayLike<number>)
+  return out
+}
+
+// Mean triangle edge length of a non-indexed geometry (drives subdivision density).
+function meanEdgeLength(geo: THREE.BufferGeometry): number {
+  const pos = geo.attributes.position as THREE.BufferAttribute
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3()
+  let sum = 0, n = 0
+  for (let i = 0; i + 2 < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i); b.fromBufferAttribute(pos, i + 1); c.fromBufferAttribute(pos, i + 2)
+    sum += a.distanceTo(b) + b.distanceTo(c) + c.distanceTo(a); n += 3
+  }
+  return n ? sum / n : 0.1
+}
+
+// Subdivide: split faces (one level) then weld coincident vertices so the result
+// stays watertight for sculpting. Returns a fresh welded geometry.
+async function subdivideGeometry(src: THREE.BufferGeometry): Promise<THREE.BufferGeometry> {
+  const { TessellateModifier } = await import('three/examples/jsm/modifiers/TessellateModifier.js')
+  const ni = src.index ? src.toNonIndexed() : src.clone()
+  const target = meanEdgeLength(ni) * 0.6      // < mean edge → every face splits at least once
+  const tess = new (TessellateModifier as any)(target, 1)
+  const out: THREE.BufferGeometry = tess.modify(ni)
+  out.deleteAttribute('normal')                // interpolated normals would block welding
+  const welded = mergeVertices(out)
+  welded.computeVertexNormals()
+  ni.dispose(); out.dispose()
+  return welded
+}
+
+// Decimate: weld, drop a fraction of vertices via quadric simplification, re-weld.
+async function decimateGeometry(src: THREE.BufferGeometry, ratio: number): Promise<THREE.BufferGeometry> {
+  const { SimplifyModifier } = await import('three/examples/jsm/modifiers/SimplifyModifier.js')
+  const ni = src.index ? src.toNonIndexed() : src.clone()
+  ni.deleteAttribute('normal')
+  const welded = mergeVertices(ni)
+  const remove = Math.max(1, Math.floor(welded.attributes.position.count * ratio))
+  const simplified: THREE.BufferGeometry = new (SimplifyModifier as any)().modify(welded, remove)
+  const reweld = mergeVertices(simplified.index ? simplified.toNonIndexed() : simplified)
+  reweld.computeVertexNormals()
+  ni.dispose(); welded.dispose(); simplified.dispose()
+  return reweld
+}
+
+// ── Brush application on vertices ─────────────────────────────────────────────
 function applyBrush(
   geo:         THREE.BufferGeometry,
   worldMatrix: THREE.Matrix4,
@@ -97,7 +221,7 @@ function applyBrush(
 
     switch (brush) {
       case 'clay': {
-        // Pousse le long de la normale uniquement côté visible
+        // Push along the normal only on the visible side.
         const dp = dx * localNormal.x + dy * localNormal.y + dz * localNormal.z
         if (sign > 0 ? dp >= 0 : dp <= 0) {
           nx += localNormal.x * s
@@ -152,7 +276,7 @@ function applyBrush(
   geo.computeVertexNormals()
 }
 
-// ── Pinceau Lisser (moyenne des voisins) ──────────────────────────────────────
+// ── Smooth brush (average of neighbours) ──────────────────────────────────────
 function applySmoothBrush(
   pos:      THREE.BufferAttribute,
   localHit: THREE.Vector3,
@@ -189,7 +313,7 @@ function applySmoothBrush(
   }
 }
 
-// ── Pinceau Déplacer (glisser les vertices) ───────────────────────────────────
+// ── Move brush (drag vertices) ────────────────────────────────────────────────
 function applyMoveBrush(
   geo:         THREE.BufferGeometry,
   worldMatrix: THREE.Matrix4,
@@ -227,8 +351,8 @@ function applyMoveBrush(
   geo.computeVertexNormals()
 }
 
-// ── Couleurs de sommets : init / pinceau ──────────────────────────────────────
-// Garantit un attribut `color` (blanc par défaut → n'altère pas le matériau).
+// ── Vertex colors: init / brush ───────────────────────────────────────────────
+// Ensures a `color` attribute (white by default → doesn't alter the material).
 function ensureColorAttr(geo: THREE.BufferGeometry): THREE.BufferAttribute {
   let attr = geo.getAttribute('color') as THREE.BufferAttribute | undefined
   if (!attr || attr.count !== geo.attributes.position.count) {
@@ -240,7 +364,7 @@ function ensureColorAttr(geo: THREE.BufferGeometry): THREE.BufferAttribute {
   return attr
 }
 
-// Peinture de couleurs de sommets dans le rayon du pinceau (mélange additif).
+// Paints vertex colors within the brush radius (additive blend).
 function applyColorBrush(
   geo: THREE.BufferGeometry, worldMatrix: THREE.Matrix4, worldHit: THREE.Vector3,
   radius: number, rgb: [number, number, number], strength: number,
@@ -266,7 +390,7 @@ function applyColorBrush(
   col.needsUpdate = true
 }
 
-// Peinture de poids (scalaire 0..1) dans un tableau parallèle.
+// Paints weights (scalar 0..1) into a parallel array.
 function applyWeightBrush(
   weights: Float32Array, geo: THREE.BufferGeometry, worldMatrix: THREE.Matrix4,
   worldHit: THREE.Vector3, radius: number, value: number, strength: number,
@@ -287,7 +411,7 @@ function applyWeightBrush(
   }
 }
 
-// Rampe de poids façon Blender : bleu(0) → cyan → vert → jaune → rouge(1).
+// Blender-style weight ramp: blue(0) → cyan → green → yellow → red(1).
 function weightColor(w: number): [number, number, number] {
   const x = Math.max(0, Math.min(1, w))
   if (x < 0.25) return [0, x / 0.25, 1]
@@ -304,7 +428,7 @@ function writeWeightColors(geo: THREE.BufferGeometry, weights: Float32Array) {
   col.needsUpdate = true
 }
 
-// ── Cursor 3D (anneau sur la surface) ────────────────────────────────────────
+// ── 3D cursor (ring on the surface) ───────────────────────────────────────────
 function BrushCursor({
   point, normal, radius, visible,
 }: {
@@ -328,7 +452,7 @@ function BrushCursor({
   )
 }
 
-// ── Mesh sélectionnable + sculptable/peignable ───────────────────────────────
+// ── Selectable + sculptable/paintable mesh ────────────────────────────────────
 interface SelectableMeshProps {
   obj:                SceneObject
   selected:           boolean
@@ -340,13 +464,16 @@ interface SelectableMeshProps {
   paintColor:         string
   paintWeight:        number
   onSelect:           () => void
+  onBeginEdit:        () => void      // record an undo snapshot before mutating
   onTransformStart:   () => void
   onTransformEnd:     () => void
   onCommit:           (patch: Partial<SceneObject>) => void
+  onMeshCommit:       (mesh: MeshData) => void
   onCursorMove:       (pos: THREE.Vector3, normal: THREE.Vector3) => void
   onCursorClear:      () => void
   symmetry:           boolean
   wireframe:          boolean
+  editElem:           EditElem
 }
 
 const TEX_SIZE = 1024
@@ -354,35 +481,77 @@ const TEX_SIZE = 1024
 function SelectableMesh({
   obj, selected, mode, transformMode,
   sculptBrush, brushRadius, brushStrength, paintColor, paintWeight,
-  onSelect, onTransformStart, onTransformEnd, onCommit,
-  onCursorMove, onCursorClear, symmetry, wireframe,
+  onSelect, onBeginEdit, onTransformStart, onTransformEnd, onCommit, onMeshCommit,
+  onCursorMove, onCursorClear, symmetry, wireframe, editElem,
 }: SelectableMeshProps) {
   const [meshNode, setMeshNode] = useState<THREE.Mesh | null>(null)
   const transformRef = useRef<any>(null)
-  const geoRef       = useRef<THREE.BufferGeometry>(createGeometry(obj.primType))
+  const geoRef       = useRef<THREE.BufferGeometry>(buildGeometry(obj))
+  const baseRef      = useRef<Float32Array | null>(null)   // pristine positions (reset target)
   const isPainting   = useRef(false)
+  const dirtyRef     = useRef(false)                        // geometry/paint changed this stroke
   const invertRef    = useRef(false)
   const lastHit      = useRef<THREE.Vector3 | null>(null)
-  // Données de peinture persistantes par maillage.
-  const vColorsRef   = useRef<Float32Array | null>(null)   // couleurs de sommets (vertex paint)
-  const weightsRef   = useRef<Float32Array | null>(null)   // poids 0..1 (weight paint)
+  // Persistent paint data per mesh.
+  const vColorsRef   = useRef<Float32Array | null>(null)   // vertex paint colors
+  const weightsRef   = useRef<Float32Array | null>(null)   // weights 0..1 (weight paint)
+  const meshSeenRef  = useRef<MeshData | undefined>(obj.mesh)
   const [texture, setTexture] = useState<THREE.CanvasTexture | null>(null)
   const texCtxRef    = useRef<CanvasRenderingContext2D | null>(null)
+  // Edit Mode element selection (vertex/edge/face) + drag-grab bookkeeping.
+  const [editSel, setEditSel] = useState<EditSel>(EMPTY_SEL)
+  const editSelRef   = useRef<EditSel>(EMPTY_SEL)
+  const editElemRef  = useRef<EditElem>(editElem)
+  const downFace     = useRef<{ a: number; b: number; c: number; point: THREE.Vector3; shift: boolean } | null>(null)
+  const editMoved    = useRef(false)
+  useEffect(() => { editSelRef.current = editSel }, [editSel])
+  useEffect(() => { editElemRef.current = editElem }, [editElem])
+  // Clear the selection when the object changes or we leave Edit Mode.
+  useEffect(() => { setEditSel(EMPTY_SEL); editSelRef.current = EMPTY_SEL }, [obj.id, mode])
 
   const isPaintMode  = selected && PAINT_MODES.includes(mode)
 
-  useEffect(() => () => { geoRef.current.dispose() }, [])
+  // Applies saved (or pristine) geometry + paint buffers to the live geometry.
+  const applyMeshState = useCallback((mesh?: MeshData) => {
+    const geo = geoRef.current
+    const pos = geo.attributes.position as THREE.BufferAttribute
+    if (mesh?.positions && mesh.positions.length === pos.count * 3) {
+      (pos.array as Float32Array).set(mesh.positions)
+      pos.needsUpdate = true
+      geo.computeVertexNormals()
+    } else if (!mesh?.positions && baseRef.current) {
+      (pos.array as Float32Array).set(baseRef.current)
+      pos.needsUpdate = true
+      geo.computeVertexNormals()
+    }
+    const n = pos.count
+    const col = ensureColorAttr(geo)
+    vColorsRef.current = mesh?.colors && mesh.colors.length === n * 3
+      ? Float32Array.from(mesh.colors) : new Float32Array(n * 3).fill(1)
+    weightsRef.current = mesh?.weights && mesh.weights.length === n
+      ? Float32Array.from(mesh.weights) : new Float32Array(n)
+    if (mode === 'weight_paint') writeWeightColors(geo, weightsRef.current)
+    else { (col.array as Float32Array).set(vColorsRef.current); col.needsUpdate = true }
+  }, [mode])
 
-  // (Ré)initialise les buffers de peinture quand la géométrie change.
+  // Mount: capture the pristine base and apply any saved mesh state.
   useEffect(() => {
-    const n = geoRef.current.attributes.position.count
-    ensureColorAttr(geoRef.current)
-    if (!vColorsRef.current || vColorsRef.current.length !== n * 3) vColorsRef.current = new Float32Array(n * 3).fill(1)
-    if (!weightsRef.current || weightsRef.current.length !== n)     weightsRef.current = new Float32Array(n)
-  }, [obj.primType])
+    baseRef.current = Float32Array.from(geoRef.current.attributes.position.array as Float32Array)
+    applyMeshState(obj.mesh)
+    return () => { geoRef.current.dispose() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  // Synchronise le buffer de couleurs affiché selon le mode :
-  //  - weight_paint → rampe de poids ; sinon → couleurs de vertex paint.
+  // Reapply when the mesh payload changes externally (undo/redo) — not mid-stroke.
+  useEffect(() => {
+    if (meshSeenRef.current === obj.mesh) return
+    meshSeenRef.current = obj.mesh
+    if (isPainting.current) return
+    applyMeshState(obj.mesh)
+  }, [obj.mesh, applyMeshState])
+
+  // Switch the displayed color buffer with the mode:
+  //  - weight_paint → weight ramp ; otherwise → vertex-paint colors.
   useEffect(() => {
     const geo = geoRef.current
     const col = ensureColorAttr(geo)
@@ -394,26 +563,37 @@ function SelectableMesh({
     }
   }, [mode])
 
-  // Crée paresseusement la texture peignable à la 1re entrée en Texture Paint.
+  // Lazily create the paintable texture on first entry into Texture Paint,
+  // seeding it from any saved texture.
   useEffect(() => {
     if (mode !== 'texture_paint' || texture) return
     const cv = document.createElement('canvas')
     cv.width = cv.height = TEX_SIZE
     const cx = cv.getContext('2d')!
-    cx.fillStyle = obj.color ?? '#9aa7c4'
-    cx.fillRect(0, 0, TEX_SIZE, TEX_SIZE)
-    texCtxRef.current = cx
-    const tex = new THREE.CanvasTexture(cv)
-    tex.colorSpace = THREE.SRGBColorSpace
-    setTexture(tex)
-  }, [mode, texture, obj.color])
+    const finalize = () => {
+      texCtxRef.current = cx
+      const tex = new THREE.CanvasTexture(cv)
+      tex.colorSpace = THREE.SRGBColorSpace
+      setTexture(tex)
+    }
+    if (obj.mesh?.texture) {
+      const img = new Image()
+      img.onload  = () => { cx.drawImage(img, 0, 0, TEX_SIZE, TEX_SIZE); finalize() }
+      img.onerror = () => { cx.fillStyle = obj.color ?? '#9aa7c4'; cx.fillRect(0, 0, TEX_SIZE, TEX_SIZE); finalize() }
+      img.src = obj.mesh.texture
+    } else {
+      cx.fillStyle = obj.color ?? '#9aa7c4'
+      cx.fillRect(0, 0, TEX_SIZE, TEX_SIZE)
+      finalize()
+    }
+  }, [mode, texture, obj.color, obj.mesh])
 
-  // Désactive OrbitControls pendant le gizmo et commite la transformation.
+  // Disable OrbitControls during the gizmo and commit the transform.
   useEffect(() => {
     const ctrl = transformRef.current
     if (!ctrl || !selected) return
     const handler = (e: { value: boolean }) => {
-      if (e.value) { onTransformStart(); return }
+      if (e.value) { onBeginEdit(); onTransformStart(); return }
       onTransformEnd()
       if (meshNode) {
         const r = meshNode.rotation
@@ -426,19 +606,20 @@ function SelectableMesh({
     }
     ctrl.addEventListener('dragging-changed', handler)
     return () => ctrl.removeEventListener('dragging-changed', handler)
-  }, [selected, onTransformStart, onTransformEnd, onCommit, meshNode])
+  }, [selected, onBeginEdit, onTransformStart, onTransformEnd, onCommit, meshNode])
 
   const handleClick = useCallback((e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
     onSelect()
   }, [onSelect])
 
-  // Applique une « touche » de pinceau au point survolé, selon le mode courant.
+  // Applies one brush "dab" at the hovered point, per the current mode.
   const stroke = useCallback((e: ThreeEvent<PointerEvent>, wn: THREE.Vector3) => {
     if (!meshNode) return
     const M = meshNode.matrixWorld
     const cx = obj.position[0]
     const mirror = (p: THREE.Vector3) => new THREE.Vector3(2 * cx - p.x, p.y, p.z)
+    dirtyRef.current = true
     if (mode === 'sculpt') {
       if (sculptBrush === 'move' && lastHit.current) {
         const delta = e.point.clone().sub(lastHit.current)
@@ -449,13 +630,6 @@ function SelectableMesh({
         applyBrush(geoRef.current, M, e.point, wn, sculptBrush, brushRadius, brushStrength, invertRef.current)
         if (symmetry) applyBrush(geoRef.current, M, mirror(e.point), new THREE.Vector3(-wn.x, wn.y, wn.z), sculptBrush, brushRadius, brushStrength, invertRef.current)
       }
-    } else if (mode === 'edit' && lastHit.current) {
-      // « Tweak » de sommets : déplace les sommets sous le curseur (petit rayon).
-      const delta = e.point.clone().sub(lastHit.current)
-      const r = Math.min(brushRadius, 0.18)
-      applyMoveBrush(geoRef.current, M, e.point, delta, r, 1)
-      if (symmetry) applyMoveBrush(geoRef.current, M, mirror(e.point), new THREE.Vector3(-delta.x, delta.y, delta.z), r, 1)
-      lastHit.current = e.point.clone()
     } else if (mode === 'vertex_paint' && vColorsRef.current) {
       const c = new THREE.Color(invertRef.current ? '#ffffff' : paintColor)
       applyColorBrush(geoRef.current, M, e.point, brushRadius, [c.r, c.g, c.b], brushStrength)
@@ -482,19 +656,87 @@ function SelectableMesh({
     }
   }, [meshNode, mode, sculptBrush, brushRadius, brushStrength, symmetry, obj.position, paintColor, paintWeight, texture])
 
+  // ── Edit Mode: pick the clicked element, building a fresh selection (or toggling
+  // it with Shift). Vertex → nearest corner; Edge → nearest of the 3 face edges;
+  // Face → the whole triangle. Edge/face entries drive the orange overlays.
+  const pickEditElement = useCallback((face: { a: number; b: number; c: number; point: THREE.Vector3 }, shift: boolean) => {
+    if (!meshNode) return
+    const pos = geoRef.current.getAttribute('position') as THREE.BufferAttribute
+    const world = (i: number) => new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(meshNode.matrixWorld)
+    const corners = [face.a, face.b, face.c]
+    let pick: EditSel
+    if (editElemRef.current === 'vertex') {
+      const nearest = corners.reduce((best, i) => world(i).distanceTo(face.point) < world(best).distanceTo(face.point) ? i : best, corners[0])
+      pick = { v: [nearest], e: [], f: [] }
+    } else if (editElemRef.current === 'edge') {
+      const edges: [number, number][] = [[face.a, face.b], [face.b, face.c], [face.c, face.a]]
+      const mid = (e: [number, number]) => world(e[0]).clone().add(world(e[1])).multiplyScalar(0.5)
+      const ne = edges.reduce((best, e) => mid(e).distanceTo(face.point) < mid(best).distanceTo(face.point) ? e : best, edges[0])
+      pick = { v: [ne[0], ne[1]], e: [ne[0], ne[1]], f: [] }
+    } else {
+      pick = { v: [face.a, face.b, face.c], e: [], f: [face.a, face.b, face.c] }
+    }
+    setEditSel(prev => {
+      if (!shift) return pick
+      // Toggle: drop the element if its first vertex is already selected, else add it.
+      const has = pick.v.every(i => prev.v.includes(i))
+      const next: EditSel = has
+        ? { v: prev.v.filter(i => !pick.v.includes(i)), e: prev.e, f: prev.f }
+        : { v: Array.from(new Set([...prev.v, ...pick.v])), e: [...prev.e, ...pick.e], f: [...prev.f, ...pick.f] }
+      editSelRef.current = next
+      return next
+    })
+    if (!shift) editSelRef.current = pick
+  }, [meshNode])
+
+  // Translate the selected vertices by a world-space delta (converted to local).
+  const moveEditSelection = useCallback((worldFrom: THREE.Vector3, worldTo: THREE.Vector3) => {
+    if (!meshNode) return
+    const sel = editSelRef.current.v
+    if (!sel.length) return
+    const lf = meshNode.worldToLocal(worldFrom.clone())
+    const lt = meshNode.worldToLocal(worldTo.clone())
+    const d = lt.sub(lf)
+    const pos = geoRef.current.getAttribute('position') as THREE.BufferAttribute
+    const arr = pos.array as Float32Array
+    for (const i of sel) { arr[i * 3] += d.x; arr[i * 3 + 1] += d.y; arr[i * 3 + 2] += d.z }
+    pos.needsUpdate = true
+    geoRef.current.computeVertexNormals()
+    dirtyRef.current = true
+  }, [meshNode])
+
   const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
     if (!isPaintMode || !meshNode || !e.face) return
     e.stopPropagation()
+    if (mode === 'edit') {
+      // Defer: a click (no drag) selects an element; a drag grabs the selection.
+      isPainting.current = true
+      editMoved.current  = false
+      lastHit.current    = e.point.clone()
+      downFace.current   = { a: e.face.a, b: e.face.b, c: e.face.c, point: e.point.clone(), shift: (e.nativeEvent as PointerEvent).shiftKey }
+      return
+    }
+    onBeginEdit()                       // snapshot before the stroke modifies anything
     isPainting.current = true
+    dirtyRef.current   = false
     invertRef.current  = e.buttons === 2
     lastHit.current    = e.point.clone()
     const wn = e.face.normal.clone().transformDirection(meshNode.matrixWorld).normalize()
-    if (mode === 'sculpt' && sculptBrush === 'move') return  // le déplacement attend le 1er move
+    if (mode === 'sculpt' && sculptBrush === 'move') return  // move waits for the first drag
     stroke(e, wn)
-  }, [isPaintMode, meshNode, mode, sculptBrush, stroke])
+  }, [isPaintMode, meshNode, mode, sculptBrush, stroke, onBeginEdit])
 
   const handlePointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
     if (!meshNode) return
+    if (mode === 'edit') {
+      if (isPainting.current && lastHit.current && editSelRef.current.v.length) {
+        e.stopPropagation()
+        if (!editMoved.current) { editMoved.current = true; onBeginEdit() }   // record once, at grab start
+        moveEditSelection(lastHit.current, e.point)
+        lastHit.current = e.point.clone()
+      }
+      return
+    }
     const wn = e.face
       ? e.face.normal.clone().transformDirection(meshNode.matrixWorld).normalize()
       : new THREE.Vector3(0, 1, 0)
@@ -504,9 +746,56 @@ function SelectableMesh({
     stroke(e, wn)
   }, [isPaintMode, meshNode, onCursorMove, stroke])
 
-  const stopPainting = useCallback(() => { isPainting.current = false; lastHit.current = null }, [])
+  // Commit the deformed mesh / paint buffers into scene state when a stroke ends.
+  const stopPainting = useCallback(() => {
+    if (mode === 'edit') {
+      const moved = editMoved.current && dirtyRef.current
+      if (!editMoved.current && downFace.current) {
+        pickEditElement(downFace.current, downFace.current.shift)   // click → select element
+      } else if (moved) {
+        const mesh = serializeMesh(geoRef.current, obj.primType, vColorsRef.current, weightsRef.current, texCtxRef.current?.canvas ?? null, obj.mesh)
+        meshSeenRef.current = mesh
+        onMeshCommit(mesh)
+      }
+      isPainting.current = false
+      editMoved.current  = false
+      downFace.current   = null
+      lastHit.current    = null
+      dirtyRef.current   = false
+      return
+    }
+    const wasDirty = isPainting.current && dirtyRef.current
+    isPainting.current = false
+    lastHit.current = null
+    if (wasDirty) {
+      const mesh = serializeMesh(
+        geoRef.current, obj.primType,
+        vColorsRef.current, weightsRef.current,
+        texCtxRef.current?.canvas ?? null, obj.mesh,
+      )
+      meshSeenRef.current = mesh        // avoid the reapply effect re-running on our own commit
+      onMeshCommit(mesh)
+    }
+    dirtyRef.current = false
+  }, [mode, obj.primType, obj.mesh, onMeshCommit, pickEditElement])
 
   const showVertexColors = mode === 'vertex_paint' || mode === 'weight_paint'
+
+  // Edit-Mode highlight overlays — geometries share the live position buffer so
+  // selected verts/edges/faces follow the mesh as it is grabbed.
+  const editHighlight = useMemo(() => {
+    if (mode !== 'edit') return null
+    const posAttr = geoRef.current.getAttribute('position')
+    const mk = (indices: number[]) => {
+      const g = new THREE.BufferGeometry()
+      g.setAttribute('position', posAttr)
+      if (indices.length) g.setIndex(indices)
+      g.setDrawRange(0, indices.length)
+      return g
+    }
+    return { pts: mk(editSel.v), lines: mk(editSel.e), faces: mk(editSel.f) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, editSel, meshNode])
 
   return (
     <>
@@ -524,25 +813,49 @@ function SelectableMesh({
         onContextMenu={(e) => e.stopPropagation()}
       >
         <meshStandardMaterial
+          key={obj.shadeFlat ? 'flat' : 'smooth'}
           color={showVertexColors ? '#ffffff' : (obj.color ?? (selected ? '#9dafc8' : '#7c8db5'))}
           map={mode === 'texture_paint' ? texture : null}
           vertexColors={showVertexColors}
           roughness={obj.roughness ?? 0.45}
           metalness={obj.metalness ?? 0.15}
+          flatShading={obj.shadeFlat ?? false}
+          side={THREE.DoubleSide}
           wireframe={wireframe || mode === 'edit'}
           emissive={selected && mode === 'object' ? C.accent : '#000000'}
           emissiveIntensity={selected && mode === 'object' ? 0.18 : 0}
         />
       </mesh>
 
-      {/* Edit Mode : sommets visibles (points) façon Blender. */}
-      {selected && mode === 'edit' && (
+      {/* Edit Mode: all vertices (Blender-style), shown only in vertex select. */}
+      {selected && mode === 'edit' && editElem === 'vertex' && (
         <points geometry={geoRef.current} position={obj.position} rotation={obj.rotation ?? [0,0,0]} scale={obj.scale ?? [1,1,1]}>
-          <pointsMaterial size={0.06} color={C.accent} sizeAttenuation depthTest={false} />
+          <pointsMaterial size={0.05} color={C.accent} sizeAttenuation depthTest={false} />
         </points>
       )}
 
-      {/* Gizmo de transformation (Object Mode uniquement). */}
+      {/* Edit Mode: highlighted selection (orange) — points / edges / faces. */}
+      {selected && mode === 'edit' && editHighlight && (
+        <group position={obj.position} rotation={obj.rotation ?? [0,0,0]} scale={obj.scale ?? [1,1,1]}>
+          {editSel.f.length > 0 && (
+            <mesh geometry={editHighlight.faces}>
+              <meshBasicMaterial color="#ff8c2b" transparent opacity={0.4} side={THREE.DoubleSide} depthTest={false} />
+            </mesh>
+          )}
+          {editSel.e.length > 0 && (
+            <lineSegments geometry={editHighlight.lines}>
+              <lineBasicMaterial color="#ff8c2b" depthTest={false} />
+            </lineSegments>
+          )}
+          {editSel.v.length > 0 && (
+            <points geometry={editHighlight.pts}>
+              <pointsMaterial size={0.11} color="#ff8c2b" sizeAttenuation depthTest={false} />
+            </points>
+          )}
+        </group>
+      )}
+
+      {/* Transform gizmo (Object Mode only). */}
       {selected && mode === 'object' && meshNode && (
         <TransformControls ref={transformRef} object={meshNode} mode={transformMode} size={0.8} />
       )}
@@ -550,7 +863,26 @@ function SelectableMesh({
   )
 }
 
-// ── Viewport 3D ───────────────────────────────────────────────────────────────
+// ── Focus rig: frames the selected object when the focus signal changes ────────
+function FocusRig({ signal, target }: { signal: number; target: [number, number, number] | null }) {
+  const { controls, camera } = useThree() as any
+  const prev = useRef(signal)
+  useEffect(() => {
+    if (signal === prev.current) return
+    prev.current = signal
+    if (!target || !controls) return
+    const t = new THREE.Vector3(...target)
+    const offset = camera.position.clone().sub(controls.target)
+    const dist = Math.max(offset.length(), 0.001)
+    offset.normalize().multiplyScalar(Math.min(dist, 5))
+    controls.target.copy(t)
+    camera.position.copy(t.clone().add(offset))
+    controls.update?.()
+  }, [signal, target, controls, camera])
+  return null
+}
+
+// ── 3D viewport ───────────────────────────────────────────────────────────────
 interface ViewportProps {
   objects:       SceneObject[]
   selectedId:    string | null
@@ -563,21 +895,26 @@ interface ViewportProps {
   paintWeight:   number
   cursorPos:     THREE.Vector3 | null
   cursorNormal:  THREE.Vector3 | null
+  focusSignal:   number
   onSelect:      (id: string | null) => void
+  onBeginEdit:   () => void
   onCommit:      (id: string, patch: Partial<SceneObject>) => void
+  onMeshCommit:  (id: string, mesh: MeshData) => void
   onCursorMove:  (pos: THREE.Vector3, normal: THREE.Vector3) => void
   onCursorClear: () => void
   symmetry:      boolean
   wireframe:     boolean
+  editElem:      EditElem
 }
 
 function Viewport({
   objects, selectedId, mode, transformMode,
   sculptBrush, brushRadius, brushStrength, paintColor, paintWeight,
-  cursorPos, cursorNormal,
-  onSelect, onCommit, onCursorMove, onCursorClear, symmetry, wireframe,
+  cursorPos, cursorNormal, focusSignal,
+  onSelect, onBeginEdit, onCommit, onMeshCommit, onCursorMove, onCursorClear, symmetry, wireframe, editElem,
 }: ViewportProps) {
   const [orbitEnabled, setOrbitEnabled] = useState(true)
+  const selectedObj = objects.find(o => o.id === selectedId) ?? null
 
   return (
     <>
@@ -593,7 +930,9 @@ function Viewport({
 
       {objects.filter(o => o.visible).map((obj) => (
         <SelectableMesh
-          key={obj.id}
+          // Remount on topology change (subdivide/decimate/import) so geometry rebuilds;
+          // a plain sculpt keeps the vertex count, so the key — and the mesh — stays put.
+          key={`${obj.id}:${obj.primType}:${obj.mesh?.positions?.length ?? 0}:${obj.mesh?.index?.length ?? 0}`}
           obj={obj}
           selected={obj.id === selectedId}
           mode={mode}
@@ -604,26 +943,37 @@ function Viewport({
           paintColor={paintColor}
           paintWeight={paintWeight}
           onSelect={() => onSelect(obj.id)}
+          onBeginEdit={onBeginEdit}
           onCommit={(patch) => onCommit(obj.id, patch)}
+          onMeshCommit={(mesh) => onMeshCommit(obj.id, mesh)}
           onTransformStart={() => setOrbitEnabled(false)}
           onTransformEnd={() => setOrbitEnabled(true)}
           onCursorMove={onCursorMove}
           onCursorClear={onCursorClear}
           symmetry={symmetry}
           wireframe={wireframe}
+          editElem={editElem}
         />
       ))}
 
       <BrushCursor
         point={cursorPos}
         normal={cursorNormal}
-        radius={mode === 'edit' ? Math.min(brushRadius, 0.18) : brushRadius}
-        visible={PAINT_MODES.includes(mode) && !!selectedId}
+        radius={brushRadius}
+        visible={PAINT_MODES.includes(mode) && mode !== 'edit' && !!selectedId}
       />
 
-      {/* Orbite à la souris uniquement en Object Mode (les autres modes peignent
-          au glissé) ; le zoom molette reste toujours disponible. */}
-      <OrbitControls makeDefault enableRotate={orbitEnabled && mode === 'object'} enablePan={mode === 'object'} />
+      <FocusRig signal={focusSignal} target={selectedObj?.position ?? null} />
+
+      {/* Orbit: Object Mode uses the default LMB-rotate. Edit Mode frees the LMB
+          for select/grab and orbits with the middle button (Blender-style).
+          Wheel zoom stays available everywhere. */}
+      <OrbitControls makeDefault
+        enableRotate={orbitEnabled && (mode === 'object' || mode === 'edit')}
+        enablePan={mode === 'object' || mode === 'edit'}
+        mouseButtons={mode === 'edit'
+          ? { LEFT: undefined as any, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: THREE.MOUSE.PAN }
+          : undefined} />
 
       <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
         <GizmoViewport axisColors={['#ff3333', '#33ff33', '#3333ff']} labelColor="white" />
@@ -679,11 +1029,16 @@ function OutlinerPanel({
   )
 }
 
-// ── Propriétés ────────────────────────────────────────────────────────────────
-function PropertiesPanel({ selected, onPatch }: { selected: SceneObject | null; onPatch: (p: Partial<SceneObject>) => void }) {
+// ── Properties ────────────────────────────────────────────────────────────────
+function PropertiesPanel({ selected, onPatch, onSubdivide, onDecimate }: {
+  selected: SceneObject | null
+  onPatch: (p: Partial<SceneObject>) => void
+  onSubdivide: () => void
+  onDecimate: () => void
+}) {
   const { t } = useTranslation('paintsharp')
   const [open, setOpen] = useState<Record<string, boolean>>({
-    object: true, transform: true, material: true,
+    object: true, transform: true, material: true, mesh: true,
   })
   const toggle = (k: string) => setOpen(p => ({ ...p, [k]: !p[k] }))
 
@@ -741,6 +1096,32 @@ function PropertiesPanel({ selected, onPatch }: { selected: SceneObject | null; 
               </Row>
               <Row label={t('vertex_field_roughness')}><Num key={selected.id+'r'} val={selected.roughness ?? 0.45} step={0.01} onChange={v => onPatch({ roughness: v })} /></Row>
               <Row label={t('vertex_field_metalness')}><Num key={selected.id+'m'} val={selected.metalness ?? 0.15} step={0.01} onChange={v => onPatch({ metalness: v })} /></Row>
+              <Row label={t('vertex_field_shading', { defaultValue: 'Ombrage' })}>
+                <div className="flex gap-1">
+                  <button onClick={() => onPatch({ shadeFlat: false })}
+                          className="flex-1 px-1.5 py-0.5 rounded text-[11px]"
+                          style={{ background: !selected.shadeFlat ? C.accent + '33' : C.bg, color: !selected.shadeFlat ? C.accent : C.textDim, border: `1px solid ${!selected.shadeFlat ? C.accent : C.border}` }}>
+                    {t('vertex_shade_smooth', { defaultValue: 'Lisse' })}
+                  </button>
+                  <button onClick={() => onPatch({ shadeFlat: true })}
+                          className="flex-1 px-1.5 py-0.5 rounded text-[11px]"
+                          style={{ background: selected.shadeFlat ? C.accent + '33' : C.bg, color: selected.shadeFlat ? C.accent : C.textDim, border: `1px solid ${selected.shadeFlat ? C.accent : C.border}` }}>
+                    {t('vertex_shade_flat', { defaultValue: 'Plat' })}
+                  </button>
+                </div>
+              </Row>
+            </Section>
+            <Section id="mesh" title={t('vertex_section_mesh', { defaultValue: 'Maillage' })}>
+              <button onClick={onSubdivide}
+                      className="flex items-center justify-center gap-1.5 w-full px-2 py-1 rounded text-[11px]"
+                      style={{ background: C.bg, color: C.text, border: `1px solid ${C.border}` }}>
+                <Grid3x3 size={12} /> {t('vertex_subdivide', { defaultValue: 'Subdiviser' })}
+              </button>
+              <button onClick={onDecimate}
+                      className="flex items-center justify-center gap-1.5 w-full px-2 py-1 rounded text-[11px]"
+                      style={{ background: C.bg, color: C.text, border: `1px solid ${C.border}` }}>
+                <Minimize2 size={12} /> {t('vertex_decimate', { defaultValue: 'Décimer' })}
+              </button>
             </Section>
           </div>
         )}
@@ -749,7 +1130,7 @@ function PropertiesPanel({ selected, onPatch }: { selected: SceneObject | null; 
   )
 }
 
-// ── Panneau de pinceaux ───────────────────────────────────────────────────────
+// ── Brush panel ───────────────────────────────────────────────────────────────
 const BRUSH_LIST: Array<{
   id:       SculptBrush
   labelKey: string
@@ -789,7 +1170,7 @@ function BrushPanel({
         <span className="text-xs font-medium" style={{ color: C.text }}>{t('vertex_brushes_title')}</span>
       </div>
 
-      {/* Pinceau actif */}
+      {/* Active brush */}
       <div className="px-3 py-2 border-b" style={{ borderColor: C.border }}>
         <div className="flex items-center gap-2 mb-2">
           <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
@@ -802,7 +1183,7 @@ function BrushPanel({
           </div>
         </div>
 
-        {/* Rayon */}
+        {/* Radius */}
         <div className="mb-2">
           <div className="flex justify-between mb-0.5">
             <span className="text-[11px]" style={{ color: C.textDim }}>{t('vertex_radius')}</span>
@@ -814,7 +1195,7 @@ function BrushPanel({
                  style={{ accentColor: C.accent }} />
         </div>
 
-        {/* Force */}
+        {/* Strength */}
         <div>
           <div className="flex justify-between mb-0.5">
             <span className="text-[11px]" style={{ color: C.textDim }}>{t('vertex_strength')}</span>
@@ -827,7 +1208,7 @@ function BrushPanel({
         </div>
       </div>
 
-      {/* Grille de pinceaux */}
+      {/* Brush grid */}
       <div className="flex-1 overflow-y-auto p-2">
         <div className="grid grid-cols-2 gap-1.5">
           {BRUSH_LIST.map(({ id, labelKey, Icon, color }) => (
@@ -854,7 +1235,7 @@ function BrushPanel({
         </div>
       </div>
 
-      {/* Légende */}
+      {/* Legend */}
       <div className="px-3 py-2 border-t" style={{ borderColor: C.border }}>
         <p className="text-[10px] leading-snug" style={{ color: C.textDim }}>
           {t('vertex_legend_left_click')}<br />
@@ -866,7 +1247,7 @@ function BrushPanel({
   )
 }
 
-// ── Toolbar gauche ────────────────────────────────────────────────────────────
+// ── Left toolbar ──────────────────────────────────────────────────────────────
 function ToolbarLeft({
   mode, transformMode, onMode, onTransform,
 }: {
@@ -893,36 +1274,36 @@ function ToolbarLeft({
 
   return (
     <>
-      {/* Transformations (Object Mode) */}
+      {/* Transforms (Object Mode) */}
       <span className="text-[9px] uppercase tracking-widest mb-0.5" style={{ color: C.textDim }}>{t('vertex_group_object')}</span>
       <Btn active={mode === 'object' && transformMode === 'translate'}
            onClick={() => { onMode('object'); onTransform('translate') }}
-           title={t('vertex_tool_move')}>
+           title={`${t('vertex_tool_move')} (G)`}>
         <Move size={14} />
       </Btn>
       <Btn active={mode === 'object' && transformMode === 'rotate'}
            onClick={() => { onMode('object'); onTransform('rotate') }}
-           title={t('vertex_tool_rotate')}>
+           title={`${t('vertex_tool_rotate')} (R)`}>
         <RotateCw size={14} />
       </Btn>
       <Btn active={mode === 'object' && transformMode === 'scale'}
            onClick={() => { onMode('object'); onTransform('scale') }}
-           title={t('vertex_tool_scale')}>
+           title={`${t('vertex_tool_scale')} (S)`}>
         <Maximize2 size={14} />
       </Btn>
 
       <Sep />
 
-      {/* Raccourcis de modes (le sélecteur complet est dans la barre d'options) */}
-      <Btn active={mode === 'edit'}         onClick={() => onMode('edit')}         title={t('vertex_mode_edit')}><Waypoints size={15} /></Btn>
-      <Btn active={mode === 'sculpt'}       onClick={() => onMode('sculpt')}       title={t('vertex_mode_sculpt_m')}><Brush size={15} /></Btn>
-      <Btn active={mode === 'vertex_paint'} onClick={() => onMode('vertex_paint')} title={t('vertex_mode_vpaint')}><Palette size={15} /></Btn>
-      <Btn active={mode === 'weight_paint'} onClick={() => onMode('weight_paint')} title={t('vertex_mode_wpaint')}><Weight size={15} /></Btn>
-      <Btn active={mode === 'texture_paint'}onClick={() => onMode('texture_paint')}title={t('vertex_mode_tpaint')}><ImageIcon size={15} /></Btn>
+      {/* Mode shortcuts (the full selector lives in the options bar) */}
+      <Btn active={mode === 'edit'}         onClick={() => onMode('edit')}         title={`${t('vertex_mode_edit')} (2 / Tab)`}><Waypoints size={15} /></Btn>
+      <Btn active={mode === 'sculpt'}       onClick={() => onMode('sculpt')}       title={`${t('vertex_mode_sculpt_m')} (3)`}><Brush size={15} /></Btn>
+      <Btn active={mode === 'vertex_paint'} onClick={() => onMode('vertex_paint')} title={`${t('vertex_mode_vpaint')} (4)`}><Palette size={15} /></Btn>
+      <Btn active={mode === 'weight_paint'} onClick={() => onMode('weight_paint')} title={`${t('vertex_mode_wpaint')} (5)`}><Weight size={15} /></Btn>
+      <Btn active={mode === 'texture_paint'}onClick={() => onMode('texture_paint')}title={`${t('vertex_mode_tpaint')} (6)`}><ImageIcon size={15} /></Btn>
 
       <Sep />
 
-      {/* Éclairage rapide */}
+      {/* Quick lighting */}
       <Btn active={false} onClick={() => {}} title={t('vertex_tool_light')}>
         <Sun size={13} style={{ color: C.textDim }} />
       </Btn>
@@ -930,7 +1311,7 @@ function ToolbarLeft({
   )
 }
 
-// ── Sélecteur de mode façon Blender ───────────────────────────────────────────
+// ── Blender-style mode selector ───────────────────────────────────────────────
 const MODE_LIST: { id: Mode; labelKey: string; Icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }> }[] = [
   { id: 'object',        labelKey: 'vertex_mode_object', Icon: MousePointer2 },
   { id: 'edit',          labelKey: 'vertex_mode_edit',   Icon: Waypoints },
@@ -973,15 +1354,18 @@ function ModeDropdown({ mode, onMode }: { mode: Mode; onMode: (m: Mode) => void 
   )
 }
 
-// ── Barre d'ajout de primitives ───────────────────────────────────────────────
+// ── Add-primitive toolbar ─────────────────────────────────────────────────────
 function AddPrimitivesToolbar({ onAdd }: { onAdd: (type: PrimType) => void }) {
   const { t } = useTranslation('paintsharp')
   type LIcon = React.ComponentType<{ size?: number; style?: React.CSSProperties }>
   const items: [PrimType, string, LIcon][] = [
-    ['box',      t('vertex_prim_box'),      Box      as LIcon],
-    ['sphere',   t('vertex_prim_sphere'),   Circle   as LIcon],
-    ['cylinder', t('vertex_prim_cylinder'), RotateCw as LIcon],
-    ['torus',    t('vertex_prim_torus'),    Maximize2 as LIcon],
+    ['box',       t('vertex_prim_box'),      Box       as LIcon],
+    ['sphere',    t('vertex_prim_sphere'),   Circle    as LIcon],
+    ['cylinder',  t('vertex_prim_cylinder'), RotateCw  as LIcon],
+    ['torus',     t('vertex_prim_torus'),    Maximize2 as LIcon],
+    ['cone',      t('vertex_prim_cone',      { defaultValue: 'Cône' }),      Triangle as LIcon],
+    ['plane',     t('vertex_prim_plane',     { defaultValue: 'Plan' }),      Square   as LIcon],
+    ['icosphere', t('vertex_prim_icosphere', { defaultValue: 'Icosphère' }), Hexagon  as LIcon],
   ]
 
   return (
@@ -1005,13 +1389,100 @@ function AddPrimitivesToolbar({ onAdd }: { onAdd: (type: PrimType) => void }) {
   )
 }
 
-// ── Page principale Vertex ────────────────────────────────────────────────────
+// ── Mesh export / import ──────────────────────────────────────────────────────
+// Builds a transient THREE.Group from the visible scene objects for exporting.
+function buildExportGroup(objects: SceneObject[]): THREE.Group {
+  const group = new THREE.Group()
+  for (const o of objects.filter(x => x.visible)) {
+    const geo = buildGeometry(o)
+    if (o.mesh?.positions && o.mesh.positions.length === geo.attributes.position.count * 3) {
+      (geo.attributes.position.array as Float32Array).set(o.mesh.positions)
+      geo.attributes.position.needsUpdate = true
+      geo.computeVertexNormals()
+    }
+    const mat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(o.color ?? '#7c8db5'),
+      roughness: o.roughness ?? 0.45, metalness: o.metalness ?? 0.15,
+    })
+    const m = new THREE.Mesh(geo, mat)
+    m.position.set(...o.position)
+    if (o.rotation) m.rotation.set(...o.rotation)
+    if (o.scale)    m.scale.set(...o.scale)
+    m.name = o.name
+    group.add(m)
+  }
+  return group
+}
+
+// Loads an imported file into one or more SceneObjects (primType 'custom').
+async function importMeshFile(file: File): Promise<SceneObject[]> {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  const base = file.name.replace(/\.[^.]+$/, '')
+
+  const toObject = (geo: THREE.BufferGeometry, name: string, i: number): SceneObject => {
+    geo = geo.index ? geo.toNonIndexed().clone() : geo
+    // Re-index to share vertices so sculpting stays watertight.
+    let g = mergeVertices(geo)
+    g.computeBoundingBox()
+    const bb = g.boundingBox!
+    const c = new THREE.Vector3(); bb.getCenter(c)
+    const size = new THREE.Vector3(); bb.getSize(size)
+    const maxd = Math.max(size.x, size.y, size.z) || 1
+    const s = 1.6 / maxd
+    g.translate(-c.x, -c.y, -c.z)
+    g.scale(s, s, s)
+    g.computeVertexNormals()
+    const pos = g.attributes.position as THREE.BufferAttribute
+    const uv  = g.getAttribute('uv') as THREE.BufferAttribute | undefined
+    const idx = g.getIndex()
+    return {
+      id: `obj-${Date.now()}-${i}`,
+      name,
+      primType: 'custom',
+      visible: true,
+      position: [0, (size.y * s) / 2, 0],
+      mesh: {
+        positions: Array.from(pos.array as ArrayLike<number>),
+        index: idx ? Array.from(idx.array as ArrayLike<number>) : undefined,
+        uvs: uv ? Array.from(uv.array as ArrayLike<number>) : undefined,
+      },
+    }
+  }
+
+  if (ext === 'obj') {
+    const txt = await file.text()
+    const mod = await import('three/examples/jsm/loaders/OBJLoader.js')
+    const grp = new mod.OBJLoader().parse(txt) as THREE.Group
+    const out: SceneObject[] = []
+    grp.traverse((n: any) => { if (n.isMesh) out.push(toObject(n.geometry, n.name || base, out.length)) })
+    return out
+  }
+  if (ext === 'stl') {
+    const buf = await file.arrayBuffer()
+    const mod = await import('three/examples/jsm/loaders/STLLoader.js')
+    const geo = new mod.STLLoader().parse(buf) as THREE.BufferGeometry
+    return [toObject(geo, base, 0)]
+  }
+  if (ext === 'glb' || ext === 'gltf') {
+    const buf = await file.arrayBuffer()
+    const mod = await import('three/examples/jsm/loaders/GLTFLoader.js')
+    const loader = new mod.GLTFLoader()
+    const gltf: any = await new Promise((resolve, reject) => loader.parse(buf, '', resolve, reject))
+    const out: SceneObject[] = []
+    gltf.scene.traverse((n: any) => { if (n.isMesh) out.push(toObject(n.geometry, n.name || base, out.length)) })
+    return out
+  }
+  throw new Error(`Unsupported format: ${ext}`)
+}
+
+// ── Main Vertex page ──────────────────────────────────────────────────────────
 export default function VertexEditorPage() {
   const { t } = useTranslation('paintsharp')
   const { id }   = useParams<{ id: string }>()
   const navigate = useNavigate()
 
   const [mode,          setMode]          = useState<Mode>('object')
+  const [editElem,      setEditElem]      = useState<EditElem>('vertex')
   const [transformMode, setTransformMode] = useState<TransformMode>('translate')
   const [sculptBrush,   setSculptBrush]   = useState<SculptBrush>('clay')
   const [brushRadius,   setBrushRadius]   = useState(0.55)
@@ -1023,9 +1494,12 @@ export default function VertexEditorPage() {
   const [selectedId,    setSelectedId]    = useState<string | null>(null)
   const [cursorPos,     setCursorPos]     = useState<THREE.Vector3 | null>(null)
   const [cursorNormal,  setCursorNormal]  = useState<THREE.Vector3 | null>(null)
+  const [focusSignal,   setFocusSignal]   = useState(0)
+  const [ready,         setReady]         = useState(false)   // scene loaded → autosave armed
   const [objects,       setObjects]       = useState<SceneObject[]>([
     { id: 'default-0', name: t('vertex_prim_sphere'), primType: 'sphere', visible: true, position: [0, 0.8, 0] },
   ])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: scene, isLoading } = useQuery({
     queryKey: ['paintsharp-scene', id],
@@ -1035,7 +1509,56 @@ export default function VertexEditorPage() {
 
   const qc = useQueryClient()
 
-  // ── Titre éditable (standard WorkspaceShell) — synchronisé depuis la scène ─────
+  // ── Undo / redo history ──────────────────────────────────────────────────────
+  const objectsRef = useRef(objects)
+  useEffect(() => { objectsRef.current = objects }, [objects])
+  const past   = useRef<SceneObject[][]>([])
+  const future = useRef<SceneObject[][]>([])
+  const [, bumpHist] = useState(0)
+  const HIST_CAP = 25
+
+  const record = useCallback(() => {
+    past.current.push(structuredClone(objectsRef.current))
+    if (past.current.length > HIST_CAP) past.current.shift()
+    future.current = []
+    bumpHist(v => v + 1)
+  }, [])
+
+  const undo = useCallback(() => {
+    if (!past.current.length) return
+    future.current.push(structuredClone(objectsRef.current))
+    const prev = past.current.pop()!
+    setObjects(prev)
+    setSelectedId(s => (s && prev.some(o => o.id === s)) ? s : null)
+    bumpHist(v => v + 1)
+  }, [])
+
+  const redo = useCallback(() => {
+    if (!future.current.length) return
+    past.current.push(structuredClone(objectsRef.current))
+    const next = future.current.pop()!
+    setObjects(next)
+    setSelectedId(s => (s && next.some(o => o.id === s)) ? s : null)
+    bumpHist(v => v + 1)
+  }, [])
+
+  // ── Load the persisted scene once per id ─────────────────────────────────────
+  const loadedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!id || loadedRef.current === id) return
+    if (isLoading) return
+    loadedRef.current = id
+    const sj = scene?.scene_json as { objects?: SceneObject[] } | undefined
+    if (sj?.objects && Array.isArray(sj.objects) && sj.objects.length) {
+      setObjects(sj.objects)
+      setSelectedId(null)
+    }
+    past.current = []
+    future.current = []
+    setReady(true)
+  }, [id, scene, isLoading])
+
+  // ── Editable title (standard WorkspaceShell) — synced from the scene ──────────
   const [titleDraft, setTitleDraft] = useState('')
   useEffect(() => { if (scene?.title != null) setTitleDraft(scene.title) }, [scene?.title])
   const renameMut = useMutation({
@@ -1056,13 +1579,27 @@ export default function VertexEditorPage() {
     else if (!v && scene?.title) setTitleDraft(scene.title)
   }
 
+  // Approximate poly counts for the scene summary.
+  const countStats = useCallback((objs: SceneObject[]) => {
+    let v = 0, f = 0
+    for (const o of objs) {
+      const g = buildGeometry(o)
+      v += g.attributes.position.count
+      const idx = g.getIndex()
+      f += idx ? idx.count / 3 : g.attributes.position.count / 3
+      g.dispose()
+    }
+    return { v: Math.round(v), f: Math.round(f) }
+  }, [])
+
   const saveMut = useMutation({
-    mutationFn: async (sceneJson: object) => {
+    mutationFn: async (sceneJson: { objects: SceneObject[] }) => {
       if (!id) return
+      const { v, f } = countStats(sceneJson.objects)
       await paintsharpApi.updateScene(id, {
         scene_json:   sceneJson,
-        vertex_count: objects.length * 100,
-        face_count:   objects.length * 50,
+        vertex_count: v,
+        face_count:   f,
       })
     },
   })
@@ -1072,11 +1609,16 @@ export default function VertexEditorPage() {
 
   const addObject = useCallback((primType: PrimType) => {
     const labels: Record<PrimType, string> = {
-      box:      t('vertex_prim_box'),
-      sphere:   t('vertex_prim_sphere'),
-      cylinder: t('vertex_prim_cylinder'),
-      torus:    t('vertex_prim_torus'),
+      box:       t('vertex_prim_box'),
+      sphere:    t('vertex_prim_sphere'),
+      cylinder:  t('vertex_prim_cylinder'),
+      torus:     t('vertex_prim_torus'),
+      cone:      t('vertex_prim_cone',      { defaultValue: 'Cône' }),
+      plane:     t('vertex_prim_plane',     { defaultValue: 'Plan' }),
+      icosphere: t('vertex_prim_icosphere', { defaultValue: 'Icosphère' }),
+      custom:    t('vertex_prim_custom',    { defaultValue: 'Maillage' }),
     }
+    record()
     const newObj: SceneObject = {
       id:       `obj-${Date.now()}`,
       name:     labels[primType],
@@ -1086,20 +1628,23 @@ export default function VertexEditorPage() {
     }
     setObjects(prev => [...prev, newObj])
     setSelectedId(newObj.id)
-  }, [t])
+  }, [t, record])
 
-  const toggleVisibility = useCallback((id: string) => {
-    setObjects(prev => prev.map(o => o.id === id ? { ...o, visible: !o.visible } : o))
-  }, [])
+  const toggleVisibility = useCallback((tid: string) => {
+    record()
+    setObjects(prev => prev.map(o => o.id === tid ? { ...o, visible: !o.visible } : o))
+  }, [record])
 
-  const deleteObject = useCallback((id: string) => {
-    setObjects(prev => prev.filter(o => o.id !== id))
-    setSelectedId(prev => prev === id ? null : prev)
-  }, [])
+  const deleteObject = useCallback((tid: string) => {
+    record()
+    setObjects(prev => prev.filter(o => o.id !== tid))
+    setSelectedId(prev => prev === tid ? null : prev)
+  }, [record])
 
-  const duplicateObject = useCallback((id: string) => {
+  const duplicateObject = useCallback((tid: string) => {
+    record()
     setObjects(prev => {
-      const src = prev.find(o => o.id === id)
+      const src = prev.find(o => o.id === tid)
       if (!src) return prev
       const copy: SceneObject = {
         ...structuredClone(src),
@@ -1110,12 +1655,53 @@ export default function VertexEditorPage() {
       setSelectedId(copy.id)
       return [...prev, copy]
     })
+  }, [record])
+
+  // Property/transform edits (record an undo step first).
+  const updateObject = useCallback((tid: string | null, patch: Partial<SceneObject>) => {
+    if (!tid) return
+    record()
+    setObjects(prev => prev.map(o => o.id === tid ? { ...o, ...patch } : o))
+  }, [record])
+
+  // Transform gizmo commit — the snapshot was already taken on drag start.
+  const commitTransform = useCallback((tid: string, patch: Partial<SceneObject>) => {
+    setObjects(prev => prev.map(o => o.id === tid ? { ...o, ...patch } : o))
   }, [])
 
-  const updateObject = useCallback((id: string | null, patch: Partial<SceneObject>) => {
-    if (!id) return
-    setObjects(prev => prev.map(o => o.id === id ? { ...o, ...patch } : o))
+  // Sculpt/paint stroke commit — snapshot already taken on pointer-down.
+  const commitMesh = useCallback((tid: string, mesh: MeshData) => {
+    setObjects(prev => prev.map(o => o.id === tid ? { ...o, mesh } : o))
   }, [])
+
+  // Mesh modifiers: rebuild topology, baking the object into a custom mesh. Paint
+  // buffers (colors/weights/texture) are dropped since the vertex set changes.
+  const remesh = useCallback(async (tid: string, op: 'subdivide' | 'decimate') => {
+    const obj = objectsRef.current.find(o => o.id === tid)
+    if (!obj) return
+    const src = buildGeometry(obj)
+    // buildGeometry yields the pristine primitive; re-apply any sculpted positions
+    // so the modifier operates on the deformed mesh, not the original shape.
+    if (obj.mesh?.positions) {
+      const pos = src.attributes.position as THREE.BufferAttribute
+      if (obj.mesh.positions.length === pos.count * 3) {
+        (pos.array as Float32Array).set(obj.mesh.positions)
+        pos.needsUpdate = true
+        src.computeVertexNormals()
+      }
+    }
+    try {
+      const out = op === 'subdivide' ? await subdivideGeometry(src) : await decimateGeometry(src, 0.4)
+      const mesh = geometryToMeshData(out)
+      out.dispose()
+      record()
+      setObjects(prev => prev.map(o => o.id === tid ? { ...o, primType: 'custom', mesh } : o))
+    } catch (err) {
+      console.error('Vertex remesh failed', err)
+    } finally {
+      src.dispose()
+    }
+  }, [record])
 
   const handleCursorMove = useCallback((pos: THREE.Vector3, normal: THREE.Vector3) => {
     setCursorPos(pos.clone())
@@ -1127,8 +1713,87 @@ export default function VertexEditorPage() {
     setCursorNormal(null)
   }, [])
 
-  // Sauvegarde automatique (debounce + flush au démontage/fermeture).
-  useDebouncedAutosave(objects, !!id, (d) => saveMut.mutate({ objects: d }))
+  // ── Mesh import / export ─────────────────────────────────────────────────────
+  const download = useCallback((data: BlobPart, mime: string, ext: string) => {
+    const blob = new Blob([data], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(scene?.title || 'vertex')}${ext}`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [scene?.title])
+
+  const exportMesh = useCallback(async (format: 'obj' | 'stl' | 'gltf') => {
+    const group = buildExportGroup(objectsRef.current)
+    if (format === 'obj') {
+      const mod = await import('three/examples/jsm/exporters/OBJExporter.js')
+      download(new mod.OBJExporter().parse(group), 'text/plain', '.obj')
+    } else if (format === 'stl') {
+      const mod = await import('three/examples/jsm/exporters/STLExporter.js')
+      download(new mod.STLExporter().parse(group), 'model/stl', '.stl')
+    } else {
+      const mod = await import('three/examples/jsm/exporters/GLTFExporter.js')
+      new mod.GLTFExporter().parse(group, (res: any) => {
+        download(JSON.stringify(res), 'model/gltf+json', '.gltf')
+      }, () => {}, {})
+    }
+  }, [download])
+
+  const handleImportFile = useCallback(async (file: File) => {
+    try {
+      const objs = await importMeshFile(file)
+      if (!objs.length) return
+      record()
+      setObjects(prev => [...prev, ...objs])
+      setSelectedId(objs[0].id)
+    } catch (err) {
+      console.error('Vertex import failed', err)
+    }
+  }, [record])
+
+  // ── Keyboard shortcuts (Blender-style) ───────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
+      const ctrlKey = e.ctrlKey || e.metaKey
+      const k = e.key.toLowerCase()
+      if (ctrlKey) {
+        if (k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() }
+        else if (k === 'y') { e.preventDefault(); redo() }
+        else if (k === 'd') { e.preventDefault(); if (selectedId) duplicateObject(selectedId) }
+        else if (k === 's') { e.preventDefault(); saveMut.mutate({ objects: objectsRef.current }) }
+        return
+      }
+      // In Edit Mode, 1/2/3 pick the select element (Blender), not the top-level mode.
+      if (mode === 'edit' && (e.key === '1' || e.key === '2' || e.key === '3')) {
+        setEditElem(e.key === '1' ? 'vertex' : e.key === '2' ? 'edge' : 'face')
+        return
+      }
+      switch (e.key) {
+        case 'g': setMode('object'); setTransformMode('translate'); break
+        case 'r': setMode('object'); setTransformMode('rotate'); break
+        case 's': setMode('object'); setTransformMode('scale'); break
+        case 'Tab': e.preventDefault(); setMode(m => m === 'edit' ? 'object' : 'edit'); break
+        case 'x': case 'Delete': if (selectedId) deleteObject(selectedId); break
+        case 'm': setSymmetry(v => !v); break
+        case 'z': setWireframe(v => !v); break
+        case 'f': setFocusSignal(s => s + 1); break
+        case '1': setMode('object'); break
+        case '2': setMode('edit'); break
+        case '3': setMode('sculpt'); break
+        case '4': setMode('vertex_paint'); break
+        case '5': setMode('weight_paint'); break
+        case '6': setMode('texture_paint'); break
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mode, selectedId, undo, redo, duplicateObject, deleteObject, saveMut])
+
+  // Autosave (debounced) — armed only once the scene has loaded.
+  useDebouncedAutosave(objects, ready && !!id, (d) => saveMut.mutate({ objects: d }))
 
   if (isLoading) {
     return (
@@ -1154,13 +1819,18 @@ export default function VertexEditorPage() {
       <OutlinerPanel objects={objects} selectedId={selectedId} onSelect={setSelectedId} onToggle={toggleVisibility} onDelete={deleteObject} onRowContextMenu={onRowContextMenu} />
     ) },
     properties: { label: t('vertex_properties_title'), render: () => (
-      <PropertiesPanel selected={selectedObj} onPatch={p => updateObject(selectedId, p)} />
+      <PropertiesPanel selected={selectedObj} onPatch={p => updateObject(selectedId, p)}
+        onSubdivide={() => selectedId && remesh(selectedId, 'subdivide')}
+        onDecimate={() => selectedId && remesh(selectedId, 'decimate')} />
     ) },
     brush: { label: t('vertex_brushes_title'), render: () => (
       <BrushPanel sculptBrush={sculptBrush} brushRadius={brushRadius} brushStrength={brushStrength}
         onBrush={setSculptBrush} onRadius={setBrushRadius} onStrength={setBrushStrength} />
     ) },
   }
+
+  const canUndo = past.current.length > 0
+  const canRedo = future.current.length > 0
 
   return (
     <EditorShell theme={C}
@@ -1193,6 +1863,25 @@ export default function VertexEditorPage() {
       menus={paintsharpMenus(t, {
         onSave:  () => saveMut.mutate({ objects }),
         onClose: () => navigate('/paintsharp'),
+        onUndo:  undo,
+        onRedo:  redo,
+        canUndo,
+        canRedo,
+        onExport: () => exportMesh('obj'),
+        exportLabel: t('vertex_export_obj', { defaultValue: 'Exporter en OBJ' }),
+        extraMenus: [{
+          label: t('vertex_menu_mesh', { defaultValue: 'Maillage' }),
+          items: [
+            { label: t('vertex_subdivide', { defaultValue: 'Subdiviser' }), onClick: () => selectedId && remesh(selectedId, 'subdivide') },
+            { label: t('vertex_decimate',  { defaultValue: 'Décimer' }),    onClick: () => selectedId && remesh(selectedId, 'decimate') },
+            'sep',
+            { label: t('vertex_import', { defaultValue: 'Importer un maillage…' }), onClick: () => fileInputRef.current?.click() },
+            'sep',
+            { label: t('vertex_export_obj',  { defaultValue: 'Exporter en OBJ' }),  onClick: () => exportMesh('obj') },
+            { label: t('vertex_export_stl',  { defaultValue: 'Exporter en STL' }),  onClick: () => exportMesh('stl') },
+            { label: t('vertex_export_gltf', { defaultValue: 'Exporter en glTF' }), onClick: () => exportMesh('gltf') },
+          ],
+        }],
       })}
       topbarActions={<>
         <span className="text-xs px-2 py-0.5 rounded"
@@ -1205,11 +1894,37 @@ export default function VertexEditorPage() {
         </button>
       </>}
       optionsBar={<>
+        {/* Undo / redo */}
+        <button onClick={undo} disabled={!canUndo} title={`${t('menu_undo')} (Ctrl+Z)`}
+                className="w-7 h-7 flex items-center justify-center rounded disabled:opacity-30"
+                style={{ color: C.textDim }}><Undo2 size={14} /></button>
+        <button onClick={redo} disabled={!canRedo} title={`${t('menu_redo')} (Ctrl+Shift+Z)`}
+                className="w-7 h-7 flex items-center justify-center rounded disabled:opacity-30"
+                style={{ color: C.textDim }}><Redo2 size={14} /></button>
+        <div className="w-px h-5 mx-1" style={{ background: C.border }} />
         <ModeDropdown mode={mode} onMode={setMode} />
         <div className="w-px h-5 mx-1" style={{ background: C.border }} />
         <AddPrimitivesToolbar onAdd={addObject} />
+        {mode === 'edit' && (
+          <>
+            <div className="w-px h-5 mx-1" style={{ background: C.border }} />
+            <div className="flex items-center gap-0.5">
+              {([
+                { id: 'vertex' as EditElem, Icon: Circle,   label: t('vertex_elem_vertex', { defaultValue: 'Sommets' }), key: '1' },
+                { id: 'edge'   as EditElem, Icon: Minus,    label: t('vertex_elem_edge',   { defaultValue: 'Arêtes' }),  key: '2' },
+                { id: 'face'   as EditElem, Icon: Triangle, label: t('vertex_elem_face',   { defaultValue: 'Faces' }),   key: '3' },
+              ]).map(({ id, Icon, label, key }) => (
+                <button key={id} onClick={() => setEditElem(id)} title={`${label} (${key})`}
+                        className="flex items-center gap-1 px-2 h-6 rounded text-[11px]"
+                        style={{ background: editElem === id ? C.accent + '33' : 'transparent', color: editElem === id ? C.accent : C.textDim, border: `1px solid ${editElem === id ? C.accent : C.border}` }}>
+                  <Icon size={12} /> {label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <div className="flex-1" />
-        {/* Réglages de pinceau (modes peinture/sculpture/édition) */}
+        {/* Brush settings (paint/sculpt/edit modes) */}
         {PAINT_MODES.includes(mode) && (
           <div className="flex items-center gap-2 mr-1">
             {(mode === 'vertex_paint' || mode === 'texture_paint') && (
@@ -1235,12 +1950,27 @@ export default function VertexEditorPage() {
             <div className="w-px h-5" style={{ background: C.border }} />
           </div>
         )}
-        <button onClick={() => setSymmetry(v => !v)} title={t('vertex_symmetry')}
+        <button onClick={() => fileInputRef.current?.click()} title={t('vertex_import', { defaultValue: 'Importer un maillage…' })}
+                className="flex items-center gap-1 px-2 h-6 rounded text-[11px]"
+                style={{ color: C.textDim, border: `1px solid ${C.border}` }}>
+          <Upload size={12} /> {t('vertex_import_short', { defaultValue: 'Importer' })}
+        </button>
+        <button onClick={() => exportMesh('obj')} title={t('vertex_export_obj', { defaultValue: 'Exporter en OBJ' })}
+                className="flex items-center gap-1 px-2 h-6 rounded text-[11px]"
+                style={{ color: C.textDim, border: `1px solid ${C.border}` }}>
+          <Download size={12} /> {t('vertex_export_short', { defaultValue: 'Exporter' })}
+        </button>
+        <button onClick={() => setFocusSignal(s => s + 1)} disabled={!selectedObj} title={`${t('vertex_focus', { defaultValue: 'Cadrer la sélection' })} (F)`}
+                className="flex items-center gap-1 px-2 h-6 rounded text-[11px] disabled:opacity-30"
+                style={{ color: C.textDim, border: `1px solid ${C.border}` }}>
+          <Crosshair size={12} />
+        </button>
+        <button onClick={() => setSymmetry(v => !v)} title={`${t('vertex_symmetry')} (M)`}
                 className="flex items-center gap-1 px-2 h-6 rounded text-[11px]"
                 style={{ background: symmetry ? C.accent + '33' : 'transparent', color: symmetry ? C.accent : C.textDim, border: `1px solid ${symmetry ? C.accent : C.border}` }}>
           <FlipHorizontal size={12} /> {t('vertex_symmetry')}
         </button>
-        <button onClick={() => setWireframe(v => !v)} title={t('vertex_wireframe')}
+        <button onClick={() => setWireframe(v => !v)} title={`${t('vertex_wireframe')} (Z)`}
                 className="flex items-center gap-1 px-2 h-6 rounded text-[11px]"
                 style={{ background: wireframe ? C.accent + '33' : 'transparent', color: wireframe ? C.accent : C.textDim, border: `1px solid ${wireframe ? C.accent : C.border}` }}>
           <Grid3x3 size={12} /> {t('vertex_wireframe')}
@@ -1268,12 +1998,16 @@ export default function VertexEditorPage() {
               paintWeight={paintWeight}
               cursorPos={cursorPos}
               cursorNormal={cursorNormal}
+              focusSignal={focusSignal}
               onSelect={setSelectedId}
-              onCommit={(id, patch) => updateObject(id, patch)}
+              onBeginEdit={record}
+              onCommit={commitTransform}
+              onMeshCommit={commitMesh}
               onCursorMove={handleCursorMove}
               onCursorClear={handleCursorClear}
               symmetry={symmetry}
               wireframe={wireframe}
+              editElem={editElem}
             />
           </Canvas>
 
@@ -1298,6 +2032,11 @@ export default function VertexEditorPage() {
             {t('vertex_hud_visible_count', { count: objects.filter(o => o.visible).length })}
           </div>
       </DockArea>
+
+      {/* Hidden file picker for mesh import */}
+      <input ref={fileInputRef} type="file" accept=".obj,.stl,.glb,.gltf" hidden
+             onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = '' }} />
+
       {ctx.menu}
     </EditorShell>
   )

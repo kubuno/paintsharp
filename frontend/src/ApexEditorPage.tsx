@@ -11,11 +11,14 @@ import {
   PenTool, ZoomIn, ZoomOut, Copy, FlipHorizontal, FlipVertical,
   BringToFront, SendToBack, ChevronUp, ChevronDown,
   Spline, Pipette, Group, Ungroup, Waypoints,
-  Search, RotateCw,
+  Search, RotateCw, Magnet, Grid3x3,
+  ChevronsDownUp, FolderPlus, Folder, FolderOpen, GripVertical,
 } from 'lucide-react'
+import polygonClipping from 'polygon-clipping'
 import { Dropdown, Checkbox, GradientField, DEFAULT_GRADIENT, type Gradient } from '@ui'
-import { apexApi, type VectorPageData, type VectorElement, type PathPoint, type PathElement, type TextElement, type FillStyle } from './api'
+import { apexApi, type VectorPageData, type VectorElement, type PathPoint, type PathElement, type TextElement, type GroupElement, type FillStyle } from './api'
 import { C as SHELL_C, EditorShell, DockArea, ColorField, paintsharpMenus, useContextMenu, type CtxItem } from './ui'
+import { EmbedShell } from './EmbedShell'
 
 // ── Palette (shared Paintsharp theme + a `handle` alias for canvas selection handles) ──
 const C = { ...SHELL_C, handle: SHELL_C.accent }
@@ -121,6 +124,8 @@ function renderCanvas(
   selectedIds: string[],
   dpr: number,
   marquee?: { x: number; y: number; w: number; h: number } | null,
+  guides?: { vx: number[]; hy: number[] },
+  grid?: { size: number; on: boolean },
 ) {
   ctx.save()
   ctx.scale(dpr, dpr)
@@ -148,12 +153,24 @@ function renderCanvas(
     ctx.fillText(ab.name, ab.x, ab.y - 4 / cs.zoom)
   }
 
-  // Elements
-  const sorted = [...pageData.elements].sort((a, b) => a.zIndex - b.zIndex)
-  for (const el of sorted) {
-    if (!el.visible) continue
+  // Optional grid (clipped to each artboard so it reads as page guides).
+  if (grid?.on && grid.size > 0) {
     ctx.save()
-    ctx.globalAlpha = el.opacity / 100
+    ctx.strokeStyle = 'rgba(120,120,140,0.18)'
+    ctx.lineWidth = 1 / cs.zoom
+    for (const ab of pageData.artboards) {
+      ctx.beginPath()
+      for (let gx = ab.x; gx <= ab.x + ab.width + 0.5; gx += grid.size) { ctx.moveTo(gx, ab.y); ctx.lineTo(gx, ab.y + ab.height) }
+      for (let gy = ab.y; gy <= ab.y + ab.height + 0.5; gy += grid.size) { ctx.moveTo(ab.x, gy); ctx.lineTo(ab.x + ab.width, gy) }
+      ctx.stroke()
+    }
+    ctx.restore()
+  }
+
+  // Elements — depth-first tree order, with cascaded (parent×child) opacity.
+  for (const { el, alpha: eff } of renderOrder(pageData.elements)) {
+    ctx.save()
+    ctx.globalAlpha = eff
 
     if (el.rotation !== 0) {
       const cx = el.x + el.w / 2, cy = el.y + el.h / 2
@@ -194,7 +211,7 @@ function renderCanvas(
     if (pathBuilt) {
       if (fill.type === 'solid') {
         ctx.fillStyle = fill.color
-        ctx.globalAlpha = (el.opacity / 100) * (fill.opacity / 100)
+        ctx.globalAlpha = eff * (fill.opacity / 100)
         ctx.fill()
       } else if (fill.type === 'linear-gradient') {
         const b = elBBox(el)
@@ -206,7 +223,7 @@ function renderCanvas(
         const stops = [...fill.stops].sort((a, z) => a.position - z.position)
         for (const s of stops) g.addColorStop(Math.max(0, Math.min(1, s.position)), hexWithAlpha(s.color, s.opacity))
         ctx.fillStyle = g
-        ctx.globalAlpha = el.opacity / 100
+        ctx.globalAlpha = eff
         ctx.fill()
       } else if (fill.type === 'radial-gradient') {
         const b = elBBox(el)
@@ -215,7 +232,7 @@ function renderCanvas(
         const stops = [...fill.stops].sort((a, z) => a.position - z.position)
         for (const s of stops) g.addColorStop(Math.max(0, Math.min(1, s.position)), hexWithAlpha(s.color, s.opacity))
         ctx.fillStyle = g
-        ctx.globalAlpha = el.opacity / 100
+        ctx.globalAlpha = eff
         ctx.fill()
       }
       if (el.stroke && el.stroke.width > 0) {
@@ -224,7 +241,7 @@ function renderCanvas(
         ctx.lineCap     = el.stroke.cap  ?? 'butt'
         ctx.lineJoin    = el.stroke.join ?? 'miter'
         ctx.setLineDash((el.stroke.dashArray ?? []).map(d => d))
-        ctx.globalAlpha = (el.opacity / 100) * (el.stroke.opacity / 100)
+        ctx.globalAlpha = eff * (el.stroke.opacity / 100)
         ctx.stroke()
         ctx.setLineDash([])
       }
@@ -294,6 +311,21 @@ function renderCanvas(
     ctx.lineWidth = 1 / cs.zoom; ctx.setLineDash([4 / cs.zoom, 3 / cs.zoom])
     ctx.fillRect(marquee.x, marquee.y, marquee.w, marquee.h)
     ctx.strokeRect(marquee.x, marquee.y, marquee.w, marquee.h)
+    ctx.restore()
+  }
+
+  // Smart alignment guides (magenta, full-bleed across the visible world).
+  if (guides && (guides.vx.length || guides.hy.length)) {
+    ctx.save()
+    ctx.strokeStyle = '#d6249f'
+    ctx.lineWidth = 1 / cs.zoom
+    ctx.setLineDash([])
+    // Span large enough to cross the viewport at any pan/zoom.
+    const span = 100000
+    ctx.beginPath()
+    for (const x of guides.vx) { ctx.moveTo(x, -span); ctx.lineTo(x, span) }
+    for (const y of guides.hy) { ctx.moveTo(-span, y); ctx.lineTo(span, y) }
+    ctx.stroke()
     ctx.restore()
   }
 
@@ -470,6 +502,45 @@ function renderNodeOverlay(
   ctx.restore()
 }
 
+// ── Gradient editing overlay (line + endpoint handles + draggable stops) ────────
+function drawGradientOverlay(ctx: CanvasRenderingContext2D, el: VectorElement, cs: CanvasState, dpr: number) {
+  const gl = gradientLine(el)
+  if (!gl) return
+  const f = el.fill
+  if (f.type !== 'linear-gradient' && f.type !== 'radial-gradient') return
+  ctx.save()
+  ctx.scale(dpr, dpr)
+  ctx.translate(cs.panX, cs.panY)
+  if (cs.rot) ctx.rotate(cs.rot)
+  ctx.scale(cs.zoom, cs.zoom)
+  const lw = 1.5 / cs.zoom
+  // Gradient line (white halo + accent core for contrast over any fill).
+  ctx.setLineDash([])
+  ctx.lineCap = 'round'
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = lw * 3
+  ctx.beginPath(); ctx.moveTo(gl.sx, gl.sy); ctx.lineTo(gl.ex, gl.ey); ctx.stroke()
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = lw
+  ctx.beginPath(); ctx.moveTo(gl.sx, gl.sy); ctx.lineTo(gl.ex, gl.ey); ctx.stroke()
+  // Endpoint discs.
+  const r = 5 / cs.zoom
+  for (const [hx, hy] of [[gl.sx, gl.sy], [gl.ex, gl.ey]] as [number, number][]) {
+    ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI * 2)
+    ctx.fillStyle = '#fff'; ctx.fill()
+    ctx.strokeStyle = C.accent; ctx.lineWidth = lw * 1.2; ctx.stroke()
+  }
+  // Colour stops as diamonds painted in their own colour.
+  const d = 4 / cs.zoom
+  for (const s of f.stops) {
+    const px = gl.sx + (gl.ex - gl.sx) * s.position
+    const py = gl.sy + (gl.ey - gl.sy) * s.position
+    ctx.save(); ctx.translate(px, py); ctx.rotate(Math.PI / 4)
+    ctx.fillStyle = s.color; ctx.fillRect(-d, -d, 2 * d, 2 * d)
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = lw; ctx.strokeRect(-d, -d, 2 * d, 2 * d)
+    ctx.restore()
+  }
+  ctx.restore()
+}
+
 // ── Canvas coordinate helpers ──────────────────────────────────────────────────
 function toCanvas(
   e: { clientX: number; clientY: number },
@@ -514,6 +585,7 @@ function hitHandle(el: VectorElement, cx: number, cy: number, zoom: number): num
 }
 
 function hitTest(el: VectorElement, px: number, py: number): boolean {
+  if (el.type === 'group') return false   // containers have no geometry
   if (el.type === 'path') {
     const pts = (el as PathElement).points
     if (pts.length === 0) return false
@@ -545,6 +617,177 @@ function selBBox(els: VectorElement[]): { x: number; y: number; w: number; h: nu
   const r = Math.max(...bs.map(b => b.x + b.w)), b = Math.max(...bs.map(b => b.y + b.h))
   return { x, y, w: r - x, h: b - y }
 }
+
+// ── Hierarchical layers (parentId + `group` container elements) ─────────────────
+const ROOT = '__root__'
+function pkey(el: { parentId?: string | null }): string { return el.parentId ?? ROOT }
+// Direct children of a parent (ROOT for top level), in sibling z-order.
+function childrenOf(els: VectorElement[], parentId: string): VectorElement[] {
+  return els.filter(e => pkey(e) === parentId).sort((a, b) => a.zIndex - b.zIndex)
+}
+// All descendant ids of a group (groups + leaves), excluding the group itself.
+function descendantIds(els: VectorElement[], groupId: string): Set<string> {
+  const out = new Set<string>()
+  const walk = (pid: string) => {
+    for (const e of els) if (pkey(e) === pid && !out.has(e.id)) { out.add(e.id); if (e.type === 'group') walk(e.id) }
+  }
+  walk(groupId)
+  return out
+}
+// Non-group descendant leaves of a group.
+function descendantLeaves(els: VectorElement[], groupId: string): VectorElement[] {
+  return [...descendantIds(els, groupId)].map(id => els.find(e => e.id === id)!).filter(e => e && e.type !== 'group')
+}
+// Top-most ancestor group of an element (the group to select when clicked).
+function topAncestorGroup(els: VectorElement[], id: string): string | null {
+  let cur = els.find(e => e.id === id)
+  let top: string | null = null
+  const seen = new Set<string>()
+  while (cur && cur.parentId && !seen.has(cur.parentId)) {
+    seen.add(cur.parentId)
+    top = cur.parentId
+    cur = els.find(e => e.id === cur!.parentId)
+  }
+  return top
+}
+// True if `el` or any ancestor group is hidden / locked (cascades).
+function ancestorFlag(els: VectorElement[], el: VectorElement, flag: 'visible' | 'locked'): boolean {
+  let cur: VectorElement | undefined = el
+  const seen = new Set<string>()
+  while (cur) {
+    if (flag === 'visible' ? !cur.visible : cur.locked) return true
+    if (!cur.parentId || seen.has(cur.parentId)) break
+    seen.add(cur.parentId)
+    cur = els.find(e => e.id === cur!.parentId)
+  }
+  return false
+}
+function effHidden(els: VectorElement[], el: VectorElement) { return ancestorFlag(els, el, 'visible') }
+function effLocked(els: VectorElement[], el: VectorElement) { return ancestorFlag(els, el, 'locked') }
+
+// Leaf elements (with cascaded alpha) in depth-first render order.
+function renderOrder(els: VectorElement[]): { el: VectorElement; alpha: number }[] {
+  const out: { el: VectorElement; alpha: number }[] = []
+  const walk = (parentId: string, vis: boolean, alpha: number) => {
+    for (const el of childrenOf(els, parentId)) {
+      const v = vis && el.visible
+      const a = alpha * (el.opacity / 100)
+      if (el.type === 'group') walk(el.id, v, a)
+      else if (v) out.push({ el, alpha: a })
+    }
+  }
+  walk(ROOT, true, 1)
+  return out
+}
+// Union bbox of a group's descendant leaves.
+function groupBBox(els: VectorElement[], groupId: string): { x: number; y: number; w: number; h: number } | null {
+  return selBBox(descendantLeaves(els, groupId))
+}
+// Remove group elements that have no children left (after delete/ungroup).
+function pruneEmptyGroups(els: VectorElement[]): VectorElement[] {
+  let cur = els
+  for (;;) {
+    const empty = new Set(cur.filter(e => e.type === 'group' && !cur.some(c => c.parentId === e.id)).map(e => e.id))
+    if (!empty.size) return cur
+    cur = cur.filter(e => !empty.has(e.id))
+  }
+}
+// Move `dragId` relative to `targetId` in the layer tree. `zone`:
+//   'inside' → become last child of target (must be a group)
+//   'before'/'after' → sibling of target, visually above/below it
+// Returns the new element list with sibling z-order renumbered. No-op on cycles.
+function moveElement(els: VectorElement[], dragId: string, targetId: string, zone: 'before' | 'after' | 'inside'): VectorElement[] {
+  const drag = els.find(e => e.id === dragId), target = els.find(e => e.id === targetId)
+  if (!drag || !target || dragId === targetId) return els
+  const newParent: string | null = zone === 'inside' && target.type === 'group' ? target.id : (target.parentId ?? null)
+  // Guard against dropping a group into itself or a descendant.
+  if (drag.type === 'group') {
+    if (newParent === drag.id) return els
+    const desc = descendantIds(els, drag.id)
+    if (newParent && desc.has(newParent)) return els
+  }
+  // Visual order = front (highest z) first.
+  const sibs = els.filter(e => (e.parentId ?? null) === newParent && e.id !== dragId).sort((a, b) => b.zIndex - a.zIndex)
+  let insertIdx: number
+  if (zone === 'inside') insertIdx = 0
+  else { const ti = sibs.findIndex(s => s.id === targetId); insertIdx = ti < 0 ? sibs.length : (zone === 'after' ? ti + 1 : ti) }
+  const moved = { ...drag, parentId: newParent } as VectorElement
+  sibs.splice(insertIdx, 0, moved)
+  const n = sibs.length
+  const zmap = new Map(sibs.map((s, i) => [s.id, n - 1 - i]))   // first (front) → highest z
+  return els.map(e => zmap.has(e.id) ? { ...(e.id === dragId ? moved : e), zIndex: zmap.get(e.id)! } as VectorElement : e)
+}
+
+// One-time migration: legacy flat `groupId` → a `group` element per distinct id.
+function migrateGroups(pd: VectorPageData): VectorPageData {
+  const legacy = pd.elements.filter(e => (e as { groupId?: string }).groupId != null)
+  if (!legacy.length) return pd
+  const groups = new Map<string, GroupElement>()
+  let z = pd.elements.length
+  const elements = pd.elements.map(e => {
+    const gid = (e as { groupId?: string }).groupId
+    const { groupId: _g, ...rest } = e as VectorElement & { groupId?: string }
+    if (gid == null) return rest as VectorElement
+    if (!groups.has(gid)) {
+      groups.set(gid, {
+        id: gid, type: 'group', name: 'Groupe', x: 0, y: 0, w: 0, h: 0,
+        rotation: 0, visible: true, locked: false, opacity: 100, zIndex: z++,
+        fill: { type: 'none' }, stroke: null, parentId: null,
+      })
+    }
+    return { ...rest, parentId: gid } as VectorElement
+  })
+  return { ...pd, elements: [...elements, ...groups.values()] }
+}
+// ── Snapping ─────────────────────────────────────────────────────────────────
+const SNAP_PX = 6   // snap threshold in screen pixels
+// Candidate snap coordinates: every other element's edges/centre, the artboards,
+// and the user guides.
+function snapTargets(pd: VectorPageData, exclude: Set<string>): { xs: number[]; ys: number[] } {
+  const xs: number[] = [], ys: number[] = []
+  for (const ab of pd.artboards) {
+    xs.push(ab.x, ab.x + ab.width / 2, ab.x + ab.width)
+    ys.push(ab.y, ab.y + ab.height / 2, ab.y + ab.height)
+  }
+  for (const el of pd.elements) {
+    if (exclude.has(el.id) || !el.visible || el.type === 'group') continue
+    const b = elBBox(el)
+    xs.push(b.x, b.x + b.w / 2, b.x + b.w)
+    ys.push(b.y, b.y + b.h / 2, b.y + b.h)
+  }
+  for (const g of pd.guides) (g.type === 'v' ? xs : ys).push(g.position)
+  return { xs, ys }
+}
+// Best alignment of any of `positions` to any `target` within `thr`.
+function bestSnap(positions: number[], targets: number[], thr: number): { delta: number; target: number } | null {
+  let best: { delta: number; target: number } | null = null
+  for (const p of positions) {
+    for (const tgt of targets) {
+      const d = tgt - p
+      if (Math.abs(d) <= thr && (!best || Math.abs(d) < Math.abs(best.delta))) best = { delta: d, target: tgt }
+    }
+  }
+  return best
+}
+
+// ── Gradient on-canvas editing ───────────────────────────────────────────────
+// Endpoints of the gradient line in world coords — mirrors the renderer's extent
+// so the handles sit exactly where the gradient is painted.
+function gradientLine(el: VectorElement): { sx: number; sy: number; ex: number; ey: number; cx: number; cy: number } | null {
+  const f = el.fill
+  if (f.type !== 'linear-gradient' && f.type !== 'radial-gradient') return null
+  const b = elBBox(el)
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2
+  const ang = ((f.angle ?? 0) * Math.PI) / 180
+  const dx = Math.cos(ang), dy = Math.sin(ang)
+  if (f.type === 'radial-gradient') {
+    const r = Math.max(b.w, b.h) / 2
+    return { sx: cx, sy: cy, ex: cx + dx * r, ey: cy + dy * r, cx, cy }
+  }
+  const half = (Math.abs(dx) * b.w + Math.abs(dy) * b.h) / 2
+  return { sx: cx - dx * half, sy: cy - dy * half, ex: cx + dx * half, ey: cy + dy * half, cx, cy }
+}
+
 // Regular polygon / star path points fitting the (cx,cy,rx,ry) ellipse.
 function genPolygon(cx: number, cy: number, rx: number, ry: number, sides: number): PathPoint[] {
   return Array.from({ length: sides }, (_, i) => {
@@ -693,10 +936,261 @@ function rotateHandlePos(bb: { x: number; y: number; w: number; h: number }, zoo
   return { x: bb.x + bb.w / 2, y: bb.y - 22 / zoom }
 }
 
+// ── Pathfinder & path geometry (boolean ops, simplify, smooth, outline, offset) ──
+// Vectors are flattened to polygons (rings of [x,y]), processed with the robust
+// `polygon-clipping` library, then rebuilt as a PathElement. Bézier curvature is
+// approximated by line sampling — the result is an editable polygonal path.
+type PCRing = [number, number][]
+type PCPoly = PCRing[]
+type PCMulti = PCPoly[]
+
+// Apply an element's own rotation (around its bbox centre) to a world point —
+// matches the transform used by the renderer/fill, so geometry is baked true.
+function bakeRotation(el: VectorElement, x: number, y: number): [number, number] {
+  if (!el.rotation) return [x, y]
+  const cx = el.x + el.w / 2, cy = el.y + el.h / 2
+  const a = (el.rotation * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a)
+  const dx = x - cx, dy = y - cy
+  return [cx + c * dx - s * dy, cy + s * dx + c * dy]
+}
+
+// Sample the cubic from anchor `a` to anchor `b` (excludes a, includes b).
+function sampleCubic(a: PathPoint, b: PathPoint, steps: number): [number, number][] {
+  const out: [number, number][] = []
+  // Straight segment when neither side carries a handle — keep it crisp (1 step).
+  const curved = a.hOut || b.hIn
+  const n = curved ? Math.max(2, steps) : 1
+  for (let s = 1; s <= n; s++) {
+    const p = cubicAt(a, b, s / n)
+    out.push([p.x, p.y])
+  }
+  return out
+}
+
+// Flatten an element into one or more closed polygon rings (true world coords).
+function elementToRings(el: VectorElement, steps = 20): PCRing[] {
+  if (el.type === 'text' || el.type === 'group') return []
+  const pe = el.type === 'path' ? (el as PathElement) : toPathElement(el)
+  const pts = pe.points
+  if (pts.length < 2) return []
+  // Split on `move` markers into independent subpaths (compound path).
+  const subs: PathPoint[][] = []
+  let cur: PathPoint[] = []
+  pts.forEach((p, i) => { if (p.move && i > 0) { subs.push(cur); cur = [] } cur.push(p) })
+  if (cur.length) subs.push(cur)
+  const rings: PCRing[] = []
+  for (const sub of subs) {
+    if (sub.length < 2) continue
+    const ring: PCRing = [bakeRotation(el, sub[0].x, sub[0].y)]
+    for (let i = 0; i < sub.length; i++) {
+      const a = sub[i], b = sub[(i + 1) % sub.length]   // closing segment wraps to start
+      for (const [x, y] of sampleCubic(a, b, steps)) ring.push(bakeRotation(el, x, y))
+    }
+    rings.push(ring)
+  }
+  return rings
+}
+
+// MultiPolygon → flat PathPoints (corner nodes), one subpath per ring.
+function multiToPathPoints(multi: PCMulti): PathPoint[] {
+  const out: PathPoint[] = []
+  for (const poly of multi) {
+    for (const ring of poly) {
+      if (ring.length < 4) continue
+      // Drop the duplicated closing vertex (polygon-clipping returns closed rings).
+      const last = ring.length - 1
+      const closed = ring[0][0] === ring[last][0] && ring[0][1] === ring[last][1]
+      const r = closed ? ring.slice(0, -1) : ring
+      const startIdx = out.length
+      r.forEach((pt, i) => out.push({ x: pt[0], y: pt[1], move: i === 0 && startIdx > 0 ? true : undefined }))
+    }
+  }
+  return out
+}
+
+// Build a PathElement from rings, inheriting style/name from `base`.
+function pathFromMulti(multi: PCMulti, base: VectorElement, name: string): PathElement | null {
+  const points = multiToPathPoints(multi)
+  if (points.length < 2) return null
+  const xs = points.map(p => p.x), ys = points.map(p => p.y)
+  const nx = Math.min(...xs), ny = Math.min(...ys)
+  const stroke = base.stroke ? structuredClone(base.stroke) : null
+  return {
+    id: newId(), type: 'path', name,
+    x: nx, y: ny, w: Math.max(...xs) - nx || 1, h: Math.max(...ys) - ny || 1,
+    rotation: 0, visible: true, locked: false, opacity: base.opacity,
+    zIndex: base.zIndex,
+    fill: structuredClone(base.fill), stroke,
+    points, closed: true,
+  }
+}
+
+type BoolOp = 'union' | 'subtract' | 'intersect' | 'exclude'
+
+// Combine elements (ordered bottom→top) with a boolean operation.
+function booleanCombine(els: VectorElement[], op: BoolOp): PCMulti | null {
+  const geoms = els.map(e => elementToRings(e)).filter(r => r.length > 0) as PCPoly[]
+  if (geoms.length < 2) return null
+  try {
+    if (op === 'union')     return polygonClipping.union(geoms[0], ...geoms.slice(1))
+    if (op === 'intersect') return polygonClipping.intersection(geoms[0], ...geoms.slice(1))
+    if (op === 'subtract')  return polygonClipping.difference(geoms[0], ...geoms.slice(1))
+    return polygonClipping.xor(geoms[0], ...geoms.slice(1))
+  } catch { return null }
+}
+
+// Ramer–Douglas–Peucker: drop anchors that lie within `eps` of the chord between
+// their kept neighbours. Honours subpaths (`move`) and the closed wrap.
+function rdpIndices(pts: { x: number; y: number }[], eps: number): number[] {
+  if (pts.length < 3) return pts.map((_, i) => i)
+  const keep = new Set<number>([0, pts.length - 1])
+  const stack: [number, number][] = [[0, pts.length - 1]]
+  while (stack.length) {
+    const [lo, hi] = stack.pop()!
+    if (hi - lo < 2) continue
+    const a = pts[lo], b = pts[hi]
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1
+    let far = -1, fd = eps
+    for (let i = lo + 1; i < hi; i++) {
+      const d = Math.abs((pts[i].x - a.x) * dy - (pts[i].y - a.y) * dx) / len
+      if (d > fd) { fd = d; far = i }
+    }
+    if (far !== -1) { keep.add(far); stack.push([lo, far], [far, hi]) }
+  }
+  return [...keep].sort((p, q) => p - q)
+}
+function simplifyPath(pe: PathElement, eps: number): PathElement {
+  // Operate per-subpath so compound paths keep their holes.
+  const pts = pe.points
+  const subs: { start: number; arr: PathPoint[] }[] = []
+  let cur: PathPoint[] = []; let start = 0
+  pts.forEach((p, i) => { if (p.move && i > 0) { subs.push({ start, arr: cur }); cur = []; start = i } cur.push(p) })
+  if (cur.length) subs.push({ start, arr: cur })
+  const next: PathPoint[] = []
+  for (const { arr } of subs) {
+    const keep = rdpIndices(arr, eps)
+    keep.forEach((idx, k) => {
+      const p = arr[idx]
+      // Kept anchors lose handles (simplification → corner nodes).
+      next.push({ x: p.x, y: p.y, move: k === 0 && next.length > 0 ? true : undefined })
+    })
+  }
+  const xs = next.map(p => p.x), ys = next.map(p => p.y)
+  const nx = Math.min(...xs), ny = Math.min(...ys)
+  return { ...pe, points: next, x: nx, y: ny, w: Math.max(...xs) - nx || 1, h: Math.max(...ys) - ny || 1 }
+}
+
+// Smooth: give every anchor symmetric handles derived from its neighbours
+// (Catmull-Rom-style), turning a polygonal path into a flowing curve.
+function smoothPath(pe: PathElement, amount = 0.2): PathElement {
+  const pts = pe.points
+  const subs: number[][] = []
+  let cur: number[] = []
+  pts.forEach((p, i) => { if (p.move && i > 0) { subs.push(cur); cur = [] } cur.push(i) })
+  if (cur.length) subs.push(cur)
+  const next = pts.map(p => ({ ...p }))
+  for (const idxs of subs) {
+    const n = idxs.length
+    if (n < 3) continue
+    for (let k = 0; k < n; k++) {
+      const p = next[idxs[k]]
+      const prev = pts[idxs[(k - 1 + n) % n]], nxt = pts[idxs[(k + 1) % n]]
+      const tx = (nxt.x - prev.x) * amount, ty = (nxt.y - prev.y) * amount
+      p.hIn = [-tx, -ty]; p.hOut = [tx, ty]
+    }
+  }
+  return { ...pe, points: next }
+}
+
+// Outline a stroke into a filled path: union of per-segment quads + round joins,
+// then subtract the inner area for unfilled closed shapes. Width in world units.
+function outlineStroke(el: VectorElement, steps = 16): PCMulti | null {
+  const stroke = el.stroke
+  if (!stroke || stroke.width <= 0) return null
+  const hw = stroke.width / 2
+  const rings = elementToRings(el, steps)
+  if (!rings.length) return null
+  const parts: PCPoly[] = []
+  // Approximate a disc by an octagon scaled to the half-width (round joins/caps).
+  const disc = (cx: number, cy: number): PCRing => {
+    const r: PCRing = []
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; r.push([cx + Math.cos(a) * hw, cy + Math.sin(a) * hw]) }
+    r.push(r[0]); return r
+  }
+  for (const ring of rings) {
+    for (let i = 0; i < ring.length - 1; i++) {
+      const [ax, ay] = ring[i], [bx, by] = ring[i + 1]
+      const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy)
+      if (len < 1e-6) continue
+      const nx = (-dy / len) * hw, ny = (dx / len) * hw
+      const quad: PCRing = [
+        [ax + nx, ay + ny], [bx + nx, by + ny],
+        [bx - nx, by - ny], [ax - nx, ay - ny], [ax + nx, ay + ny],
+      ]
+      parts.push([quad])
+      parts.push([disc(ax, ay)])
+    }
+    parts.push([disc(ring[ring.length - 1][0], ring[ring.length - 1][1])])
+  }
+  if (!parts.length) return null
+  try { return polygonClipping.union(parts[0], ...parts.slice(1)) } catch { return null }
+}
+
+// Offset a closed path outward (d>0) / inward (d<0). Naively offsets each vertex
+// along its bisector normal, then re-unions to clean self-intersections.
+function offsetPath(el: VectorElement, d: number, steps = 20): PCMulti | null {
+  const rings = elementToRings(el, steps)
+  if (!rings.length) return null
+  const out: PCPoly[] = []
+  for (const ring of rings) {
+    const r = ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1] ? ring.slice(0, -1) : ring
+    const n = r.length
+    if (n < 3) continue
+    // Outward direction depends on winding (signed area).
+    let area = 0
+    for (let i = 0; i < n; i++) { const [x1, y1] = r[i], [x2, y2] = r[(i + 1) % n]; area += x1 * y2 - x2 * y1 }
+    const sign = area > 0 ? 1 : -1
+    const offset: PCRing = []
+    for (let i = 0; i < n; i++) {
+      const [px, py] = r[(i - 1 + n) % n], [cx, cy] = r[i], [nx2, ny2] = r[(i + 1) % n]
+      const e1x = cx - px, e1y = cy - py, e2x = nx2 - cx, e2y = ny2 - cy
+      const l1 = Math.hypot(e1x, e1y) || 1, l2 = Math.hypot(e2x, e2y) || 1
+      // Edge normals (outward), averaged into a vertex normal.
+      const n1x = -e1y / l1 * sign, n1y = e1x / l1 * sign
+      const n2x = -e2y / l2 * sign, n2y = e2x / l2 * sign
+      let bx = n1x + n2x, by = n1y + n2y
+      const bl = Math.hypot(bx, by) || 1
+      bx /= bl; by /= bl
+      // Miter length compensation.
+      const cos = Math.max(0.3, n1x * bx + n1y * by)
+      offset.push([cx + bx * d / cos, cy + by * d / cos])
+    }
+    offset.push(offset[0])
+    out.push([offset])
+  }
+  if (!out.length) return null
+  try { return polygonClipping.union(out[0], ...out.slice(1)) } catch { return null }
+}
+
 // ── Main editor component ──────────────────────────────────────────────────────
-export default function ApexEditorPage() {
+// Embedded mode: the SAME editor mounted inside another app (e.g. Keyframe draws a
+// cel with the real Apex engine). Server loading/saving is bypassed — the scene is
+// seeded from memory and every edit is reported through onCommit — so any feature
+// added to Apex is instantly available here too.
+export interface ApexEmbed {
+  width:       number
+  height:      number
+  initialData: VectorPageData | null
+  onCommit:    (data: VectorPageData) => void
+  onClose:     () => void
+  title?:      string
+}
+
+export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
+  const embedded = !!embed
   const { t } = useTranslation('paintsharp')
-  const { id: projectId } = useParams<{ id: string }>()
+  const { id: routeId } = useParams<{ id: string }>()
+  const projectId = embedded ? undefined : routeId
   const navigate          = useNavigate()
   const qc                = useQueryClient()
 
@@ -748,11 +1242,15 @@ export default function ApexEditorPage() {
 
   const flushSave = useCallback(() => {
     if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null }
+    if (embedded) {
+      if (dirtyRef.current) { dirtyRef.current = false; embed!.onCommit(savePageDataRef.current) }
+      return
+    }
     if (dirtyRef.current && projectId && pageIdRef.current) {
       dirtyRef.current = false
       apexApi.savePage(projectId, pageIdRef.current, savePageDataRef.current).catch(() => {})
     }
-  }, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [projectId, embedded]) // eslint-disable-line react-hooks/exhaustive-deps
   const centeredRef             = useRef(false)
 
   const { data: pagesRes } = useQuery({
@@ -783,8 +1281,21 @@ export default function ApexEditorPage() {
     setCs({ zoom, panX, panY, rot: 0 })   // « Ajuster » réinitialise aussi la rotation de la vue
   }, [])
 
+  // Embedded: seed the scene from memory once (no server page to load).
   useEffect(() => {
-    if (!pagesRes?.pages?.length || !projectId) return
+    if (!embedded) return
+    const data = embed!.initialData ?? {
+      artboards: [{ id: newId(), name: 'Frame', x: 0, y: 0, width: embed!.width, height: embed!.height, background: 'transparent' }],
+      elements: [], guides: [],
+    }
+    skipSaveRef.current = true
+    setPageData(data)
+    centeredRef.current = false
+    setTimeout(() => { centerArtboard(data); centeredRef.current = true }, 30)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (embedded || !pagesRes?.pages?.length || !projectId) return
     const pages = pagesRes.pages
     const page  = pages[Math.min(currentPageIdx, pages.length - 1)]
     if (!page) return
@@ -793,7 +1304,7 @@ export default function ApexEditorPage() {
     pageIdRef.current = page.id
     centeredRef.current = false
     apexApi.getPage(projectId, page.id).then(r => {
-      const data = r.data.data ?? makePage1()
+      const data = migrateGroups(r.data.data ?? makePage1())
       skipSaveRef.current = true   // ce setPageData est un chargement, pas une édition
       setPageData(data)
       setTimeout(() => {
@@ -844,7 +1355,7 @@ export default function ApexEditorPage() {
   }
 
   const dragRef = useRef<{
-    type:       'pan' | 'move' | 'create' | 'resize' | 'rotate' | 'marquee' | 'node' | 'viewrotate'
+    type:       'pan' | 'move' | 'create' | 'resize' | 'rotate' | 'marquee' | 'node' | 'viewrotate' | 'gradient'
     startX:     number
     startY:     number
     canvasX:    number
@@ -863,6 +1374,7 @@ export default function ApexEditorPage() {
     breakSym?:  boolean           // alt-drag a handle → break tangent symmetry
     w0x?:       number            // viewrotate: world point under the viewport centre
     w0y?:       number
+    gradHandle?: 'start' | 'end' | number   // gradient editing: endpoint or stop index
   } | null>(null)
   const [nodeSel, setNodeSel] = useState<number | null>(null)
   const nodeSelRef = useRef<number | null>(null)
@@ -870,6 +1382,22 @@ export default function ApexEditorPage() {
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const marqueeRef = useRef<{ x: number; y: number } | null>(null)            // marquee origin
   const marqueeRectRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null)
+
+  // ── Magnétisme & repères intelligents ───────────────────────────────────────
+  const [snapOn, setSnapOn]   = useState(true)        // smart snapping (objects/artboard/guides)
+  const [gridOn, setGridOn]   = useState(false)       // grid overlay + grid snapping
+  const gridSize              = 20
+  const snapOnRef = useRef(snapOn); useEffect(() => { snapOnRef.current = snapOn }, [snapOn])
+  const gridOnRef = useRef(gridOn); useEffect(() => { gridOnRef.current = gridOn }, [gridOn])
+  // Active smart-guide lines (world coords) drawn while dragging.
+  const [guides, setGuides] = useState<{ vx: number[]; hy: number[] }>({ vx: [], hy: [] })
+
+  // ── Layers panel UI state ────────────────────────────────────────────────────
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const [dndTarget, setDndTarget] = useState<{ id: string; zone: 'before' | 'after' | 'inside' } | null>(null)
+  const dndDragId = useRef<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
 
   // ── Undo / redo history (snapshots of pageData) ────────────────────────────
   const past   = useRef<VectorPageData[]>([])
@@ -994,30 +1522,102 @@ export default function ApexEditorPage() {
   const deleteSel = useCallback(() => {
     const sel = selectedIdsRef.current; if (!sel.length) return
     pushHistory()
-    setPageData(prev => ({ ...prev, elements: prev.elements.filter(e => !sel.includes(e.id)) }))
+    setPageData(prev => {
+      // Deleting a group removes its whole subtree; then prune any emptied groups.
+      const kill = new Set(sel)
+      for (const id of sel) { const el = prev.elements.find(e => e.id === id); if (el?.type === 'group') descendantIds(prev.elements, id).forEach(d => kill.add(d)) }
+      return { ...prev, elements: pruneEmptyGroups(prev.elements.filter(e => !kill.has(e.id))) }
+    })
     setSelectedIds([])
   }, [pushHistory])
-  const selectAll = useCallback(() => setSelectedIds(pageDataRef.current.elements.filter(e => e.visible && !e.locked).map(e => e.id)), [])
+  const selectAll = useCallback(() => {
+    const els = pageDataRef.current.elements
+    setSelectedIds(els.filter(e => e.type !== 'group' && !effHidden(els, e) && !effLocked(els, e)).map(e => e.id))
+  }, [])
   const cutSel = useCallback(() => { copySel(); deleteSel() }, [copySel, deleteSel])
 
   // ── Grouping ─────────────────────────────────────────────────────────────────
+  // Wrap the selected elements into a new `group` container (nestable).
   const groupSel = useCallback(() => {
     const sel = selectedIdsRef.current
     if (sel.length < 2) return
     pushHistory()
     const gid = `g-${newId()}`
-    setPageData(prev => ({ ...prev, elements: prev.elements.map(el => sel.includes(el.id) ? { ...el, groupId: gid } as VectorElement : el) }))
-  }, [pushHistory])
+    setPageData(prev => {
+      const chosen = prev.elements.filter(e => sel.includes(e.id))
+      if (chosen.length < 2) return prev
+      const parents = new Set(chosen.map(c => c.parentId ?? null))
+      const parentId = parents.size === 1 ? [...parents][0] : null
+      const group: GroupElement = {
+        id: gid, type: 'group', name: t('apex_group_name'),
+        x: 0, y: 0, w: 0, h: 0, rotation: 0, visible: true, locked: false,
+        opacity: 100, zIndex: Math.max(...chosen.map(c => c.zIndex)),
+        fill: { type: 'none' }, stroke: null, parentId, collapsed: false,
+      }
+      return { ...prev, elements: [...prev.elements.map(el => sel.includes(el.id) ? { ...el, parentId: gid } as VectorElement : el), group] }
+    })
+  }, [pushHistory, t])
+  // Dissolve the parent group(s) of the selection, reparenting children upward.
   const ungroupSel = useCallback(() => {
     const sel = selectedIdsRef.current
     if (!sel.length) return
     pushHistory()
-    setPageData(prev => ({ ...prev, elements: prev.elements.map(el => {
-      if (!sel.includes(el.id) || el.groupId == null) return el
-      const { groupId: _g, ...rest } = el
-      return rest as VectorElement
-    }) }))
+    setPageData(prev => {
+      const chosen = prev.elements.filter(e => sel.includes(e.id))
+      // Groups to dissolve: selected groups themselves + immediate parents of selected leaves.
+      const dissolve = new Set<string>()
+      for (const c of chosen) {
+        if (c.type === 'group') dissolve.add(c.id)
+        else if (c.parentId) dissolve.add(c.parentId)
+      }
+      if (!dissolve.size) return prev
+      const grandparent = new Map<string, string | null>()
+      for (const id of dissolve) grandparent.set(id, prev.elements.find(g => g.id === id)?.parentId ?? null)
+      const elements = prev.elements
+        .filter(e => !dissolve.has(e.id))
+        .map(e => e.parentId && dissolve.has(e.parentId) ? { ...e, parentId: grandparent.get(e.parentId) ?? null } as VectorElement : e)
+      return { ...prev, elements }
+    })
   }, [pushHistory])
+
+  // ── Layers panel actions ─────────────────────────────────────────────────────
+  // Reparent / reorder via drag-and-drop in the layers tree.
+  const reparent = useCallback((dragId: string, targetId: string, zone: 'before' | 'after' | 'inside') => {
+    pushHistory()
+    setPageData(prev => ({ ...prev, elements: moveElement(prev.elements, dragId, targetId, zone) }))
+  }, [pushHistory])
+  // Inline rename of any layer / group.
+  const renameEl = useCallback((id: string, name: string) => {
+    setPageData(prev => ({ ...prev, elements: prev.elements.map(e => e.id === id ? { ...e, name } as VectorElement : e) }))
+  }, [])
+  // New empty folder (group), or wrap the current selection when ≥ 2 are selected.
+  const newFolder = useCallback(() => {
+    const sel = selectedIdsRef.current
+    if (sel.length >= 2) { groupSel(); return }
+    pushHistory()
+    setPageData(prev => {
+      const sole = prev.elements.find(e => e.id === sel[0])
+      const parentId = sole?.parentId ?? null
+      const group: GroupElement = {
+        id: `g-${newId()}`, type: 'group', name: t('apex_group_name'),
+        x: 0, y: 0, w: 0, h: 0, rotation: 0, visible: true, locked: false,
+        opacity: 100, zIndex: prev.elements.length, fill: { type: 'none' }, stroke: null,
+        parentId, collapsed: false,
+      }
+      return { ...prev, elements: [...prev.elements, group] }
+    })
+  }, [pushHistory, t, groupSel])
+  // Select from the layers panel: a group selects its leaf descendants.
+  const selectFromPanel = useCallback((id: string, additive: boolean) => {
+    const els = pageDataRef.current.elements
+    const el = els.find(e => e.id === id)
+    const ids = el?.type === 'group' ? descendantLeaves(els, id).map(e => e.id) : [id]
+    setSelectedIds(prev => additive ? Array.from(new Set([...prev, ...ids])) : ids)
+    setNodeSel(null)
+  }, [])
+  const toggleCollapse = useCallback((id: string) => {
+    setCollapsedGroups(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }, [])
 
   // ── Convert shape(s) to editable path ────────────────────────────────────────
   const convertToPath = useCallback(() => {
@@ -1044,7 +1644,7 @@ export default function ApexEditorPage() {
   // `move`) en un unique PathElement libre — pleinement éditable à la plume.
   const mergeSel = useCallback(() => {
     const sel = selectedIdsRef.current
-    const chosen = pageDataRef.current.elements.filter(e => sel.includes(e.id) && e.type !== 'text')
+    const chosen = pageDataRef.current.elements.filter(e => sel.includes(e.id) && e.type !== 'text' && e.type !== 'group')
     if (chosen.length < 2) return
     pushHistory()
     const allPts: PathPoint[] = []
@@ -1067,6 +1667,74 @@ export default function ApexEditorPage() {
     setSelectedIds([merged.id])
     setNodeSel(null)
   }, [pushHistory, t])
+
+  // ── Pathfinder : opérations booléennes sur les objets sélectionnés ──────────
+  const pathfinder = useCallback((op: BoolOp) => {
+    const sel = selectedIdsRef.current
+    const chosen = pageDataRef.current.elements
+      .filter(e => sel.includes(e.id) && e.type !== 'text' && e.type !== 'group')
+      .sort((a, b) => a.zIndex - b.zIndex)   // bottom → top (subtract = bottom minus rest)
+    if (chosen.length < 2) return
+    const multi = booleanCombine(chosen, op)
+    if (!multi || !multi.length) return
+    const top = chosen[chosen.length - 1]   // inherit appearance from the top object
+    const name = t(`apex_pf_${op}` as 'apex_pf_union')
+    const result = pathFromMulti(multi, top, name)
+    if (!result) return
+    pushHistory()
+    const keptIds = new Set(chosen.map(c => c.id))
+    setPageData(prev => ({ ...prev, elements: [...prev.elements.filter(e => !keptIds.has(e.id)), result] }))
+    setSelectedIds([result.id])
+    setNodeSel(null)
+  }, [pushHistory, t])
+
+  // ── Opérations de chemin (objet unique) ─────────────────────────────────────
+  const simplifySel = useCallback((eps = 2) => {
+    const sel = selectedIdsRef.current
+    const el = pageDataRef.current.elements.find(e => e.id === sel[0])
+    if (sel.length !== 1 || !el || el.type !== 'path') return
+    pushHistory()
+    const simplified = simplifyPath(el as PathElement, eps)
+    setPageData(prev => ({ ...prev, elements: prev.elements.map(e => e.id === el.id ? simplified : e) }))
+  }, [pushHistory])
+
+  const smoothSel = useCallback(() => {
+    const sel = selectedIdsRef.current
+    const el = pageDataRef.current.elements.find(e => e.id === sel[0])
+    if (sel.length !== 1 || !el || el.type !== 'path') return
+    pushHistory()
+    const smoothed = smoothPath(el as PathElement)
+    setPageData(prev => ({ ...prev, elements: prev.elements.map(e => e.id === el.id ? smoothed : e) }))
+  }, [pushHistory])
+
+  const outlineStrokeSel = useCallback(() => {
+    const sel = selectedIdsRef.current
+    const el = pageDataRef.current.elements.find(e => e.id === sel[0])
+    if (sel.length !== 1 || !el || !el.stroke || el.stroke.width <= 0) return
+    const multi = outlineStroke(el)
+    if (!multi || !multi.length) return
+    // Le contour vectorisé prend la couleur du trait, sans contour propre.
+    const base = { ...el, fill: { type: 'solid' as const, color: el.stroke.color, opacity: el.stroke.opacity }, stroke: null }
+    const result = pathFromMulti(multi, base, t('apex_path_outline'))
+    if (!result) return
+    pushHistory()
+    setPageData(prev => ({ ...prev, elements: prev.elements.map(e => e.id === el.id ? result : e) }))
+    setSelectedIds([result.id])
+  }, [pushHistory, t])
+
+  const offsetSel = useCallback((d: number) => {
+    const sel = selectedIdsRef.current
+    const el = pageDataRef.current.elements.find(e => e.id === sel[0])
+    if (sel.length !== 1 || !el || el.type === 'text' || d === 0) return
+    const multi = offsetPath(el, d)
+    if (!multi || !multi.length) return
+    const result = pathFromMulti(multi, el, el.name)
+    if (!result) return
+    pushHistory()
+    result.zIndex = el.zIndex
+    setPageData(prev => ({ ...prev, elements: prev.elements.map(e => e.id === el.id ? result : e) }))
+    setSelectedIds([result.id])
+  }, [pushHistory])
 
   // ── Delete the selected node (direct-selection tool) ─────────────────────────
   const deleteNode = useCallback(() => {
@@ -1110,11 +1778,26 @@ export default function ApexEditorPage() {
         { label: t('apex_flip_v'),     onClick: () => flip('v') },
         'sep',
         ...(multi ? [{ label: t('apex_group'), onClick: groupSel, shortcut: 'Ctrl+G' } as CtxItem] : []),
-        ...(hit.groupId != null ? [{ label: t('apex_ungroup'), onClick: ungroupSel, shortcut: 'Ctrl+Shift+G' } as CtxItem] : []),
+        ...(hit.parentId != null ? [{ label: t('apex_ungroup'), onClick: ungroupSel, shortcut: 'Ctrl+Shift+G' } as CtxItem] : []),
         ...(hit.type === 'rect' || hit.type === 'ellipse' || (hit.type === 'path' && (hit as PathElement).shape)
           ? [{ label: t('apex_convert_to_path'), onClick: convertToPath } as CtxItem] : []),
         ...(multi ? [{ label: t('apex_merge'), onClick: mergeSel } as CtxItem] : []),
         ...(multi ? [
+          'sep' as CtxItem,
+          { label: t('apex_pf_union'),     onClick: () => pathfinder('union') } as CtxItem,
+          { label: t('apex_pf_subtract'),  onClick: () => pathfinder('subtract') } as CtxItem,
+          { label: t('apex_pf_intersect'), onClick: () => pathfinder('intersect') } as CtxItem,
+          { label: t('apex_pf_exclude'),   onClick: () => pathfinder('exclude') } as CtxItem,
+        ] : []),
+        ...(!multi && hit.type === 'path' ? [
+          'sep' as CtxItem,
+          { label: t('apex_path_simplify'), onClick: () => simplifySel() } as CtxItem,
+          { label: t('apex_path_smooth'),   onClick: smoothSel } as CtxItem,
+        ] : []),
+        ...(!multi && hit.stroke && hit.stroke.width > 0
+          ? [{ label: t('apex_path_outline'), onClick: outlineStrokeSel } as CtxItem] : []),
+        ...(multi ? [
+          'sep' as CtxItem,
           { label: t('apex_align_left'),    onClick: () => align('left') } as CtxItem,
           { label: t('apex_align_center_h'),onClick: () => align('hcenter') } as CtxItem,
         ] : []),
@@ -1128,7 +1811,7 @@ export default function ApexEditorPage() {
         { label: t('apex_ctx_select_all'), onClick: selectAll, shortcut: 'Ctrl+A' },
       ])
     }
-  }, [ctx, t, undo, cutSel, copySel, pasteSel, duplicateSel, reorder, flip, align, deleteSel, selectAll, groupSel, ungroupSel, convertToPath, mergeSel])
+  }, [ctx, t, undo, cutSel, copySel, pasteSel, duplicateSel, reorder, flip, align, deleteSel, selectAll, groupSel, ungroupSel, convertToPath, mergeSel, pathfinder, simplifySel, smoothSel, outlineStrokeSel])
 
   // ── Commit pen path ──────────────────────────────────────────────────────────
   const commitPenPath = useCallback((points: PathPoint[], closed: boolean) => {
@@ -1167,14 +1850,18 @@ export default function ApexEditorPage() {
     const { width: w, height: h } = canvas.getBoundingClientRect()
     canvas.width  = Math.round(w * dpr)
     canvas.height = Math.round(h * dpr)
-    renderCanvas(ctx, w, h, pageData, cs, tool === 'node' ? [] : selectedIds, dpr, marquee)
+    renderCanvas(ctx, w, h, pageData, cs, tool === 'node' ? [] : selectedIds, dpr, marquee, guides, { size: gridSize, on: gridOn })
     const pen = penRef.current
     if (pen && pen.points.length > 0) drawPenOverlay(ctx, pen, cs, dpr)
     if (tool === 'node' && selectedIds.length === 1) {
       const pe = pageData.elements.find(el => el.id === selectedIds[0])
       if (pe && pe.type === 'path') renderNodeOverlay(ctx, pe as PathElement, cs, dpr, nodeSel)
     }
-  }, [pageData, cs, selectedIds, marquee, tool, nodeSel])
+    if (tool === 'select' && selectedIds.length === 1) {
+      const ge = pageData.elements.find(el => el.id === selectedIds[0])
+      if (ge && (ge.fill.type === 'linear-gradient' || ge.fill.type === 'radial-gradient')) drawGradientOverlay(ctx, ge, cs, dpr)
+    }
+  }, [pageData, cs, selectedIds, marquee, tool, nodeSel, guides, gridOn])
 
   useEffect(() => { doRender() }, [doRender, penProgress])
 
@@ -1351,6 +2038,34 @@ export default function ApexEditorPage() {
       const pd  = pageDataRef.current
       const sel = selectedIdsRef.current
       const shift = e.shiftKey
+      // Gradient handles take priority (single selection, gradient fill).
+      if (sel.length === 1) {
+        const el = pd.elements.find(x => x.id === sel[0])
+        if (el && (el.fill.type === 'linear-gradient' || el.fill.type === 'radial-gradient')) {
+          const gl = gradientLine(el)!
+          const tol = 8 / cs_.zoom
+          const stops = el.fill.stops
+          for (let i = 0; i < stops.length; i++) {
+            const px = gl.sx + (gl.ex - gl.sx) * stops[i].position
+            const py = gl.sy + (gl.ey - gl.sy) * stops[i].position
+            if (Math.hypot(pt.x - px, pt.y - py) <= tol) {
+              pushHistory()
+              dragRef.current = { type: 'gradient', startX: e.clientX, startY: e.clientY, canvasX: pt.x, canvasY: pt.y, snapshot: { ...el }, gradHandle: i, moved: false }
+              return
+            }
+          }
+          if (Math.hypot(pt.x - gl.ex, pt.y - gl.ey) <= tol) {
+            pushHistory()
+            dragRef.current = { type: 'gradient', startX: e.clientX, startY: e.clientY, canvasX: pt.x, canvasY: pt.y, snapshot: { ...el }, gradHandle: 'end', moved: false }
+            return
+          }
+          if (el.fill.type === 'linear-gradient' && Math.hypot(pt.x - gl.sx, pt.y - gl.sy) <= tol) {
+            pushHistory()
+            dragRef.current = { type: 'gradient', startX: e.clientX, startY: e.clientY, canvasX: pt.x, canvasY: pt.y, snapshot: { ...el }, gradHandle: 'start', moved: false }
+            return
+          }
+        }
+      }
       // Rotation / resize handles (single selection only)
       if (sel.length === 1) {
         const el = pd.elements.find(x => x.id === sel[0])
@@ -1372,12 +2087,12 @@ export default function ApexEditorPage() {
           }
         }
       }
-      const sorted = [...pd.elements].sort((a, b) => b.zIndex - a.zIndex)
-      const hit = sorted.find(el => !el.locked && el.visible && hitTest(el, pt.x, pt.y))
-      // Selecting any member of a group selects the whole group.
+      const sorted = renderOrder(pd.elements).map(o => o.el).reverse()   // top-most first
+      const hit = sorted.find(el => !effLocked(pd.elements, el) && hitTest(el, pt.x, pt.y))
+      // Clicking a grouped object selects all leaves of its top-most ancestor group.
       const groupMates = (id: string) => {
-        const g = pd.elements.find(x => x.id === id)?.groupId
-        return g ? pd.elements.filter(e => e.groupId === g).map(e => e.id) : [id]
+        const top = topAncestorGroup(pd.elements, id)
+        return top ? descendantLeaves(pd.elements, top).map(e => e.id) : [id]
       }
       if (hit) {
         let nextSel = sel
@@ -1556,11 +2271,59 @@ export default function ApexEditorPage() {
       }) }))
       return
     }
+    if (drag.type === 'gradient' && drag.snapshot) {
+      const snap = drag.snapshot
+      const gl = gradientLine(snap)
+      if (!gl) return
+      const ptw = toCanvas(e, rect, cs_)
+      const id = snap.id
+      drag.moved = true
+      setPageData(prev => ({ ...prev, elements: prev.elements.map(el => {
+        if (el.id !== id) return el
+        const f = el.fill
+        if (f.type !== 'linear-gradient' && f.type !== 'radial-gradient') return el
+        if (drag.gradHandle === 'end' || drag.gradHandle === 'start') {
+          let ang = Math.atan2(ptw.y - gl.cy, ptw.x - gl.cx) * 180 / Math.PI
+          if (drag.gradHandle === 'start') ang += 180
+          if (e.shiftKey) ang = Math.round(ang / 15) * 15
+          return { ...el, fill: { ...f, angle: Math.round(ang) } } as VectorElement
+        }
+        const idx = drag.gradHandle as number
+        const vx = gl.ex - gl.sx, vy = gl.ey - gl.sy
+        const len2 = vx * vx + vy * vy || 1
+        let tpos = ((ptw.x - gl.sx) * vx + (ptw.y - gl.sy) * vy) / len2
+        tpos = Math.max(0, Math.min(1, tpos))
+        const stops = f.stops.map((s, i) => i === idx ? { ...s, position: tpos } : s)
+        return { ...el, fill: { ...f, stops } } as VectorElement
+      }) }))
+      return
+    }
     if (drag.type === 'move' && drag.moves) {
       const moves = drag.moves
+      let ndx = dx, ndy = dy
+      const vx: number[] = [], hy: number[] = []
+      const base = selBBox(moves)
+      if (base && !e.altKey) {
+        if (snapOnRef.current) {
+          const exclude = new Set(moves.map(m => m.id))
+          const tg = snapTargets(pageDataRef.current, exclude)
+          const thr = SNAP_PX / cs_.zoom
+          const mx = base.x + dx, my = base.y + dy
+          const sx = bestSnap([mx, mx + base.w / 2, mx + base.w], tg.xs, thr)
+          const sy = bestSnap([my, my + base.h / 2, my + base.h], tg.ys, thr)
+          if (sx) { ndx += sx.delta; vx.push(sx.target) }
+          if (sy) { ndy += sy.delta; hy.push(sy.target) }
+        }
+        if (gridOnRef.current) {
+          // Snap the top-left corner to the grid when no smart guide claimed the axis.
+          if (!vx.length) ndx = Math.round((base.x + dx) / gridSize) * gridSize - base.x
+          if (!hy.length) ndy = Math.round((base.y + dy) / gridSize) * gridSize - base.y
+        }
+      }
+      setGuides({ vx, hy })
       setPageData(prev => ({ ...prev, elements: prev.elements.map(el => {
         const snap = moves.find(m => m.id === el.id)
-        return snap ? translateEl(snap, dx, dy) : el
+        return snap ? translateEl(snap, ndx, ndy) : el
       }) }))
       return
     }
@@ -1591,12 +2354,26 @@ export default function ApexEditorPage() {
       const snap = drag.snapshot
       const hi   = drag.handleIdx
       let { x, y, w, h } = snap
-      if ([0, 3, 5].includes(hi)) { x = snap.x + dx; w = snap.w - dx }
-      if ([2, 4, 7].includes(hi)) { w = snap.w + dx }
-      if ([0, 1, 2].includes(hi)) { y = snap.y + dy; h = snap.h - dy }
-      if ([5, 6, 7].includes(hi)) { h = snap.h + dy }
-      if (w < 4) { if ([0, 3, 5].includes(hi)) x = snap.x + snap.w - 4; w = 4 }
-      if (h < 4) { if ([0, 1, 2].includes(hi)) y = snap.y + snap.h - 4; h = 4 }
+      const left = [0, 3, 5].includes(hi), right = [2, 4, 7].includes(hi)
+      const top  = [0, 1, 2].includes(hi), bottom = [5, 6, 7].includes(hi)
+      // Snap the dragged edge to nearby targets (object/artboard/guide alignment).
+      let ndx = dx, ndy = dy
+      const vx: number[] = [], hy: number[] = []
+      if (snapOnRef.current && !e.altKey) {
+        const tg = snapTargets(pageDataRef.current, new Set([snap.id]))
+        const thr = SNAP_PX / cs_.zoom
+        if (left)   { const s = bestSnap([snap.x + dx], tg.xs, thr); if (s) { ndx += s.delta; vx.push(s.target) } }
+        if (right)  { const s = bestSnap([snap.x + snap.w + dx], tg.xs, thr); if (s) { ndx += s.delta; vx.push(s.target) } }
+        if (top)    { const s = bestSnap([snap.y + dy], tg.ys, thr); if (s) { ndy += s.delta; hy.push(s.target) } }
+        if (bottom) { const s = bestSnap([snap.y + snap.h + dy], tg.ys, thr); if (s) { ndy += s.delta; hy.push(s.target) } }
+      }
+      setGuides({ vx, hy })
+      if (left)   { x = snap.x + ndx; w = snap.w - ndx }
+      if (right)  { w = snap.w + ndx }
+      if (top)    { y = snap.y + ndy; h = snap.h - ndy }
+      if (bottom) { h = snap.h + ndy }
+      if (w < 4) { if (left) x = snap.x + snap.w - 4; w = 4 }
+      if (h < 4) { if (top)  y = snap.y + snap.h - 4; h = 4 }
       setPageData(prev => ({ ...prev, elements: prev.elements.map(el => {
         if (el.id !== snap.id) return el
         if (snap.type === 'path') {
@@ -1625,7 +2402,11 @@ export default function ApexEditorPage() {
       if (m && (m.w > 2 || m.h > 2)) {
         const inside = (b: { x:number;y:number;w:number;h:number }) =>
           b.x < m.x + m.w && b.x + b.w > m.x && b.y < m.y + m.h && b.y + b.h > m.y
-        const hits = pageDataRef.current.elements.filter(el => el.visible && !el.locked && inside(elBBox(el))).map(el => el.id)
+        const els = pageDataRef.current.elements
+        const hits = els
+          .filter(el => el.type !== 'group' && !effHidden(els, el) && !effLocked(els, el) && inside(elBBox(el)))
+          // Expand each hit to its top-most group's leaves (marquee selects whole groups).
+          .flatMap(el => { const top = topAncestorGroup(els, el.id); return top ? descendantLeaves(els, top).map(e => e.id) : [el.id] })
         setSelectedIds(prev => Array.from(new Set([...prev, ...hits])))
       }
     } else if (drag && !drag.moved && (drag.type === 'create')) {
@@ -1634,6 +2415,7 @@ export default function ApexEditorPage() {
       if (nid) setPageData(prev => ({ ...prev, elements: prev.elements.filter(e => e.id !== nid) }))
     }
     setMarquee(null); marqueeRef.current = null; marqueeRectRef.current = null
+    setGuides({ vx: [], hy: [] })
     dragRef.current = null
   }, [])
 
@@ -1743,7 +2525,7 @@ export default function ApexEditorPage() {
     : effectiveTool === 'select' || effectiveTool === 'node' ? 'default'
     : 'crosshair'
 
-  if (!projectId) return null
+  if (!projectId && !embedded) return null
 
   // Reusable property sections (used by single- and multi-selection views).
   const propBtnCls = 'flex items-center justify-center rounded transition-colors hover:brightness-150'
@@ -1799,26 +2581,142 @@ export default function ApexEditorPage() {
     </div>
   )
 
-  const apexPanels = {
-    layers: { label: t('apex_layers'), render: () => (
-      <div className="flex-1 overflow-y-auto">
-              {[...pageData.elements].reverse().map(el => (
-                <LayerRow
-                  key={el.id}
-                  el={el}
-                  selected={selectedIds.includes(el.id)}
-                  onSelect={() => setSelectedIds([el.id])}
-                  onToggleVisible={() => updateEl(el.id, { visible: !el.visible }, setPageData)}
-                  onToggleLock={() => updateEl(el.id, { locked: !el.locked }, setPageData)}
-                />
-              ))}
-              {pageData.elements.length === 0 && (
-                <p className="text-[10px] px-3 py-4" style={{ color: C.textDim }}>
-                  {t('apex_no_elements')}
-                </p>
-              )}
+  // Pathfinder : opérations booléennes (≥ 2 objets non-texte sélectionnés).
+  const selNonText = selectedIds
+    .map(id => pageData.elements.find(e => e.id === id))
+    .filter((e): e is VectorElement => !!e && e.type !== 'text' && e.type !== 'group')
+  const pathfinderSection = selNonText.length >= 2 && (
+    <PropSection title={t('apex_section_pathfinder')}>
+      <div className="px-2 pb-2 grid grid-cols-4 gap-1">
+        {([
+          ['union',     t('apex_pf_union')],
+          ['subtract',  t('apex_pf_subtract')],
+          ['intersect', t('apex_pf_intersect')],
+          ['exclude',   t('apex_pf_exclude')],
+        ] as [BoolOp, string][]).map(([op, label]) => (
+          <button key={op} title={label} onClick={() => pathfinder(op)}
+            className="flex items-center justify-center rounded transition-colors hover:brightness-150"
+            style={{ height: 30, background: '#2a2a2a' }}>
+            <PathfinderGlyph op={op} />
+          </button>
+        ))}
       </div>
-    ) },
+    </PropSection>
+  )
+
+  // Opérations de chemin (objet unique : path, ou tout objet avec contour).
+  const soloEl = selectedIds.length === 1 ? pageData.elements.find(e => e.id === selectedIds[0]) ?? null : null
+  const pathOpsSection = soloEl && soloEl.type !== 'text' && (
+    <PropSection title={t('apex_section_pathops')}>
+      <div className="px-2 pb-2 flex flex-col gap-1">
+        {soloEl.type === 'path' && (
+          <div className="flex gap-1">
+            <button onClick={() => simplifySel()} className="flex-1 flex items-center justify-center gap-1.5 h-6 rounded text-[10px] hover:brightness-150" style={{ background: '#2a2a2a', color: C.text }}>
+              <Waypoints size={11} /> {t('apex_path_simplify')}
+            </button>
+            <button onClick={() => smoothSel()} className="flex-1 flex items-center justify-center gap-1.5 h-6 rounded text-[10px] hover:brightness-150" style={{ background: '#2a2a2a', color: C.text }}>
+              <Spline size={11} /> {t('apex_path_smooth')}
+            </button>
+          </div>
+        )}
+        {soloEl.stroke && soloEl.stroke.width > 0 && (
+          <button onClick={outlineStrokeSel} className="flex items-center justify-center gap-1.5 h-6 rounded text-[10px] hover:brightness-150" style={{ background: '#2a2a2a', color: C.text }}>
+            <PenTool size={11} /> {t('apex_path_outline')}
+          </button>
+        )}
+        <div className="flex gap-1 items-center">
+          <span className="text-[10px]" style={{ color: C.textDim }}>{t('apex_path_offset')}</span>
+          <button onClick={() => offsetSel(5)} title={t('apex_path_offset_out')} className="flex-1 h-6 rounded text-[12px] hover:brightness-150" style={{ background: '#2a2a2a', color: C.text }}>＋</button>
+          <button onClick={() => offsetSel(-5)} title={t('apex_path_offset_in')} className="flex-1 h-6 rounded text-[12px] hover:brightness-150" style={{ background: '#2a2a2a', color: C.text }}>－</button>
+        </div>
+      </div>
+    </PropSection>
+  )
+
+  const apexPanels = {
+    layers: { label: t('apex_layers'), render: () => {
+      const els = pageData.elements
+      const rows: React.ReactNode[] = []
+      const build = (parentId: string, depth: number) => {
+        // Front-most (highest z) first, matching the canvas stacking top-down.
+        for (const el of childrenOf(els, parentId).slice().reverse()) {
+          const isGroup = el.type === 'group'
+          const leaves = isGroup ? descendantLeaves(els, el.id) : []
+          const selected = isGroup
+            ? leaves.length > 0 && leaves.every(l => selectedIds.includes(l.id))
+            : selectedIds.includes(el.id)
+          rows.push(
+            <LayerRow
+              key={el.id}
+              el={el}
+              depth={depth}
+              selected={selected}
+              isGroup={isGroup}
+              collapsed={collapsedGroups.has(el.id)}
+              renaming={renamingId === el.id}
+              renameDraft={renameDraft}
+              dnd={dndTarget?.id === el.id ? dndTarget.zone : null}
+              onToggleCollapse={() => toggleCollapse(el.id)}
+              onSelect={e => selectFromPanel(el.id, e.shiftKey || e.metaKey || e.ctrlKey)}
+              onStartRename={() => { setRenamingId(el.id); setRenameDraft(el.name) }}
+              onRenameDraft={setRenameDraft}
+              onCommitRename={() => { if (renameDraft.trim()) renameEl(el.id, renameDraft.trim()); setRenamingId(null) }}
+              onToggleVisible={() => updateEl(el.id, { visible: !el.visible }, setPageData)}
+              onToggleLock={() => updateEl(el.id, { locked: !el.locked }, setPageData)}
+              onDragStartRow={() => { dndDragId.current = el.id }}
+              onDragOverRow={e => {
+                e.preventDefault()
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                const rel = (e.clientY - r.top) / r.height
+                const zone: 'before' | 'after' | 'inside' = isGroup
+                  ? (rel < 0.3 ? 'before' : rel > 0.7 ? 'after' : 'inside')
+                  : (rel < 0.5 ? 'before' : 'after')
+                if (dndDragId.current && dndDragId.current !== el.id) setDndTarget({ id: el.id, zone })
+              }}
+              onDropRow={e => {
+                e.preventDefault()
+                const dragId = dndDragId.current
+                if (dragId && dndTarget && dragId !== dndTarget.id) reparent(dragId, dndTarget.id, dndTarget.zone)
+                setDndTarget(null); dndDragId.current = null
+              }}
+              onDragEndRow={() => { setDndTarget(null); dndDragId.current = null }}
+            />,
+          )
+          if (isGroup && !collapsedGroups.has(el.id)) build(el.id, depth + 1)
+        }
+      }
+      build(ROOT, 0)
+      return (
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          <div className="flex items-center gap-1 px-2 py-1 flex-shrink-0" style={{ borderBottom: `1px solid #2a2a2a` }}>
+            <button title={t('apex_new_folder')} onClick={newFolder}
+              className="flex items-center justify-center w-6 h-6 rounded hover:bg-white/10" style={{ color: C.textDim }}>
+              <FolderPlus size={13} />
+            </button>
+            <button title={t('apex_group')} onClick={groupSel} disabled={selectedIds.length < 2}
+              className="flex items-center justify-center w-6 h-6 rounded hover:bg-white/10 disabled:opacity-30" style={{ color: C.textDim }}>
+              <Group size={13} />
+            </button>
+            <button title={t('apex_ungroup')} onClick={ungroupSel}
+              className="flex items-center justify-center w-6 h-6 rounded hover:bg-white/10" style={{ color: C.textDim }}>
+              <Ungroup size={13} />
+            </button>
+            <div style={{ flex: 1 }} />
+            <button title={t('apex_delete_element')} onClick={deleteSel} disabled={!selectedIds.length}
+              className="flex items-center justify-center w-6 h-6 rounded hover:bg-white/10 disabled:opacity-30" style={{ color: '#e07a7a' }}>
+              <Trash2 size={13} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto"
+            onDragOver={e => { if (dndDragId.current) e.preventDefault() }}>
+            {rows}
+            {els.length === 0 && (
+              <p className="text-[10px] px-3 py-4" style={{ color: C.textDim }}>{t('apex_no_elements')}</p>
+            )}
+          </div>
+        </div>
+      )
+    } },
     properties: { label: selectedEl ? selectedEl.name : t('apex_properties'), render: () => (
       <>{selectedEl ? (
             <>
@@ -2135,6 +3033,7 @@ export default function ApexEditorPage() {
                   </button>
                 </div>
               )}
+              {pathOpsSection}
               {deleteSection}
             </>
           ) : selectedIds.length >= 2 ? (
@@ -2142,6 +3041,7 @@ export default function ApexEditorPage() {
               <div className="px-3 py-2 text-[11px] font-medium" style={{ color: C.text }}>
                 {t('apex_n_selected', { count: selectedIds.length })}
               </div>
+              {pathfinderSection}
               {alignSection}
               {distributeSection}
               {arrangeSection}
@@ -2161,19 +3061,23 @@ export default function ApexEditorPage() {
     ) },
   }
 
+  // Embedded inside another editor → swap the (non-nestable) WorkspaceShell for a
+  // bare shell that takes the same props. All tools/panels stay identical.
+  const Shell = (embedded ? EmbedShell : EditorShell) as typeof EditorShell
+
   return (
-    <EditorShell theme={C}
+    <Shell theme={C}
       chromeless
       topbarHeight={64}
-      onBack={() => { if (projectId && pageId) saveMut.mutate(pageData); navigate('/paintsharp/apex') }}
-      title={titleDraft}
-      onTitleChange={setTitleDraft}
-      onTitleCommit={commitTitle}
+      onBack={embedded ? () => { flushSave(); embed!.onClose() } : () => { if (projectId && pageId) saveMut.mutate(pageData); navigate('/paintsharp/apex') }}
+      title={embedded ? (embed!.title ?? 'Frame') : titleDraft}
+      onTitleChange={embedded ? undefined : setTitleDraft}
+      onTitleCommit={embedded ? undefined : commitTitle}
       titlePlaceholder={t('common_untitled', { defaultValue: 'Sans titre' })}
-      saveStatus={saveMut.isPending ? t('apex_saving') : t('doc_saved', { defaultValue: 'Enregistré' })}
+      saveStatus={embedded ? '' : (saveMut.isPending ? t('apex_saving') : t('doc_saved', { defaultValue: 'Enregistré' }))}
       subtitle="Apex"
       docInfo={pageData.artboards[0] ? `${pageData.artboards[0].width}×${pageData.artboards[0].height}` : undefined}
-      titleActions={(
+      titleActions={embedded ? undefined : (
         <button
           onClick={() => starMut.mutate(!project?.is_starred)}
           title={project?.is_starred ? t('apex_unstar', { defaultValue: 'Retirer des favoris' }) : t('apex_star', { defaultValue: 'Ajouter aux favoris' })}
@@ -2182,7 +3086,7 @@ export default function ApexEditorPage() {
           <Star size={15} fill={project?.is_starred ? 'currentColor' : 'none'} />
         </button>
       )}
-      onDelete={() => trashMut.mutate()}
+      onDelete={embedded ? undefined : () => trashMut.mutate()}
       deleteTitle={t('apex_move_to_trash', { defaultValue: 'Mettre à la corbeille' })}
       deleteConfirm={{
         title: t('apex_delete_confirm_title', { defaultValue: 'Supprimer ce projet ?' }),
@@ -2223,11 +3127,30 @@ export default function ApexEditorPage() {
             { label: t('apex_flip_h'), onClick: () => flip('h') },
             { label: t('apex_flip_v'), onClick: () => flip('v') },
           ],
+        }, {
+          label: t('apex_menu_path'),
+          items: [
+            { label: t('apex_pf_union'),     onClick: () => pathfinder('union') },
+            { label: t('apex_pf_subtract'),  onClick: () => pathfinder('subtract') },
+            { label: t('apex_pf_intersect'), onClick: () => pathfinder('intersect') },
+            { label: t('apex_pf_exclude'),   onClick: () => pathfinder('exclude') },
+            'sep',
+            { label: t('apex_merge'),          onClick: mergeSel },
+            { label: t('apex_path_simplify'),  onClick: () => simplifySel() },
+            { label: t('apex_path_smooth'),    onClick: smoothSel },
+            { label: t('apex_path_outline'),   onClick: outlineStrokeSel },
+            'sep',
+            { label: t('apex_path_offset_out'), onClick: () => offsetSel(5) },
+            { label: t('apex_path_offset_in'),  onClick: () => offsetSel(-5) },
+          ],
         }],
         onZoomIn:  () => setCs(prev => { const nz=Math.min(20,prev.zoom*1.2); const c=canvasRef.current; if(!c) return {...prev,zoom:nz}; const r=c.getBoundingClientRect(); return {zoom:nz,panX:r.width/2-(r.width/2-prev.panX)*(nz/prev.zoom),panY:r.height/2-(r.height/2-prev.panY)*(nz/prev.zoom)} }),
         onZoomOut: () => setCs(prev => { const nz=Math.max(0.02,prev.zoom*0.8); const c=canvasRef.current; if(!c) return {...prev,zoom:nz}; const r=c.getBoundingClientRect(); return {zoom:nz,panX:r.width/2-(r.width/2-prev.panX)*(nz/prev.zoom),panY:r.height/2-(r.height/2-prev.panY)*(nz/prev.zoom)} }),
         onFit:     () => centerArtboard(pageData),
         viewExtra: [
+          { label: snapOn ? t('apex_snap_off') : t('apex_snap_on'), onClick: () => setSnapOn(v => !v) },
+          { label: gridOn ? t('apex_grid_off') : t('apex_grid_on'), onClick: () => setGridOn(v => !v) },
+          'sep',
           { label: t('apex_reset_rotation'), onClick: () => setCs(prev => ({ ...prev, rot: 0 })) },
         ],
       })}
@@ -2293,6 +3216,21 @@ export default function ApexEditorPage() {
             }} className="w-5 h-5 rounded flex items-center justify-center hover:bg-white/10 text-[9px]" style={{ color: C.textDim }}>⇄</button>
             <button title={t('apex_fill_none')} onClick={() => { if (selectedEl) updateSelected({ fill: { type: 'none' } }) }}
               className="w-5 h-5 rounded flex items-center justify-center hover:bg-white/10 text-[9px]" style={{ color: C.textDim }}>∅</button>
+          </div>
+
+          {/* Magnétisme & grille */}
+          <div className="h-px w-full my-1.5" style={{ background: C.border }} />
+          <div className="flex gap-0.5">
+            <button title={t('apex_snap_toggle')} onClick={() => setSnapOn(v => !v)}
+              className="w-8 h-7 rounded flex items-center justify-center transition-colors"
+              style={{ background: snapOn ? C.accent + '30' : 'transparent', color: snapOn ? C.accent : C.textDim }}>
+              <Magnet size={14} />
+            </button>
+            <button title={t('apex_grid_toggle')} onClick={() => setGridOn(v => !v)}
+              className="w-8 h-7 rounded flex items-center justify-center transition-colors"
+              style={{ background: gridOn ? C.accent + '30' : 'transparent', color: gridOn ? C.accent : C.textDim }}>
+              <Grid3x3 size={14} />
+            </button>
           </div>
 
           <div style={{ flex: 1 }} />
@@ -2377,7 +3315,7 @@ export default function ApexEditorPage() {
                 onWheel={onWheel} onContextMenu={onCanvasContextMenu} />
       </DockArea>
       {ctx.menu}
-    </EditorShell>
+    </Shell>
   )
 }
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -2391,6 +3329,30 @@ function updateEl(
     ...prev,
     elements: prev.elements.map(el => el.id === id ? { ...el, ...patch } as VectorElement : el),
   }))
+}
+
+// Illustrator-style boolean-op glyphs: two overlapping rounded squares, the
+// resulting region shown filled in the module accent.
+function PathfinderGlyph({ op }: { op: BoolOp }) {
+  const A = '#888', B = SHELL_C.accent
+  const r1 = { x: 2, y: 3, w: 9, h: 9 }
+  const r2 = { x: 7, y: 6, w: 9, h: 9 }
+  const rect = (r: { x:number;y:number;w:number;h:number }, fill: string, stroke = 'none', op2 = 1) =>
+    <rect x={r.x} y={r.y} width={r.w} height={r.h} rx={1.5} fill={fill} stroke={stroke} strokeWidth={1} opacity={op2} />
+  return (
+    <svg width={18} height={18} viewBox="0 0 18 18">
+      {op === 'union' && <>{rect(r1, B)}{rect(r2, B)}</>}
+      {op === 'subtract' && <>{rect(r1, B)}{rect(r2, '#2a2a2a', A)}</>}
+      {op === 'intersect' && <>
+        <rect x={r1.x} y={r1.y} width={r1.w} height={r1.h} rx={1.5} fill="none" stroke={A} strokeWidth={1} />
+        <rect x={r2.x} y={r2.y} width={r2.w} height={r2.h} rx={1.5} fill="none" stroke={A} strokeWidth={1} />
+        <rect x={r2.x} y={r1.y} width={r1.x + r1.w - r2.x} height={r2.y + r2.h - r1.y} fill={B} />
+      </>}
+      {op === 'exclude' && <>{rect(r1, B, 'none', 0.55)}{rect(r2, B, 'none', 0.55)}
+        <rect x={r2.x} y={r1.y} width={r1.x + r1.w - r2.x} height={r2.y + r2.h - r1.y} fill="#2a2a2a" />
+      </>}
+    </svg>
+  )
 }
 
 function PropSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -2411,34 +3373,73 @@ function PropSection({ title, children }: { title: string; children: React.React
 }
 
 function LayerRow({
-  el, selected, onSelect, onToggleVisible, onToggleLock,
+  el, depth, selected, isGroup, collapsed, renaming, renameDraft, dnd,
+  onToggleCollapse, onSelect, onStartRename, onRenameDraft, onCommitRename,
+  onToggleVisible, onToggleLock,
+  onDragStartRow, onDragOverRow, onDropRow, onDragEndRow,
 }: {
-  el: VectorElement; selected: boolean; onSelect: () => void
+  el: VectorElement; depth: number; selected: boolean; isGroup: boolean
+  collapsed: boolean; renaming: boolean; renameDraft: string
+  dnd: 'before' | 'after' | 'inside' | null
+  onToggleCollapse: () => void
+  onSelect: (e: React.MouseEvent) => void
+  onStartRename: () => void; onRenameDraft: (v: string) => void; onCommitRename: () => void
   onToggleVisible: () => void; onToggleLock: () => void
+  onDragStartRow: () => void
+  onDragOverRow: (e: React.DragEvent) => void
+  onDropRow: (e: React.DragEvent) => void
+  onDragEndRow: () => void
 }) {
-  const Icon = el.type === 'rect' ? Square
+  const Icon = isGroup ? (collapsed ? Folder : FolderOpen)
+    : el.type === 'rect' ? Square
     : el.type === 'ellipse' ? Circle
     : el.type === 'path'    ? PenTool
     : Type
 
   return (
     <div
+      draggable
+      onDragStart={onDragStartRow}
+      onDragOver={onDragOverRow}
+      onDrop={onDropRow}
+      onDragEnd={onDragEndRow}
       onClick={onSelect}
-      className="flex items-center px-2 h-7 cursor-pointer group"
+      onDoubleClick={e => { e.stopPropagation(); onStartRename() }}
+      className="relative flex items-center pr-2 h-7 cursor-pointer group"
       style={{
-        background:   selected ? '#e84a9015' : 'transparent',
+        paddingLeft: 6 + depth * 13,
+        background:   dnd === 'inside' ? '#e84a9030' : selected ? '#e84a9015' : 'transparent',
         borderBottom: `1px solid #2a2a2a`,
         color:        selected ? '#e84a90' : '#9e9e9e',
       }}
     >
-      <div className="w-4" />
-      <Icon size={12} className="mr-1.5 flex-shrink-0" />
-      <span className="flex-1 text-[11px] truncate">{el.name}</span>
-      <div className="hidden group-hover:flex items-center gap-0.5">
-        <button onClick={e => { e.stopPropagation(); onToggleVisible() }} className="p-0.5 rounded">
-          {el.visible ? <Eye size={10} /> : <EyeOff size={10} style={{ opacity: 0.4 }} />}
+      {/* Drop indicator (before/after) */}
+      {(dnd === 'before' || dnd === 'after') && (
+        <div className="absolute left-0 right-0 h-0.5 pointer-events-none" style={{ top: dnd === 'before' ? 0 : 'auto', bottom: dnd === 'after' ? 0 : 'auto', background: '#e84a90' }} />
+      )}
+      {isGroup
+        ? <button onClick={e => { e.stopPropagation(); onToggleCollapse() }} className="w-4 flex-shrink-0 flex items-center justify-center">
+            <ChevronRight size={11} style={{ transform: collapsed ? undefined : 'rotate(90deg)', transition: 'transform 0.1s' }} />
+          </button>
+        : <div className="w-4 flex-shrink-0 flex items-center justify-center opacity-30"><GripVertical size={11} /></div>}
+      <Icon size={12} className="mx-1 flex-shrink-0" />
+      {renaming
+        ? <input
+            autoFocus
+            value={renameDraft}
+            onChange={e => onRenameDraft(e.target.value)}
+            onClick={e => e.stopPropagation()}
+            onBlur={onCommitRename}
+            onKeyDown={e => { if (e.key === 'Enter') onCommitRename(); if (e.key === 'Escape') onCommitRename() }}
+            className="flex-1 text-[11px] px-1 py-0 rounded outline-none"
+            style={{ background: '#1c1c1c', border: '1px solid #e84a90', color: '#fff' }}
+          />
+        : <span className="flex-1 text-[11px] truncate">{el.name}</span>}
+      <div className="flex items-center gap-0.5">
+        <button onClick={e => { e.stopPropagation(); onToggleVisible() }} className={`p-0.5 rounded ${el.visible ? 'opacity-0 group-hover:opacity-100' : ''}`}>
+          {el.visible ? <Eye size={10} /> : <EyeOff size={10} style={{ opacity: 0.5 }} />}
         </button>
-        <button onClick={e => { e.stopPropagation(); onToggleLock() }} className="p-0.5 rounded">
+        <button onClick={e => { e.stopPropagation(); onToggleLock() }} className={`p-0.5 rounded ${el.locked ? '' : 'opacity-0 group-hover:opacity-100'}`}>
           {el.locked ? <Lock size={10} style={{ color: '#e84a90' }} /> : <Unlock size={10} />}
         </button>
       </div>
