@@ -110,7 +110,15 @@ export function pageDataToSvg(pd: VectorPageData): string {
   let vbX = 0, vbY = 0, vbW = 1000, vbH = 1000
   if (ab) { vbX = ab.x; vbY = ab.y; vbW = ab.width; vbH = ab.height }
   const defs: string[] = []
-  const body = [...pd.elements].filter(e => e.visible).sort((a, b) => a.zIndex - b.zIndex)
+  // Hide leaves whose element or any ancestor group is hidden (cascade).
+  const byId = new Map(pd.elements.map(e => [e.id, e]))
+  const visible = (e: typeof pd.elements[number]): boolean => {
+    let cur: typeof e | undefined = e
+    const seen = new Set<string>()
+    while (cur) { if (!cur.visible) return false; const p = cur.parentId; if (!p || seen.has(p)) break; seen.add(p); cur = byId.get(p) }
+    return true
+  }
+  const body = [...pd.elements].filter(e => e.type !== 'group' && visible(e)).sort((a, b) => a.zIndex - b.zIndex)
     .map(e => elementToSvg(e, defs)).filter(Boolean).join('\n  ')
   const bg = ab && ab.background && ab.background !== 'transparent'
     ? `<rect x="${num(vbX)}" y="${num(vbY)}" width="${num(vbW)}" height="${num(vbH)}" fill="${esc(ab.background)}"/>\n  ` : ''

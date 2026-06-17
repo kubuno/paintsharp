@@ -17,6 +17,7 @@ import {
 import { Dropdown } from '@ui'
 import { layerApi, type LayerStructureItem } from './api'
 import { C, hexToRgb, rgbToHex, rgbToHsl, hslToRgb, ColorPicker, DockArea, Navigator, OptNum, EditorShell, paintsharpMenus, useContextMenu, type CtxItem, type DockController } from './ui'
+import { EmbedShell } from './EmbedShell'
 
 // Palette + colour math now live in the shared Paintsharp UI library (ui/theme.ts).
 
@@ -54,13 +55,38 @@ const BRUSH_PRESETS: BrushPreset[] = [
 ]
 const DEFAULT_BRUSH = BRUSH_PRESETS[0]
 
+// Colour tags for organising the layers panel (label dot uses the same colour).
+const LAYER_COLORS: { value: string; key: string; dot: string }[] = [
+  { value: '#ef4444', key: 'layer_color_red',    dot: '🔴' },
+  { value: '#f59e0b', key: 'layer_color_orange', dot: '🟠' },
+  { value: '#eab308', key: 'layer_color_yellow', dot: '🟡' },
+  { value: '#22c55e', key: 'layer_color_green',  dot: '🟢' },
+  { value: '#3b82f6', key: 'layer_color_blue',   dot: '🔵' },
+  { value: '#a855f7', key: 'layer_color_purple', dot: '🟣' },
+]
+
+// Web-safe font families offered by the text tool.
+const FONT_FAMILIES = [
+  'Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New',
+  'Verdana', 'Trebuchet MS', 'Tahoma', 'Impact', 'Comic Sans MS',
+]
+
 const BLEND_INT: Record<string, number> = {
+  // 10 is reserved internally for the eraser stroke compositing.
   normal: 0, multiply: 1, screen: 2, overlay: 3,
   darken: 4, lighten: 5, difference: 6, 'color-dodge': 7, 'color-burn': 8, 'soft-light': 9,
+  'hard-light': 11, 'linear-dodge': 12, 'linear-burn': 13, 'vivid-light': 14,
+  'linear-light': 15, 'pin-light': 16, exclusion: 17, subtract: 18, divide: 19,
+  hue: 20, saturation: 21, color: 22, luminosity: 23,
 }
+// Grouped like Photoshop's blend-mode menu; separators are inserted by the UI.
 const BLEND_KEYS = [
-  'normal', 'multiply', 'screen', 'overlay',
-  'darken', 'lighten', 'difference', 'color-dodge', 'color-burn', 'soft-light',
+  'normal',
+  'darken', 'multiply', 'color-burn', 'linear-burn',
+  'lighten', 'screen', 'color-dodge', 'linear-dodge',
+  'overlay', 'soft-light', 'hard-light', 'vivid-light', 'linear-light', 'pin-light',
+  'difference', 'exclusion', 'subtract', 'divide',
+  'hue', 'saturation', 'color', 'luminosity',
 ] as const
 const blendLabel = (t: TFunction, k: string): string => ({
   normal: t('layer_blend_normal'), multiply: t('layer_blend_multiply'),
@@ -68,6 +94,13 @@ const blendLabel = (t: TFunction, k: string): string => ({
   darken: t('layer_blend_darken'), lighten: t('layer_blend_lighten'),
   difference: t('layer_blend_difference'), 'color-dodge': t('layer_blend_color_dodge'),
   'color-burn': t('layer_blend_color_burn'), 'soft-light': t('layer_blend_soft_light'),
+  'hard-light': t('layer_blend_hard_light'), 'linear-dodge': t('layer_blend_linear_dodge'),
+  'linear-burn': t('layer_blend_linear_burn'), 'vivid-light': t('layer_blend_vivid_light'),
+  'linear-light': t('layer_blend_linear_light'), 'pin-light': t('layer_blend_pin_light'),
+  exclusion: t('layer_blend_exclusion'), subtract: t('layer_blend_subtract'),
+  divide: t('layer_blend_divide'), hue: t('layer_blend_hue'),
+  saturation: t('layer_blend_saturation'), color: t('layer_blend_color'),
+  luminosity: t('layer_blend_luminosity'),
 }[k] ?? k)
 
 function newId() { return crypto.randomUUID() }
@@ -317,6 +350,32 @@ vec3 fOvl(vec3 b,vec3 l){
 vec3 fSoft(vec3 b,vec3 l){
   return mix(2.*b*l+b*b*(1.-2.*l), 2.*b*(1.-l)+sqrt(b)*(2.*l-1.), step(.5,l));
 }
+vec3 fVivid(vec3 b,vec3 l){
+  return vec3(
+    l.r<.5? 1.-min((1.-b.r)/max(2.*l.r,1e-4),1.) : min(b.r/max(2.*(1.-l.r),1e-4),1.),
+    l.g<.5? 1.-min((1.-b.g)/max(2.*l.g,1e-4),1.) : min(b.g/max(2.*(1.-l.g),1e-4),1.),
+    l.b<.5? 1.-min((1.-b.b)/max(2.*l.b,1e-4),1.) : min(b.b/max(2.*(1.-l.b),1e-4),1.));
+}
+vec3 fPin(vec3 b,vec3 l){
+  return vec3(
+    l.r<.5? min(b.r,2.*l.r) : max(b.r,2.*(l.r-.5)),
+    l.g<.5? min(b.g,2.*l.g) : max(b.g,2.*(l.g-.5)),
+    l.b<.5? min(b.b,2.*l.b) : max(b.b,2.*(l.b-.5)));
+}
+// Non-separable (HSL) blends — hue / saturation / color / luminosity.
+float bLum(vec3 c){return dot(c,vec3(0.3,0.59,0.11));}
+vec3 clipColor(vec3 c){
+  float l=bLum(c), n=min(min(c.r,c.g),c.b), x=max(max(c.r,c.g),c.b);
+  if(n<0.) c=l+(c-l)*l/max(l-n,1e-5);
+  if(x>1.) c=l+(c-l)*(1.-l)/max(x-l,1e-5);
+  return c;
+}
+vec3 setLum(vec3 c,float l){return clipColor(c+(l-bLum(c)));}
+float bSat(vec3 c){return max(max(c.r,c.g),c.b)-min(min(c.r,c.g),c.b);}
+vec3 setSat(vec3 c,float s){
+  float mn=min(min(c.r,c.g),c.b), mx=max(max(c.r,c.g),c.b), rg=mx-mn;
+  return rg>0.? (c-mn)/rg*s : vec3(0.);
+}
 void main(){
   vec4 base=texture(uBase,vUv), lay=texture(uLayer,vUv);
   // Erase mode: reduce base alpha by stroke alpha (opacity already baked into lay.a)
@@ -337,6 +396,19 @@ void main(){
   else if(uMode==7) bl=clamp(base.rgb/max(1.-lay.rgb,.001),0.,1.);
   else if(uMode==8) bl=1.-clamp((1.-base.rgb)/max(lay.rgb,.001),0.,1.);
   else if(uMode==9) bl=fSoft(base.rgb,lay.rgb);
+  else if(uMode==11) bl=fOvl(lay.rgb,base.rgb);                       // hard light
+  else if(uMode==12) bl=min(base.rgb+lay.rgb,1.);                     // linear dodge (add)
+  else if(uMode==13) bl=max(base.rgb+lay.rgb-1.,0.);                  // linear burn
+  else if(uMode==14) bl=fVivid(base.rgb,lay.rgb);                     // vivid light
+  else if(uMode==15) bl=clamp(base.rgb+2.*lay.rgb-1.,0.,1.);          // linear light
+  else if(uMode==16) bl=fPin(base.rgb,lay.rgb);                       // pin light
+  else if(uMode==17) bl=base.rgb+lay.rgb-2.*base.rgb*lay.rgb;         // exclusion
+  else if(uMode==18) bl=max(base.rgb-lay.rgb,0.);                     // subtract
+  else if(uMode==19) bl=clamp(base.rgb/max(lay.rgb,vec3(1e-4)),0.,1.);// divide
+  else if(uMode==20) bl=setLum(setSat(lay.rgb,bSat(base.rgb)),bLum(base.rgb)); // hue
+  else if(uMode==21) bl=setLum(setSat(base.rgb,bSat(lay.rgb)),bLum(base.rgb)); // saturation
+  else if(uMode==22) bl=setLum(lay.rgb,bLum(base.rgb));               // color
+  else if(uMode==23) bl=setLum(base.rgb,bLum(lay.rgb));               // luminosity
   else bl=lay.rgb;
   float a=lay.a+base.a*(1.-lay.a);
   vec3 c=a<.0001?vec3(0.):(bl*lay.a+base.rgb*base.a*(1.-lay.a))/a;
@@ -448,9 +520,23 @@ function glFB(gl: WebGL2RenderingContext, w: number, h: number) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function LayerEditorPage() {
+// Embedded mode: the SAME raster editor mounted inside another app (Keyframe draws
+// a cel). Server doc loading/saving is bypassed — seeded from a PNG in memory and
+// every edit reported through onCommit — so all of Layer's tools stay available.
+export interface LayerEmbed {
+  width:    number
+  height:   number
+  initial:  string | null   // PNG data URL of the current cel, or null
+  onCommit: (png: string) => void
+  onClose:  () => void
+  title?:   string
+}
+
+export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) {
+  const embedded = !!embed
   const { t } = useTranslation('paintsharp')
-  const { id: docId } = useParams<{ id: string }>()
+  const { id: routeId } = useParams<{ id: string }>()
+  const docId = embedded ? undefined : routeId
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -497,6 +583,12 @@ export default function LayerEditorPage() {
   // Track whether the user manually changed the size (so a preset won't clobber it).
   const sizeTouched    = useRef(false)
   const [fgColor,      setFgColor]     = useState('#000000')
+  // Text tool: the in-progress text box anchored at a doc-space point (null = none).
+  const [textEdit,     setTextEdit]    = useState<{ dx: number; dy: number } | null>(null)
+  const [textValue,    setTextValue]   = useState('')
+  const [fontFamily,   setFontFamily]  = useState('Arial')
+  const [fontSize,     setFontSize]    = useState(120)   // document pixels (docs are hi-DPI)
+  const textBoxRef = useRef<HTMLDivElement>(null)
   // Recently used colours (most-recent first, max 30), persisted across sessions.
   const [colorHistory, setColorHistory] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('kubuno:paintsharp:colorHistory') || '[]') } catch { return [] }
@@ -586,6 +678,8 @@ export default function LayerEditorPage() {
   useEffect(() => { layersRef.current = layers },     [layers])
   useEffect(() => { activeRef.current = activeId },   [activeId])
   useEffect(() => { toolRef.current   = tool },       [tool])
+  // Leaving the text tool commits any open text box.
+  useEffect(() => { if (tool !== 'text' && textEdit) commitText() }, [tool]) // eslint-disable-line react-hooks/exhaustive-deps
   // Enter free-transform when the tool is selected; commit when leaving it.
   useEffect(() => {
     if (tool === 'transform') { if (!xfActive.current) enterTransform() }
@@ -595,12 +689,23 @@ export default function LayerEditorPage() {
   useEffect(() => { bhRef.current     = brushHard },  [brushHard])
   useEffect(() => { boRef.current     = brushOpac },  [brushOpac])
   useEffect(() => { fgRef.current     = fgColor },    [fgColor])
+  // Focus the text box as soon as it opens.
+  useEffect(() => {
+    if (textEdit && textBoxRef.current) {
+      const el = textBoxRef.current
+      el.textContent = ''
+      el.focus()
+    }
+  }, [textEdit])
   const pressureSensRef = useRef(pressureSens)
   useEffect(() => { pressureSensRef.current = pressureSens }, [pressureSens])
   const stabilizerRef = useRef(stabilizer)
   useEffect(() => { stabilizerRef.current = stabilizer }, [stabilizer])
-  // Smoothed pointer position used by the stabilizer (doc space).
+  // Smoothed brush position (the lagging end of the stabilizer "string") and the
+  // last raw cursor position, both in doc space. rawPt drives the end-of-stroke
+  // catch-up so the line always reaches where the user lifted.
   const smoothPt = useRef<{x:number;y:number}|null>(null)
+  const rawPt    = useRef<{x:number;y:number}|null>(null)
 
   // Undo/Redo stacks
   const undoStack = useRef<{id: string; px: Uint8Array}[]>([])
@@ -640,6 +745,7 @@ export default function LayerEditorPage() {
   const lastDabIdx = useRef(-1)              // index of the last point already stamped
   // Union of the canvas region touched since the last GPU upload (doc-space px).
   const strokeDirty = useRef<{x0:number;y0:number;x1:number;y1:number}|null>(null)
+  const strokeBBox  = useRef<{x0:number;y0:number;x1:number;y1:number}|null>(null)
   const strokeRaf   = useRef<number | null>(null)
 
   // Save mutation
@@ -665,10 +771,12 @@ export default function LayerEditorPage() {
 
   // ── Init layers + centering when doc loads ────────────────────────────────
   useEffect(() => {
-    if (!doc) return
-    docSize.current = { w: doc.width, h: doc.height }
+    if (!doc && !embedded) return
+    const W = embedded ? embed!.width : doc!.width
+    const H = embedded ? embed!.height : doc!.height
+    docSize.current = { w: W, h: H }
 
-    const lsRaw = (doc.layers_structure as LayerStructureItem[]) ?? []
+    const lsRaw = embedded ? [] : ((doc!.layers_structure as LayerStructureItem[]) ?? [])
     // Métadonnée conservée en state (sans les pixels) ; les pixels vont en texture.
     const stripData = (nodes: LayerStructureItem[]): LayerStructureItem[] =>
       nodes.map(({ data: _d, mask_data: _m, children, ...meta }) =>
@@ -684,21 +792,28 @@ export default function LayerEditorPage() {
     // Recreate FB pair at correct doc size
     const gl = glRef.current
     if (gl) {
-      fbPair.current = [glFB(gl, doc.width, doc.height), glFB(gl, doc.width, doc.height)]
+      fbPair.current = [glFB(gl, W, H), glFB(gl, W, H)]
       // Discard the group-isolation pool (stale size); it refills lazily.
       fbPoolAll.current.forEach(f => { gl.deleteFramebuffer(f.fb); gl.deleteTexture(f.tex) })
       fbPoolAll.current = []; fbPoolFree.current = []
-      // Ensure textures + restaurer les pixels depuis le fichier (.kblay).
-      const src = lsRaw.length > 0 ? lsRaw : initial
-      leaves(src).forEach(l => {
-        if (l.type !== 'raster') return
-        if (!textures.current.has(l.id)) createTex(gl, l.id, doc.width, doc.height, l.name === 'Fond')
-        if (l.data) loadPngToTex(l.id, l.data)
-        if (l.mask?.enabled && l.mask_data) {
-          if (!textures.current.has(maskKey(l.id))) createTex(gl, maskKey(l.id), doc.width, doc.height, true)
-          loadPngToTex(maskKey(l.id), l.mask_data)
-        }
-      })
+      if (embedded) {
+        // Single transparent cel layer seeded with the incoming PNG (if any).
+        const fond = initial[0]
+        if (!textures.current.has(fond.id)) createTex(gl, fond.id, W, H)
+        if (embed!.initial) loadPngToTex(fond.id, embed!.initial)
+      } else {
+        // Ensure textures + restaurer les pixels depuis le fichier (.kblay).
+        const src = lsRaw.length > 0 ? lsRaw : initial
+        leaves(src).forEach(l => {
+          if (l.type !== 'raster') return
+          if (!textures.current.has(l.id)) createTex(gl, l.id, W, H, l.name === 'Fond')
+          if (l.data) loadPngToTex(l.id, l.data)
+          if (l.mask?.enabled && l.mask_data) {
+            if (!textures.current.has(maskKey(l.id))) createTex(gl, maskKey(l.id), W, H, true)
+            loadPngToTex(maskKey(l.id), l.mask_data)
+          }
+        })
+      }
     }
 
     // Center canvas after layout
@@ -708,21 +823,28 @@ export default function LayerEditorPage() {
       const { width, height } = vp.getBoundingClientRect()
       if (width === 0 || height === 0) return
       const zoom = Math.max(0.05, Math.min(1.5,
-        Math.min((width - 60) / doc.width, (height - 60) / doc.height)
+        Math.min((width - 60) / W, (height - 60) / H)
       ))
       setViewState({
         zoom,
-        panX: (width  - doc.width  * zoom) / 2,
-        panY: (height - doc.height * zoom) / 2,
+        panX: (width  - W * zoom) / 2,
+        panY: (height - H * zoom) / 2,
       })
     }, 0)
-  }, [doc]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [doc, embedded]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-render when layers or view change
+  // Re-composite the whole layer tree only when the layers themselves change.
   useEffect(() => {
     renderComposite()
+    redrawOverlay()
+  }, [layers]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // View-only changes (pan / zoom / rotation) never touch the pixels, so they
+  // skip the expensive tree compositing and just re-blit the last composite.
+  useEffect(() => {
+    renderDisplay()
     redrawOverlay() // keep the selection tint aligned with pan/zoom/rotation
-  }, [layers, viewState, viewRot]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [viewState, viewRot]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Structural changes (load, add/delete/reorder…) refresh thumbnails. Keyed on
   // `layers` ONLY — never viewState — so panning/zooming triggers no readbacks.
@@ -761,8 +883,8 @@ export default function LayerEditorPage() {
   // de pixels (`thumbNonce`, incrémenté à chaque writeTex). Sérialise les pixels.
   useDebouncedAutosave(
     { s: layers, p: thumbNonce },
-    !!docId && layers.length > 0,
-    () => saveMut.mutate(buildSaveStructure()),
+    (embedded || !!docId) && layers.length > 0,
+    () => { if (embedded) embed!.onCommit(compositeToPng()); else saveMut.mutate(buildSaveStructure()) },
   )
 
   // ── WebGL helpers ─────────────────────────────────────────────────────────
@@ -896,16 +1018,18 @@ export default function LayerEditorPage() {
   }
   const maskKey = (id: string) => `${id}::mask`
 
-  function renderComposite() {
+  // Display-only pass: re-blit the already-composited document with the current
+  // pan / zoom / rotation. This is the ONLY work that has to run when just the
+  // view moves — the (potentially expensive) layer-tree compositing done by
+  // renderComposite() is skipped entirely, which keeps panning and zooming smooth
+  // even on documents with many layers or groups.
+  function renderDisplay() {
     const gl  = glRef.current
-    const pc  = progComp.current
     const pd  = progDisp.current
     const vao = quadVAO.current
     const fb  = fbPair.current
     const cv  = canvasRef.current
-    if (!gl || !pc || !pd || !vao || !fb || !cv) return
-
-    ensureTex(gl)
+    if (!gl || !pd || !vao || !fb || !cv) return
 
     const { w, h } = docSize.current
     const dpr = window.devicePixelRatio || 1
@@ -915,6 +1039,45 @@ export default function LayerEditorPage() {
     const newH = Math.round(cv.clientHeight * dpr)
     viewSizeRef.current = { w: cv.clientWidth, h: cv.clientHeight }
     if (cv.width !== newW || cv.height !== newH) { cv.width = newW; cv.height = newH }
+
+    const src = lastSrc.current
+    const vs = vsRef.current
+    gl.bindVertexArray(vao)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    gl.viewport(0, 0, newW, newH)
+    gl.clearColor(0.1, 0.1, 0.1, 1)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    gl.useProgram(pd)
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fb[src].tex)
+    // The display shader does the quality resampling (bicubic / footprint
+    // supersample). It only needs mipmaps available when the view is minified —
+    // judged from the *device-pixel* scale (zoom × dpr), so HiDPI is handled.
+    if (vs.zoom * dpr < 1) {
+      gl.generateMipmap(gl.TEXTURE_2D)
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+    } else {
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    }
+    gl.uniform1i(gl.getUniformLocation(pd, 'uTex'), 0)
+    gl.uniform2f(gl.getUniformLocation(pd, 'uOffset'), vs.panX * dpr, vs.panY * dpr)
+    gl.uniform2f(gl.getUniformLocation(pd, 'uScale'),  w * vs.zoom * dpr, h * vs.zoom * dpr)
+    gl.uniform2f(gl.getUniformLocation(pd, 'uViewport'), newW, newH)
+    gl.uniform1f(gl.getUniformLocation(pd, 'uRot'), rotRef.current)
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+    gl.bindVertexArray(null)
+  }
+
+  function renderComposite() {
+    const gl  = glRef.current
+    const pc  = progComp.current
+    const vao = quadVAO.current
+    const fb  = fbPair.current
+    const cv  = canvasRef.current
+    if (!gl || !pc || !vao || !fb || !cv) return
+
+    ensureTex(gl)
+
+    const { w, h } = docSize.current
 
     gl.bindVertexArray(vao)
 
@@ -978,31 +1141,10 @@ export default function LayerEditorPage() {
 
     const src = compositeInto(fb, layersRef.current, 0)
     lastSrc.current = src
-
-    // Display with pan/zoom
-    const vs = vsRef.current
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-    gl.viewport(0, 0, newW, newH)
-    gl.clearColor(0.1, 0.1, 0.1, 1)
-    gl.clear(gl.COLOR_BUFFER_BIT)
-    gl.useProgram(pd)
-    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fb[src].tex)
-    // The display shader does the quality resampling (bicubic / footprint
-    // supersample). It only needs mipmaps available when the view is minified —
-    // judged from the *device-pixel* scale (zoom × dpr), so HiDPI is handled.
-    if (vs.zoom * dpr < 1) {
-      gl.generateMipmap(gl.TEXTURE_2D)
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
-    } else {
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-    }
-    gl.uniform1i(gl.getUniformLocation(pd, 'uTex'), 0)
-    gl.uniform2f(gl.getUniformLocation(pd, 'uOffset'), vs.panX * dpr, vs.panY * dpr)
-    gl.uniform2f(gl.getUniformLocation(pd, 'uScale'),  w * vs.zoom * dpr, h * vs.zoom * dpr)
-    gl.uniform2f(gl.getUniformLocation(pd, 'uViewport'), newW, newH)
-    gl.uniform1f(gl.getUniformLocation(pd, 'uRot'), rotRef.current)
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     gl.bindVertexArray(null)
+
+    // Push the freshly composited result to the screen.
+    renderDisplay()
   }
 
   // ── Undo / Redo ───────────────────────────────────────────────────────────
@@ -1635,8 +1777,18 @@ export default function LayerEditorPage() {
     const key = `${qr}|${hardness}|${fill}`
     const cache = dabSpriteCache.current
     const hit = cache.get(key)
-    if (hit) return hit
-    if (cache.size > 320) cache.clear() // bound memory over long sessions
+    if (hit) {
+      // Mark as most-recently-used (Map keeps insertion order → re-insert moves it last).
+      cache.delete(key); cache.set(key, hit)
+      return hit
+    }
+    // LRU eviction: drop the least-recently-used entries instead of clearing the
+    // whole cache, so a varied brush stroke doesn't repeatedly rebuild sprites.
+    while (cache.size >= 320) {
+      const oldest = cache.keys().next().value
+      if (oldest === undefined) break
+      cache.delete(oldest)
+    }
 
     const size = Math.max(1, Math.ceil(qr * 2))
     const cv = document.createElement('canvas')
@@ -1659,14 +1811,28 @@ export default function LayerEditorPage() {
   }
 
   // Expand the dirty rectangle to cover a dab at (x,y) of the given radius.
+  // Two rectangles are tracked: `strokeDirty` (consumed and reset every frame by
+  // uploadStrokeDirty) and `strokeBBox` (the union over the *whole* stroke, reset
+  // only when the stroke is committed) so the final merge can restrict its pixel
+  // loop to the touched region instead of scanning the entire document.
   function markStrokeDirty(x: number, y: number, r: number) {
     const x0 = x - r - 1, y0 = y - r - 1, x1 = x + r + 1, y1 = y + r + 1
     const d = strokeDirty.current
-    if (!d) { strokeDirty.current = { x0, y0, x1, y1 }; return }
-    if (x0 < d.x0) d.x0 = x0
-    if (y0 < d.y0) d.y0 = y0
-    if (x1 > d.x1) d.x1 = x1
-    if (y1 > d.y1) d.y1 = y1
+    if (!d) { strokeDirty.current = { x0, y0, x1, y1 } }
+    else {
+      if (x0 < d.x0) d.x0 = x0
+      if (y0 < d.y0) d.y0 = y0
+      if (x1 > d.x1) d.x1 = x1
+      if (y1 > d.y1) d.y1 = y1
+    }
+    const b = strokeBBox.current
+    if (!b) { strokeBBox.current = { x0, y0, x1, y1 } }
+    else {
+      if (x0 < b.x0) b.x0 = x0
+      if (y0 < b.y0) b.y0 = y0
+      if (x1 > b.x1) b.x1 = x1
+      if (y1 > b.y1) b.y1 = y1
+    }
   }
 
   // Stamp one dab at (x,y) in doc space with the given radius & alpha.
@@ -1852,6 +2018,7 @@ export default function LayerEditorPage() {
     ensureStrokeTex(gl, w, h)
     const [dx, dy] = screenToDoc(cx, cy)
     smoothPt.current = { x: dx, y: dy }
+    rawPt.current    = { x: dx, y: dy }
     strokeDocPts.current = [{ x: dx, y: dy, p: pressure }]
     strokePreviewRef.current = { layerId: id, isErase: erase }
     stampStroke(erase, true)      // clear + first dab
@@ -1859,19 +2026,56 @@ export default function LayerEditorPage() {
     renderComposite()
   }
 
+  // ── Stroke stabilizer ──────────────────────────────────────────────────────
+  // "Pulled-string" model: the brush trails the cursor on a string whose length
+  // grows with the stabilizer setting. The brush only advances when the cursor is
+  // farther away than that length, so jitter inside the slack is absorbed and the
+  // resulting path is far smoother than a per-sample average — yet corners stay
+  // crisp because the brush is pulled straight toward the cursor, never overshoots.
+  // The length is expressed in *screen* pixels (converted to doc space via zoom)
+  // so the lag feels identical at every zoom level. Returns the new brush point,
+  // or null when the cursor is still within the slack (no dab needed).
+  function stabilizeStep(rawX: number, rawY: number): { x: number; y: number } | null {
+    rawPt.current = { x: rawX, y: rawY }
+    const s = Math.max(0, Math.min(100, stabilizerRef.current)) / 100
+    const b = smoothPt.current
+    if (!b) { smoothPt.current = { x: rawX, y: rawY }; return { x: rawX, y: rawY } }
+    if (s <= 0) { smoothPt.current = { x: rawX, y: rawY }; return { x: rawX, y: rawY } }
+    // s² ramps gently at low settings; ~70px max lag on screen at 100%.
+    const pull = (s * s * 70) / Math.max(vsRef.current.zoom, 0.01)
+    const dx = rawX - b.x, dy = rawY - b.y
+    const dist = Math.hypot(dx, dy)
+    if (dist <= pull) return null            // cursor inside the slack → brush holds
+    // Advance the brush so it sits exactly `pull` behind the cursor, eased a touch
+    // (0.75) so a high setting also damps the residual motion for extra smoothness.
+    const move = (dist - pull) * 0.75
+    const nx = b.x + (dx / dist) * move
+    const ny = b.y + (dy / dist) * move
+    smoothPt.current = { x: nx, y: ny }
+    return { x: nx, y: ny }
+  }
+
+  // At stroke end, walk the brush the rest of the way to the final cursor so the
+  // line lands where the user lifted instead of stopping short of it (the classic
+  // failing of a lagging stabilizer). Emits intermediate points via `push`.
+  function stabilizerCatchUp(push: (x: number, y: number) => void) {
+    const raw = rawPt.current, b = smoothPt.current
+    if (!raw || !b) return
+    const dx = raw.x - b.x, dy = raw.y - b.y
+    const dist = Math.hypot(dx, dy)
+    if (dist < 0.75) return
+    const steps = Math.min(48, Math.max(1, Math.ceil(dist / 18)))
+    for (let i = 1; i <= steps; i++) { const f = i / steps; push(b.x + dx * f, b.y + dy * f) }
+    smoothPt.current = { x: raw.x, y: raw.y }
+  }
+
   function extendBrushStroke(cx: number, cy: number, pressure: number) {
     const gl = glRef.current
     if (!gl || !strokePreviewRef.current) return
     const [dx, dy] = screenToDoc(cx, cy)
-    // Exponential smoothing (stabilizer): higher % → more lag → smoother curves.
-    const s = Math.max(0, Math.min(100, stabilizerRef.current)) / 100
-    // alpha = fraction of the way to the raw point each sample. s=0 → 1 (no smoothing).
-    const alpha = 1 - s * 0.9
-    const prev = smoothPt.current ?? { x: dx, y: dy }
-    const nx = prev.x + (dx - prev.x) * alpha
-    const ny = prev.y + (dy - prev.y) * alpha
-    smoothPt.current = { x: nx, y: ny }
-    strokeDocPts.current.push({ x: nx, y: ny, p: pressure })
+    const pt = stabilizeStep(dx, dy)
+    if (!pt) return                          // within the string slack → nothing to draw yet
+    strokeDocPts.current.push({ x: pt.x, y: pt.y, p: pressure })
     // Cheap: stamp only the new segment; the GPU upload + recomposite are batched
     // to one per animation frame, so many coalesced samples cost a single redraw.
     stampStroke(strokePreviewRef.current.isErase, false)
@@ -1889,6 +2093,9 @@ export default function LayerEditorPage() {
     const sc = strokeCanvasRef.current
     if (!sc) { clearBrushStroke(); return }
 
+    // Stabilizer catch-up: extend the lagging line to the final cursor position.
+    const lastP = pts[pts.length - 1]?.p ?? 1
+    stabilizerCatchUp((x, y) => strokeDocPts.current.push({ x, y, p: lastP }))
     // Cancel any pending frame and stamp whatever tail hasn't been stamped yet, so
     // the offscreen canvas holds the complete stroke before we read it back.
     if (strokeRaf.current != null) { cancelAnimationFrame(strokeRaf.current); strokeRaf.current = null }
@@ -1904,28 +2111,40 @@ export default function LayerEditorPage() {
     const sel = selMask.current
     const lockA = !!activeLayer.lockAlpha   // lock transparent pixels → preserve alpha
     if (currentPx) {
-      if (erase) {
-        for (let i = 0; i < currentPx.length; i += 4) {
-          if (sel && !sel[i>>2]) continue
-          if (lockA) continue   // transparency locked → erasing can't change alpha
-          const ea = strokeImg[i+3] / 255
-          if (ea > 0) currentPx[i+3] = Math.max(0, currentPx[i+3] - Math.round(ea * 255))
+      // Restrict the blend to the rectangle the stroke actually touched, so a small
+      // dab on a large canvas costs O(brush-area) instead of O(document-area).
+      const b = strokeBBox.current
+      const bx0 = b ? Math.max(0, Math.floor(b.x0)) : 0
+      const by0 = b ? Math.max(0, Math.floor(b.y0)) : 0
+      const bx1 = b ? Math.min(docW, Math.ceil(b.x1)) : docW
+      const by1 = b ? Math.min(docH, Math.ceil(b.y1)) : docH
+      if (erase && !lockA) {   // transparency locked → erasing can't change alpha
+        for (let y = by0; y < by1; y++) {
+          for (let x = bx0; x < bx1; x++) {
+            const i = (y * docW + x) << 2
+            if (sel && !sel[i>>2]) continue
+            const ea = strokeImg[i+3] / 255
+            if (ea > 0) currentPx[i+3] = Math.max(0, currentPx[i+3] - Math.round(ea * 255))
+          }
         }
-      } else {
-        for (let i = 0; i < currentPx.length; i += 4) {
-          if (sel && !sel[i>>2]) continue
-          const sA = strokeImg[i+3] / 255
-          if (sA < 0.001) continue
-          const origA = currentPx[i+3]
-          if (lockA && origA === 0) continue   // no painting onto transparent areas
-          const sR = strokeImg[i], sG = strokeImg[i+1], sB = strokeImg[i+2]
-          const dA = origA / 255
-          const outA = sA + dA * (1 - sA)
-          if (outA < 0.0001) { currentPx[i+3] = 0; continue }
-          currentPx[i]   = Math.round((sR*sA + currentPx[i]  *dA*(1-sA))/outA)
-          currentPx[i+1] = Math.round((sG*sA + currentPx[i+1]*dA*(1-sA))/outA)
-          currentPx[i+2] = Math.round((sB*sA + currentPx[i+2]*dA*(1-sA))/outA)
-          currentPx[i+3] = lockA ? origA : Math.round(outA * 255)   // keep alpha when locked
+      } else if (!erase) {
+        for (let y = by0; y < by1; y++) {
+          for (let x = bx0; x < bx1; x++) {
+            const i = (y * docW + x) << 2
+            if (sel && !sel[i>>2]) continue
+            const sA = strokeImg[i+3] / 255
+            if (sA < 0.001) continue
+            const origA = currentPx[i+3]
+            if (lockA && origA === 0) continue   // no painting onto transparent areas
+            const sR = strokeImg[i], sG = strokeImg[i+1], sB = strokeImg[i+2]
+            const dA = origA / 255
+            const outA = sA + dA * (1 - sA)
+            if (outA < 0.0001) { currentPx[i+3] = 0; continue }
+            currentPx[i]   = Math.round((sR*sA + currentPx[i]  *dA*(1-sA))/outA)
+            currentPx[i+1] = Math.round((sG*sA + currentPx[i+1]*dA*(1-sA))/outA)
+            currentPx[i+2] = Math.round((sB*sA + currentPx[i+2]*dA*(1-sA))/outA)
+            currentPx[i+3] = lockA ? origA : Math.round(outA * 255)   // keep alpha when locked
+          }
         }
       }
       writeTex(id, currentPx)
@@ -1940,6 +2159,7 @@ export default function LayerEditorPage() {
     lastDabIdx.current = -1
     dabCarry.current   = 0
     strokeDirty.current = null
+    strokeBBox.current  = null
     // Clear strokeTex to transparent so it doesn't appear in next renderComposite
     const gl  = glRef.current
     const tex = strokeTexRef.current
@@ -1979,6 +2199,7 @@ export default function LayerEditorPage() {
     maskStroke.current = { maskId: maskKey(id), hide: !erase }
     const [dx, dy] = screenToDoc(cx, cy)
     smoothPt.current = { x: dx, y: dy }
+    rawPt.current    = { x: dx, y: dy }
     strokeDocPts.current = [{ x: dx, y: dy, p: pressure }]
     stampStroke(false, true)  // stamp on strokeCanvas (color ignored; alpha = coverage)
     blendMaskPreview()
@@ -1986,18 +2207,19 @@ export default function LayerEditorPage() {
   function extendMaskStroke(cx: number, cy: number, pressure: number) {
     if (!maskStroke.current) return
     const [dx, dy] = screenToDoc(cx, cy)
-    const s = Math.max(0, Math.min(100, stabilizerRef.current)) / 100
-    const alpha = 1 - s * 0.9
-    const prev = smoothPt.current ?? { x: dx, y: dy }
-    const nx = prev.x + (dx - prev.x) * alpha, ny = prev.y + (dy - prev.y) * alpha
-    smoothPt.current = { x: nx, y: ny }
-    strokeDocPts.current.push({ x: nx, y: ny, p: pressure })
+    const pt = stabilizeStep(dx, dy)
+    if (!pt) return
+    strokeDocPts.current.push({ x: pt.x, y: pt.y, p: pressure })
     stampStroke(false, false)
     blendMaskPreview()
   }
   function mergeMaskStroke() {
     const ms = maskStroke.current, mb = maskBase.current
     if (ms && mb) {
+      // Stabilizer catch-up: complete the line to the final cursor before committing.
+      const lastP = strokeDocPts.current[strokeDocPts.current.length - 1]?.p ?? 1
+      stabilizerCatchUp((x, y) => strokeDocPts.current.push({ x, y, p: lastP }))
+      stampStroke(false, false)
       const orig = new Uint8Array(mb.length); orig.set(mb)
       writeTex(ms.maskId, orig)   // restore base so undo captures the original mask
       pushUndo(ms.maskId)
@@ -2007,7 +2229,7 @@ export default function LayerEditorPage() {
   }
   function clearMaskStroke() {
     maskStroke.current = null; maskBase.current = null
-    strokeDocPts.current = []; lastDabIdx.current = -1; dabCarry.current = 0; strokeDirty.current = null
+    strokeDocPts.current = []; lastDabIdx.current = -1; dabCarry.current = 0; strokeDirty.current = null; strokeBBox.current = null
     const sc = strokeCanvasRef.current
     if (sc) sc.getContext('2d')!.clearRect(0, 0, sc.width, sc.height)
   }
@@ -2072,6 +2294,48 @@ export default function LayerEditorPage() {
   }
 
   // ── Pointer handlers (mouse · finger/touch · pen/Apple Pencil) ───────────
+  // Rasterise the in-progress text box onto the active raster layer (alpha over),
+  // then close the editor. Called on commit (Ctrl/⌘+Enter, blur, or tool switch).
+  function commitText() {
+    const te = textEdit
+    const val = textValue
+    setTextEdit(null); setTextValue('')
+    if (!te || !val.trim()) return
+    const id = activeRef.current
+    const layer = id ? findInTree(layersRef.current, id) : null
+    if (!id || !layer || layer.locked || layer.children) return
+    const { w, h } = docSize.current
+    const c = document.createElement('canvas'); c.width = w; c.height = h
+    const ctx = c.getContext('2d'); if (!ctx) return
+    const fs = fontSize
+    ctx.fillStyle = fgRef.current
+    ctx.textBaseline = 'top'
+    ctx.font = `${fs}px ${fontFamily}, sans-serif`
+    const lh = fs * 1.25
+    // The contentEditable box adds half-leading above the first glyph; mirror it
+    // so the rasterised text lands where the user saw it.
+    const pad = (lh - fs) / 2
+    val.split('\n').forEach((line, i) => ctx.fillText(line, te.dx, te.dy + pad + i * lh))
+    const textPx = new Uint8Array(ctx.getImageData(0, 0, w, h).data.buffer)
+
+    pushUndo(id)
+    const base = readTex(id)
+    if (base) {
+      for (let i = 0; i < base.length; i += 4) {
+        const ta = textPx[i + 3] / 255
+        if (ta <= 0) continue
+        const dA = base[i + 3] / 255
+        const outA = ta + dA * (1 - ta)
+        if (outA < 0.0001) { base[i + 3] = 0; continue }
+        base[i]     = Math.round((textPx[i]     * ta + base[i]     * dA * (1 - ta)) / outA)
+        base[i + 1] = Math.round((textPx[i + 1] * ta + base[i + 1] * dA * (1 - ta)) / outA)
+        base[i + 2] = Math.round((textPx[i + 2] * ta + base[i + 2] * dA * (1 - ta)) / outA)
+        base[i + 3] = Math.round(outA * 255)
+      }
+      writeTex(id, base)
+    }
+  }
+
   function onPointerDown(e: React.PointerEvent) {
     // Track every touch contact; a second finger turns the interaction into a
     // pinch-zoom / rotate / pan gesture (and aborts any single-finger stroke).
@@ -2117,6 +2381,15 @@ export default function LayerEditorPage() {
       const { w, h } = viewSizeRef.current
       const startAngle = Math.atan2(cy - h / 2, cx - w / 2)
       dragRot.current = { startAngle, startRot: rotRef.current }
+      return
+    }
+    if (t === 'text') {
+      // Commit any open text box, then open a fresh one at the clicked doc point.
+      ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+      activePtrId.current = null
+      commitText()
+      const [dx, dy] = screenToDoc(cx, cy)
+      setTextEdit({ dx, dy }); setTextValue('')
       return
     }
     if (t === 'eyedrop') { pickColor(cx, cy); return }
@@ -2285,7 +2558,18 @@ export default function LayerEditorPage() {
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
+          || (e.target instanceof HTMLElement && e.target.isContentEditable)) return
+      // Layer-management combos take priority over single-key tool switches.
+      const mod = e.ctrlKey || e.metaKey
+      const k = e.key.toLowerCase()
+      if (mod && !e.shiftKey && k === 'e') { e.preventDefault(); if (activeRef.current) mergeDown(activeRef.current); return }
+      if (mod &&  e.shiftKey && k === 'e') { e.preventDefault(); flattenImage(); return }
+      if (mod && !e.shiftKey && k === 'g') { e.preventDefault(); if (activeRef.current) groupLayer(activeRef.current); return }
+      if (mod &&  e.shiftKey && k === 'g') { e.preventDefault(); if (activeRef.current) ungroupLayer(activeRef.current); return }
+      if (e.key === 'Delete' && !mod && !xfActive.current && activeRef.current) {
+        e.preventDefault(); deleteLayer(activeRef.current); return
+      }
       if (e.key === 'b' || e.key === 'B') setTool('brush')
       if (e.key === 'e' || e.key === 'E') setTool('eraser')
       if (e.key === 'h' || e.key === 'H') setTool('hand')
@@ -2449,6 +2733,146 @@ export default function LayerEditorPage() {
     updateLayer(id, { clipping: !n.clipping })
   }
 
+  function setLayerColor(id: string, colorLabel: string | undefined) {
+    updateLayer(id, { colorLabel })
+  }
+
+  // Locate a node's parent list + index (render order: 0 = top of that list).
+  function locate(tree: LayerStructureItem[], id: string): { list: LayerStructureItem[]; index: number } | null {
+    for (let i = 0; i < tree.length; i++) {
+      if (tree[i].id === id) return { list: tree, index: i }
+      const ch = tree[i].children
+      if (ch) { const r = locate(ch, id); if (r) return r }
+    }
+    return null
+  }
+
+  // A layer can merge down when the node directly below it (same list) is also a
+  // raster leaf — the result is baked into that lower layer.
+  function canMergeDown(id: string): boolean {
+    const loc = locate(layersRef.current, id); if (!loc) return false
+    const upper = loc.list[loc.index], lower = loc.list[loc.index + 1]
+    return !!lower && !upper.children && !lower.children && upper.type === 'raster' && lower.type === 'raster'
+  }
+
+  // Read the full visible composite (all layers) back to CPU pixels.
+  function readCompositePixels(): Uint8Array | null {
+    renderComposite()
+    const gl = glRef.current, fb = fbPair.current
+    if (!gl || !fb) return null
+    const { w, h } = docSize.current
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb[lastSrc.current].fb)
+    const px = new Uint8Array(w * h * 4)
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    return px
+  }
+
+  // Flatten the whole document to a PNG data URL (used by embedded mode to report
+  // the cel back to the host). Same top-to-bottom orientation as texToPng.
+  function compositeToPng(): string {
+    const px = readCompositePixels()
+    const { w, h } = docSize.current
+    const c = document.createElement('canvas'); c.width = w; c.height = h
+    const ctx = c.getContext('2d'); if (!px || !ctx) return ''
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(px), w, h), 0, 0)
+    return c.toDataURL('image/png')
+  }
+
+  // Composite two stacked raster layers in isolation and return the result pixels.
+  function bakePair(lower: LayerStructureItem, upper: LayerStructureItem): Uint8Array | null {
+    const gl = glRef.current, pc = progComp.current, vao = quadVAO.current
+    const loTex = textures.current.get(lower.id), upTex = textures.current.get(upper.id)
+    if (!gl || !pc || !vao || !loTex || !upTex) return null
+    const { w, h } = docSize.current
+    const A = glFB(gl, w, h), B = glFB(gl, w, h)
+    gl.bindVertexArray(vao)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, A.fb); gl.viewport(0, 0, w, h)
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT)
+    const loMask = lower.mask?.enabled ? (textures.current.get(maskKey(lower.id)) ?? null) : null
+    const upMask = upper.mask?.enabled ? (textures.current.get(maskKey(upper.id)) ?? null) : null
+    composeLayer(gl, pc, w, h, A.tex, loTex, B.fb, (lower.opacity / 100) * ((lower.fill ?? 100) / 100), BLEND_INT[lower.blendMode] ?? 0, loMask, null)
+    composeLayer(gl, pc, w, h, B.tex, upTex, A.fb, (upper.opacity / 100) * ((upper.fill ?? 100) / 100), BLEND_INT[upper.blendMode] ?? 0, upMask, upper.clipping ? loTex : null)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, A.fb)
+    const px = new Uint8Array(w * h * 4)
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.bindVertexArray(null)
+    gl.deleteFramebuffer(A.fb); gl.deleteTexture(A.tex); gl.deleteFramebuffer(B.fb); gl.deleteTexture(B.tex)
+    return px
+  }
+
+  // Merge a layer into the raster layer directly below it (bakes blend/opacity/mask
+  // of both). The result keeps the lower layer's id/name/position, reset to normal.
+  function mergeDown(id: string) {
+    const gl = glRef.current
+    if (!gl || !canMergeDown(id)) return
+    const loc = locate(layersRef.current, id)!
+    const upper = loc.list[loc.index], lower = loc.list[loc.index + 1]
+    const px = bakePair(lower, upper); if (!px) return
+    // Drop the upper layer's textures and the lower layer's (now-baked) mask.
+    const freeTex = (k: string) => { const x = textures.current.get(k); if (x) { gl.deleteTexture(x); textures.current.delete(k) } }
+    freeTex(upper.id); freeTex(maskKey(upper.id)); freeTex(maskKey(lower.id))
+    setLayers(prev => {
+      let tree = mapTree(prev, lower.id, { blendMode: 'normal', opacity: 100, fill: 100, mask: null, clipping: false })
+      tree = removeFromTree(tree, upper.id).tree
+      return pinBackground(tree)
+    })
+    setActiveId(lower.id)
+    writeTex(lower.id, px)   // upload baked pixels + recomposite
+  }
+
+  // Flatten everything into a single opaque background layer.
+  function flattenImage() {
+    const gl = glRef.current; if (!gl) return
+    if (allNodes(layersRef.current).length <= 1) return
+    const px = readCompositePixels(); if (!px) return
+    const { w, h } = docSize.current
+    const id = newId(); createTex(gl, id, w, h)
+    allNodes(layersRef.current).forEach(n => {
+      const tx = textures.current.get(n.id); if (tx) { gl.deleteTexture(tx); textures.current.delete(n.id) }
+      const mx = textures.current.get(maskKey(n.id)); if (mx) { gl.deleteTexture(mx); textures.current.delete(maskKey(n.id)) }
+    })
+    const flat: LayerStructureItem = {
+      id, type: 'raster', name: 'Fond', visible: true, locked: false,
+      opacity: 100, fill: 100, blendMode: 'normal', x: 0, y: 0, mask: null, effects: [],
+    }
+    setLayers([flat]); setActiveId(id)
+    writeTex(id, px)
+  }
+
+  // Isolate a layer: hide everything except it and its ancestors. Clicking the same
+  // layer's solo again restores the previous visibility of every node.
+  const soloMemory = useRef<{ map: Map<string, boolean>; id: string } | null>(null)
+  function soloLayer(id: string) {
+    setLayers(prev => {
+      const restore = (list: LayerStructureItem[], mem: Map<string, boolean>): LayerStructureItem[] =>
+        list.map(n => n.children
+          ? { ...n, visible: mem.get(n.id) ?? n.visible, children: restore(n.children, mem) }
+          : { ...n, visible: mem.get(n.id) ?? n.visible })
+      if (soloMemory.current && soloMemory.current.id === id) {
+        const mem = soloMemory.current.map; soloMemory.current = null
+        return restore(prev, mem)
+      }
+      // (re)isolate — snapshot original visibility only on the first solo.
+      const map = soloMemory.current?.map ?? (() => { const m = new Map<string, boolean>(); allNodes(prev).forEach(n => m.set(n.id, n.visible)); return m })()
+      const keep = new Set<string>()
+      const findPath = (list: LayerStructureItem[], anc: string[]): boolean => {
+        for (const n of list) {
+          if (n.id === id) { anc.forEach(a => keep.add(a)); keep.add(n.id); return true }
+          if (n.children && findPath(n.children, [...anc, n.id])) return true
+        }
+        return false
+      }
+      findPath(prev, [])
+      soloMemory.current = { map, id }
+      const apply = (list: LayerStructureItem[]): LayerStructureItem[] =>
+        list.map(n => n.children
+          ? { ...n, visible: keep.has(n.id), children: apply(n.children) }
+          : { ...n, visible: keep.has(n.id) })
+      return apply(prev)
+    })
+  }
+
   // Reorder: move `dragId` relative to `targetId` (sibling before/after, or into a
   // group). Blocks dropping a group into its own descendant; keeps "Fond" pinned.
   function reorderLayers(dragId: string, targetId: string, after: boolean, intoGroup = false) {
@@ -2524,7 +2948,7 @@ export default function LayerEditorPage() {
     tool === 'zoom'   ? 'zoom-in'  :
     tool === 'rotate' ? 'grab'     : 'none'
 
-  if (!docId) return null
+  if (!docId && !embedded) return null
   if (webglError) {
     return (
       <div className="h-full flex items-center justify-center" style={{ background: C.bg }}>
@@ -2573,6 +2997,8 @@ export default function LayerEditorPage() {
         onToggleLockAlpha={id => updateLayer(id, { lockAlpha: !findInTree(layers, id)?.lockAlpha })}
         onToggleLockPosition={id => updateLayer(id, { lockPosition: !findInTree(layers, id)?.lockPosition })}
         onGroup={groupLayer} onUngroup={ungroupLayer} onToggleClip={toggleClip}
+        onMergeDown={mergeDown} canMergeDown={canMergeDown} onFlatten={flattenImage}
+        onSolo={soloLayer} onSetColor={setLayerColor}
         onToggleExpand={id => updateLayer(id, { expanded: !findInTree(layers, id)?.expanded })} />
     ) },
     brush: { label: t('layer_tab_brush'), render: () => (
@@ -2593,18 +3019,21 @@ export default function LayerEditorPage() {
     ) },
   }
 
+  // Embedded inside another editor → bare shell (WorkspaceShell can't be nested).
+  const Shell = (embedded ? EmbedShell : EditorShell) as typeof EditorShell
+
   return (
-    <EditorShell theme={C}
+    <Shell theme={C}
       chromeless
       topbarHeight={64}
-      onBack={() => { if(docId&&layers.length>0) saveMut.mutate(buildSaveStructure()); navigate('/paintsharp/layer') }}
-      title={titleDraft}
-      onTitleChange={setTitleDraft}
-      onTitleCommit={commitTitle}
+      onBack={embedded ? () => { embed!.onCommit(compositeToPng()); embed!.onClose() } : () => { if(docId&&layers.length>0) saveMut.mutate(buildSaveStructure()); navigate('/paintsharp/layer') }}
+      title={embedded ? (embed!.title ?? 'Frame') : titleDraft}
+      onTitleChange={embedded ? undefined : setTitleDraft}
+      onTitleCommit={embedded ? undefined : commitTitle}
       titlePlaceholder={t('common_untitled', { defaultValue: 'Sans titre' })}
       saveStatus={saveMut.isPending ? t('layer_saving') : t('doc_saved', { defaultValue: 'Enregistré' })}
       subtitle="Layer" docInfo={doc ? `${doc.width}×${doc.height}` : undefined}
-      titleActions={(
+      titleActions={embedded ? undefined : (
         <button
           onClick={() => starMut.mutate(!doc?.is_starred)}
           title={doc?.is_starred ? t('layer_unstar', { defaultValue: 'Retirer des favoris' }) : t('layer_star', { defaultValue: 'Ajouter aux favoris' })}
@@ -2613,7 +3042,7 @@ export default function LayerEditorPage() {
           <Star size={15} fill={doc?.is_starred ? 'currentColor' : 'none'} />
         </button>
       )}
-      onDelete={() => trashMut.mutate()}
+      onDelete={embedded ? undefined : () => trashMut.mutate()}
       deleteTitle={t('layer_move_to_trash', { defaultValue: 'Mettre à la corbeille' })}
       deleteConfirm={{
         title: t('layer_delete_confirm_title', { defaultValue: 'Supprimer ce document ?' }),
@@ -2673,6 +3102,14 @@ export default function LayerEditorPage() {
                 {inputKind==='pen' ? <PenTool size={11}/> : <Fingerprint size={11}/>}{Math.round(inputPressure*100)}%
               </span>
             )}
+          </>
+        ) : (tool==='text') ? (
+          <>
+            <Dropdown variant="dark" fontSize={11} value={fontFamily} onChange={setFontFamily}
+                      options={FONT_FAMILIES.map(f => ({ value: f, label: f }))} />
+            <OptNum label={t('layer_text_size')} value={fontSize} min={4} max={2000} suffix="px"
+                    onChange={v => setFontSize(Math.max(4, v))} C={C} />
+            <span style={{ color:C.textDim }}>{t('layer_text_hint')}</span>
           </>
         ) : (tool==='zoom' || tool==='rotate' || tool==='hand') ? (
           <span style={{ color:C.textDim }}>{Math.round(viewState.zoom*100)}% · {Math.round(viewRot*180/Math.PI)}°</span>
@@ -2816,6 +3253,28 @@ export default function LayerEditorPage() {
                   onWheel={onWheel} />
           <canvas ref={overlayRef}
                   className="absolute inset-0 w-full h-full pointer-events-none" />
+          {textEdit && (() => {
+            const [sx, sy] = docToScreen(textEdit.dx, textEdit.dy)
+            const z = viewState.zoom
+            return (
+              <div ref={textBoxRef} contentEditable suppressContentEditableWarning
+                   onInput={e => setTextValue((e.target as HTMLDivElement).innerText)}
+                   onPointerDown={e => e.stopPropagation()}
+                   onKeyDown={e => {
+                     e.stopPropagation() // don't trigger global tool shortcuts while typing
+                     if (e.key === 'Escape') { e.preventDefault(); setTextEdit(null); setTextValue('') }
+                     else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commitText() }
+                   }}
+                   onBlur={commitText}
+                   className="absolute z-30 outline-none"
+                   style={{ left: sx, top: sy, color: fgColor, fontFamily,
+                            fontSize: fontSize * z, lineHeight: 1.25, whiteSpace: 'pre',
+                            border: `1px dashed ${C.accent}`, padding: '0 1px', minWidth: 4,
+                            cursor: 'text', caretColor: fgColor,
+                            transform: viewRot ? `rotate(${viewRot}rad)` : undefined,
+                            transformOrigin: 'top left' }} />
+            )
+          })()}
           {colorPickerOpen && (
             <div className="absolute left-2 bottom-2 z-20">
               <ColorPicker t={t} color={fgColor} onChange={setFgColor}
@@ -2824,7 +3283,7 @@ export default function LayerEditorPage() {
             </div>
           )}
         </DockArea>
-    </EditorShell>
+    </Shell>
   )
 }
 // ── Layers panel ──────────────────────────────────────────────────────────────
@@ -2858,7 +3317,8 @@ function LayersPanel({
   onOpacity, onBlend, onStartRename, onCommitRename, onCancelRename,
   editingMask, onAddMask, onRemoveMask, onToggleEditMask,
   onDuplicate, onReorder, paintThumb, thumbVersion,
-  onFill, onToggleLockAlpha, onToggleLockPosition, onGroup, onUngroup, onToggleClip, onToggleExpand, bare,
+  onFill, onToggleLockAlpha, onToggleLockPosition, onGroup, onUngroup, onToggleClip, onToggleExpand,
+  onMergeDown, canMergeDown, onFlatten, onSolo, onSetColor, bare,
 }: {
   t: TFunction
   layers: LayerStructureItem[]
@@ -2890,6 +3350,11 @@ function LayersPanel({
   onUngroup: (id: string) => void
   onToggleClip: (id: string) => void
   onToggleExpand: (id: string) => void
+  onMergeDown: (id: string) => void
+  canMergeDown: (id: string) => boolean
+  onFlatten: () => void
+  onSolo: (id: string) => void
+  onSetColor: (id: string, color: string | undefined) => void
   bare?: boolean
 }) {
   const C2 = C
@@ -2918,15 +3383,24 @@ function LayersPanel({
       { label: t('layer_rename'),    onClick: () => onStartRename(layer.id, layer.name) },
       'sep',
       { label: layer.visible ? t('layer_hide') : t('layer_show'), onClick: () => onToggleVisible(layer.id) },
+      { label: t('layer_solo'), onClick: () => onSolo(layer.id) },
       { label: layer.locked ? t('layer_unlock_all') : t('layer_lock_all'), onClick: () => onToggleLock(layer.id) },
       'sep',
       isGroup
-        ? { label: t('layer_ungroup'), onClick: () => onUngroup(layer.id) }
-        : { label: t('layer_group'),   onClick: () => onGroup(layer.id) },
+        ? { label: t('layer_ungroup'), onClick: () => onUngroup(layer.id), shortcut: 'Ctrl+Shift+G' }
+        : { label: t('layer_group'),   onClick: () => onGroup(layer.id), shortcut: 'Ctrl+G' },
+      ...(!isGroup ? [{ label: t('layer_merge_down'), onClick: () => onMergeDown(layer.id), disabled: !canMergeDown(layer.id), shortcut: 'Ctrl+E' } as CtxItem] : []),
+      { label: t('layer_flatten'), onClick: onFlatten, shortcut: 'Ctrl+Shift+E' },
       ...(!isGroup ? [(layer.mask?.enabled
         ? { label: t('layer_mask_remove'), onClick: () => onRemoveMask(layer.id) }
         : { label: t('layer_mask_add'),    onClick: () => onAddMask(layer.id) }) as CtxItem] : []),
       ...(!isGroup ? [{ label: t('layer_clip'), onClick: () => onToggleClip(layer.id) } as CtxItem] : []),
+      'sep',
+      // Colour tags.
+      ...LAYER_COLORS.map(c => ({
+        label: `${c.dot} ${t(c.key)}`, onClick: () => onSetColor(layer.id, c.value),
+      } as CtxItem)),
+      { label: t('layer_color_none'), onClick: () => onSetColor(layer.id, undefined), disabled: !layer.colorLabel },
       'sep',
       { label: t('layer_delete'), onClick: () => onDelete(layer.id), danger: true, disabled: leafCount <= 1, shortcut: 'Suppr' },
     ]
@@ -2968,10 +3442,13 @@ function LayersPanel({
                     boxShadow: dropHere === 'after' ? `inset 0 -2px 0 ${C2.accent}` : undefined,
                     borderLeft:`2px solid ${isActive?C2.accent:'transparent'}`,
                     background: dropHere === 'into' ? C2.accent+'33' : isActive ? C2.accent+'18' : isGroup ? '#ffffff08' : 'transparent' }}>
+        {/* Colour tag strip (right edge) */}
+        {layer.colorLabel && <div className="absolute right-0 top-0 bottom-0 pointer-events-none" style={{ width: 3, background: layer.colorLabel }} />}
         {/* Row 1 */}
         <div className="flex items-center gap-1 pr-2 pt-1.5 pb-0.5" style={{ paddingLeft: indent, opacity: dragId === layer.id ? 0.4 : 1 }}>
           <GripVertical size={11} className="opacity-0 group-hover:opacity-40 flex-shrink-0" style={{ color:C2.textDim, cursor:'grab' }} />
-          <button onClick={e=>{e.stopPropagation();onToggleVisible(layer.id)}} className="flex-shrink-0">
+          <button onClick={e=>{e.stopPropagation(); e.altKey ? onSolo(layer.id) : onToggleVisible(layer.id)}}
+                  title={t('layer_solo_hint')} className="flex-shrink-0">
             {layer.visible ? <Eye size={11} style={{ color:C2.textDim }} /> : <EyeOff size={11} style={{ color:'#555' }} />}
           </button>
           {isGroup ? (
@@ -3223,7 +3700,10 @@ function ToolProps({ t, tool, brushSize,setBrushSize, brushHard,setBrushHard, br
           {(tool==='hand') && (
             <p className="text-[11px]" style={{ color:C2.textDim }}>{t('layer_hint_hand')}</p>
           )}
-          {(tool==='text'||tool==='crop') && (
+          {(tool==='text') && (
+            <p className="text-[11px]" style={{ color:C2.textDim }}>{t('layer_text_hint')}</p>
+          )}
+          {(tool==='crop') && (
             <p className="text-[11px]" style={{ color:C2.textDim }}>{t('layer_hint_wip')}</p>
           )}
         </div>

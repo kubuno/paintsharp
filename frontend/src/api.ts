@@ -141,7 +141,7 @@ export interface PathPoint {
   move?: boolean
 }
 
-export type VectorElement = RectElement | EllipseElement | PathElement | TextElement
+export type VectorElement = RectElement | EllipseElement | PathElement | TextElement | GroupElement
 
 export interface BaseElement {
   id:       string
@@ -158,7 +158,18 @@ export interface BaseElement {
   zIndex:   number
   fill:     FillStyle
   stroke:   StrokeStyle | null
+  // Legacy flat grouping — migrated to `parentId` + a `group` element on load.
   groupId?: string
+  // Hierarchical layers: id of the containing `group` element (omitted = root).
+  parentId?: string | null
+}
+
+// A container/folder element: no geometry of its own, holds child elements via
+// their `parentId`. Enables arbitrarily nested layers.
+export interface GroupElement extends BaseElement {
+  type:      'group'
+  // Layers-panel UI state: whether the folder is collapsed.
+  collapsed?: boolean
 }
 
 export interface RectElement extends BaseElement {
@@ -241,6 +252,8 @@ export interface LayerStructureItem {
   // adjustment layers
   adjustment?: unknown
   clipping?:   boolean        // clip to the layer below (its alpha)
+  // organization
+  colorLabel?: string         // colour tag for the layers panel (hex, or absent = none)
   // groups
   expanded?: boolean
   children?: LayerStructureItem[]
@@ -341,10 +354,14 @@ export type LayerDataDef =
   | { type: 'null' }
   | { type: 'camera'; zoom: number }
   | { type: 'group'; childIds: string[] }
+  // Frame-by-frame (cel) drawing layer: per-frame PNG images (hold exposure). When a
+  // frame was drawn with the embedded Apex vector editor, its editable scene is kept
+  // in `vframes` so re-opening the frame restores full vector editability.
+  | { type: 'paint'; width: number; height: number; frames: Record<string, string>; vframes?: Record<string, VectorPageData> }
 
 export interface AnimLayer {
   id:         string
-  type:       'shape' | 'image' | 'vector' | 'text' | 'group' | 'camera' | 'null' | 'solid'
+  type:       'shape' | 'image' | 'vector' | 'text' | 'group' | 'camera' | 'null' | 'solid' | 'paint'
   name:       string
   parentId:   string | null
   inPoint:    number
@@ -451,6 +468,21 @@ export interface ClipTransform {
   blend:    string   // mode de fusion (source-over, screen, multiply, …)
 }
 
+export interface ClipText {
+  content:      string
+  fontSize:     number
+  fontFamily:   string
+  color:        string
+  align:        'left' | 'center' | 'right'
+  bold:         boolean
+  italic:       boolean
+  x:            number   // offset from composition centre (px)
+  y:            number
+  strokeColor?: string
+  strokeWidth?: number   // 0 = no outline
+  background?:  string   // optional box behind the text
+}
+
 export interface VideoClip {
   id:        string
   mediaId:   string
@@ -464,6 +496,11 @@ export interface VideoClip {
   volume:    number
   effects:   ClipEffect[]
   transform?: ClipTransform
+  // Fade durations in frames (opacity ramps at the clip edges).
+  fadeIn?:   number
+  fadeOut?:  number
+  // When set, the clip is a text/title overlay instead of a media clip.
+  text?:     ClipText
 }
 
 export interface ClipEffect {
