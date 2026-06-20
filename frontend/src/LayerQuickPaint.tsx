@@ -11,6 +11,7 @@
 // after every stroke.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Brush, Eraser, RotateCcw, Trash2 } from 'lucide-react'
+import { RangeSlider } from '@ui'
 
 export interface LayerQuickPaintProps {
   width: number
@@ -127,7 +128,7 @@ export function LayerQuickPaint({ width, height, cssWidth, cssHeight, value, onC
           ))}
         </div>
         <div className="w-px h-5" style={{ background: '#3a3a3a' }} />
-        <input type="range" min={1} max={80} value={size} onChange={e => setSize(+e.target.value)} className="w-20 accent-[#e8824a]" title="Size" />
+        <RangeSlider min={1} max={80} value={size} onChange={setSize} className="w-20" accent="#e8824a" trackColor="rgba(255,255,255,0.15)" aria-label="Size" />
         <span className="text-[10px] w-6 text-center" style={{ color: '#bbb' }}>{size}</span>
         <div className="w-px h-5" style={{ background: '#3a3a3a' }} />
         <button onClick={undo} title="Undo" className="w-7 h-7 flex items-center justify-center rounded text-[#bbb] hover:bg-white/10"><RotateCcw size={14} /></button>

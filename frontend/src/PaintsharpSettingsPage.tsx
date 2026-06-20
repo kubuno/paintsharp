@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@kubuno/sdk'
 import { Palette, Save, ChevronLeft, ExternalLink, Check } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { Toggle, Button, Tabs, NumberInput } from '@ui'
+import { Toggle, Button, Tabs, NumberInput, RangeSlider } from '@ui'
 
 type Tab = 'vertex' | 'media' | 'canvas' | 'about'
 
@@ -94,8 +94,8 @@ function VertexTab() {
             {t('settings_max_scene_desc')} <span className="font-medium">{formatMb(bytesFromMb(curScene))}</span>
           </p>
           <div className="flex items-center gap-3">
-            <input type="range" min={10} max={500} step={10} value={curScene}
-                   onChange={(e) => setLocalScene(Number(e.target.value))} className="flex-1" />
+            <RangeSlider min={10} max={500} step={10} value={curScene}
+                   onChange={setLocalScene} className="flex-1" aria-label={t('settings_max_scene_label')} />
             <span className="text-sm font-medium text-text-primary w-16 text-right">{curScene} Mo</span>
           </div>
         </div>
@@ -109,8 +109,8 @@ function VertexTab() {
             {t('settings_max_asset_desc')} <span className="font-medium">{formatMb(bytesFromMb(curAsset))}</span>
           </p>
           <div className="flex items-center gap-3">
-            <input type="range" min={10} max={1000} step={10} value={curAsset}
-                   onChange={(e) => setLocalAsset(Number(e.target.value))} className="flex-1" />
+            <RangeSlider min={10} max={1000} step={10} value={curAsset}
+                   onChange={setLocalAsset} className="flex-1" aria-label={t('settings_max_asset_label')} />
             <span className="text-sm font-medium text-text-primary w-20 text-right">{curAsset} Mo</span>
           </div>
         </div>
@@ -206,8 +206,8 @@ function MediaTab() {
             {t('settings_max_media_desc')} <span className="font-medium">{formatMb(bytesFromMb(curMedia))}</span>
           </p>
           <div className="flex items-center gap-3">
-            <input type="range" min={100} max={10240} step={100} value={curMedia}
-                   onChange={(e) => setLocalMedia(Number(e.target.value))} className="flex-1" />
+            <RangeSlider min={100} max={10240} step={100} value={curMedia}
+                   onChange={setLocalMedia} className="flex-1" aria-label={t('settings_max_media_label')} />
             <span className="text-sm font-medium text-text-primary w-20 text-right">
               {curMedia >= 1024 ? `${(curMedia / 1024).toFixed(1)} Go` : `${curMedia} Mo`}
             </span>
@@ -380,8 +380,8 @@ function CanvasTab() {
             {t('settings_thumbnail_quality_desc')} <span className="font-medium">{curQ}</span>
           </p>
           <div className="flex items-center gap-3">
-            <input type="range" min={50} max={100} step={5} value={curQ}
-                   onChange={(e) => setLocalQ(Number(e.target.value))} className="flex-1" />
+            <RangeSlider min={50} max={100} step={5} value={curQ}
+                   onChange={setLocalQ} className="flex-1" aria-label={t('settings_thumbnail_quality_label')} />
             <span className="text-sm font-medium text-text-primary w-12 text-right">{curQ}</span>
           </div>
         </div>

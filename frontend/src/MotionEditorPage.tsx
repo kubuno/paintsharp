@@ -17,7 +17,7 @@ import {
 import { api } from '@kubuno/sdk'
 import { useFilesDialogStore } from '@kubuno/drive'
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
-import { Button } from '@ui'
+import { Button, RangeSlider } from '@ui'
 import { C as SHELL_C, EditorShell, DockArea, paintsharpMenus, useContextMenu, type CtxItem } from './ui'
 
 const C = SHELL_C   // shared Paintsharp palette for the editor chrome
@@ -1409,10 +1409,9 @@ export default function MotionEditorPage() {
                         <span className="text-[10px] text-gray-400">{t(d.labelKey)}</span>
                         <button onClick={() => removeEffect(clip.id, i)} className="text-gray-600 hover:text-[#e84a4a]"><Trash2 size={10} /></button>
                       </div>
-                      <input type="range" min={d.min} max={d.max} step={d.step} value={val}
-                             onChange={ev => updateEffect(clip.id, i, Number(ev.target.value))}
-                             onMouseUp={commitEffects} onTouchEnd={commitEffects}
-                             className="w-full h-1 accent-[#a855f7]" />
+                      <RangeSlider min={d.min} max={d.max} step={d.step} value={val}
+                             onChange={v => { updateEffect(clip.id, i, v); commitEffects() }}
+                             className="w-full" accent="#a855f7" trackColor="rgba(255,255,255,0.15)" aria-label={t(d.labelKey)} />
                     </div>
                   )
                 })}

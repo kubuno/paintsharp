@@ -21,7 +21,7 @@ import { buildAnnotatedPdf, type ExportPage } from './pdfExport'
 import { useAuthStore } from '@kubuno/sdk'
 import { useConfirm } from '@kubuno/sdk'
 import { ConfirmDialog } from '@ui'
-import { Button, MenuDropdown, type MenuItem } from '@ui'
+import { Button, MenuDropdown, RangeSlider, type MenuItem } from '@ui'
 import { C, EditorShell, DockArea, ColorField, paintsharpMenus } from './ui'
 import { useDebouncedAutosave } from './useAutosave'
 
@@ -1273,14 +1273,15 @@ export default function PdfWriterEditorPage() {
               </div>
             </div>
 
-            {/* Taille police */}
+            {/* Font size */}
             <div className="px-3 py-2 border-b border-[#212121]">
               <p className="text-[11px] text-[#8e8e8e] mb-1.5">{t('pdf_text_size')}</p>
               <div className="flex items-center gap-2">
-                <input
-                  type="range" min={8} max={72} value={fontSize}
-                  onChange={e => setFontSize(Number(e.target.value))}
-                  className="flex-1 h-1 accent-[#5a9bdc]"
+                <RangeSlider
+                  min={8} max={72} value={fontSize}
+                  onChange={setFontSize}
+                  className="flex-1" accent="#5a9bdc" trackColor="rgba(255,255,255,0.15)"
+                  aria-label={t('pdf_text_size')}
                 />
                 <span className="text-xs text-[#8e8e8e] w-7 text-right">{fontSize}</span>
               </div>
@@ -1666,7 +1667,7 @@ export default function PdfWriterEditorPage() {
       {/* ── Panel signature ── */}
       {showSigPanel && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 no-print"
           onClick={() => setShowSigPanel(false)}
         >
           <div
