@@ -15,6 +15,7 @@ import {
   Download, Upload, Crosshair,
   MousePointer2, Waypoints, Palette, Weight, Image as ImageIcon, Star,
 } from 'lucide-react'
+import { RangeSlider } from '@ui'
 import { paintsharpApi } from './api'
 import { C as SHELL_C, EditorShell, DockArea, ColorField, paintsharpMenus, useContextMenu, type CtxItem } from './ui'
 
@@ -1189,10 +1190,9 @@ function BrushPanel({
             <span className="text-[11px]" style={{ color: C.textDim }}>{t('vertex_radius')}</span>
             <span className="text-[11px] font-mono" style={{ color: C.accent }}>{brushRadius.toFixed(2)}</span>
           </div>
-          <input type="range" min={0.08} max={2} step={0.01} value={brushRadius}
-                 onChange={e => onRadius(parseFloat(e.target.value))}
-                 className="w-full h-1.5 rounded appearance-none cursor-pointer"
-                 style={{ accentColor: C.accent }} />
+          <RangeSlider min={0.08} max={2} step={0.01} value={brushRadius}
+                 onChange={onRadius}
+                 className="w-full" accent={C.accent} trackColor="rgba(255,255,255,0.15)" aria-label={t('vertex_radius')} />
         </div>
 
         {/* Strength */}
@@ -1201,10 +1201,9 @@ function BrushPanel({
             <span className="text-[11px]" style={{ color: C.textDim }}>{t('vertex_strength')}</span>
             <span className="text-[11px] font-mono" style={{ color: C.accent }}>{Math.round(brushStrength * 100)}%</span>
           </div>
-          <input type="range" min={0.02} max={1} step={0.01} value={brushStrength}
-                 onChange={e => onStrength(parseFloat(e.target.value))}
-                 className="w-full h-1.5 rounded appearance-none cursor-pointer"
-                 style={{ accentColor: C.accent }} />
+          <RangeSlider min={0.02} max={1} step={0.01} value={brushStrength}
+                 onChange={onStrength}
+                 className="w-full" accent={C.accent} trackColor="rgba(255,255,255,0.15)" aria-label={t('vertex_strength')} />
         </div>
       </div>
 
@@ -1933,19 +1932,19 @@ export default function VertexEditorPage() {
             {mode === 'weight_paint' && (
               <label className="flex items-center gap-1 text-[11px]" style={{ color: C.textDim }}>
                 {t('vertex_paint_weight')}
-                <input type="range" min={0} max={1} step={0.01} value={paintWeight}
-                       onChange={e => setPaintWeight(parseFloat(e.target.value))} style={{ accentColor: C.accent, width: 70 }} />
+                <RangeSlider min={0} max={1} step={0.01} value={paintWeight}
+                       onChange={setPaintWeight} style={{ width: 70 }} accent={C.accent} trackColor="rgba(255,255,255,0.15)" aria-label={t('vertex_paint_weight')} />
               </label>
             )}
             <label className="flex items-center gap-1 text-[11px]" style={{ color: C.textDim }}>
               {t('vertex_radius')}
-              <input type="range" min={0.08} max={2} step={0.01} value={brushRadius}
-                     onChange={e => setBrushRadius(parseFloat(e.target.value))} style={{ accentColor: C.accent, width: 70 }} />
+              <RangeSlider min={0.08} max={2} step={0.01} value={brushRadius}
+                     onChange={setBrushRadius} style={{ width: 70 }} accent={C.accent} trackColor="rgba(255,255,255,0.15)" aria-label={t('vertex_radius')} />
             </label>
             <label className="flex items-center gap-1 text-[11px]" style={{ color: C.textDim }}>
               {t('vertex_strength')}
-              <input type="range" min={0.02} max={1} step={0.01} value={brushStrength}
-                     onChange={e => setBrushStrength(parseFloat(e.target.value))} style={{ accentColor: C.accent, width: 70 }} />
+              <RangeSlider min={0.02} max={1} step={0.01} value={brushStrength}
+                     onChange={setBrushStrength} style={{ width: 70 }} accent={C.accent} trackColor="rgba(255,255,255,0.15)" aria-label={t('vertex_strength')} />
             </label>
             <div className="w-px h-5" style={{ background: C.border }} />
           </div>

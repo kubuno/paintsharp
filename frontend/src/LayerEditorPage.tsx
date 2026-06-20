@@ -14,7 +14,7 @@ import {
   Pencil, Wind, Highlighter, PenLine, Sparkles, Fingerprint, PanelRight, Lasso, Wand, Move,
   Copy, Search, FolderClosed, FolderOpen, GripVertical, CornerDownRight, Grid2x2, Star,
 } from 'lucide-react'
-import { Dropdown } from '@ui'
+import { Dropdown, RangeSlider } from '@ui'
 import { layerApi, type LayerStructureItem } from './api'
 import { C, hexToRgb, rgbToHex, rgbToHsl, hslToRgb, ColorPicker, DockArea, Navigator, OptNum, EditorShell, paintsharpMenus, useContextMenu, type CtxItem, type DockController } from './ui'
 import { EmbedShell } from './EmbedShell'
@@ -3775,13 +3775,8 @@ function BrushSlider({ label, value, min, max, unit, onChange, accent }: {
   return (
     <div className="flex items-center gap-2">
       <span className="text-[10px] w-14 flex-shrink-0" style={{ color:'#9e9e9e' }}>{label}</span>
-      <div className="relative flex-1 h-1.5 rounded-full overflow-visible" style={{ background:'#3a3a3a' }}>
-        <div className="absolute inset-y-0 left-0 rounded-full"
-             style={{ background:accent, width:`${((value-min)/(max-min))*100}%` }} />
-        <input type="range" min={min} max={max} value={value}
-               onChange={e => onChange(+e.target.value)}
-               className="absolute inset-0 w-full opacity-0 cursor-pointer h-4 -top-1.5" />
-      </div>
+      <RangeSlider min={min} max={max} value={value} onChange={onChange}
+             className="flex-1" accent={accent} trackColor="rgba(255,255,255,0.15)" aria-label={label} />
       <input type="number" min={min} max={max} value={value}
              onChange={e => onChange(+e.target.value)}
              className="w-10 h-5 text-[10px] text-center rounded outline-none"
@@ -3796,23 +3791,13 @@ function AdjSlider({ label, icon:Icon, value, min, max, onChange, accent }: {
   label:string; icon?:React.ComponentType<{size?:number;style?:React.CSSProperties}>
   value:number; min:number; max:number; onChange:(v:number)=>void; accent:string
 }) {
-  const span = max - min
-  const fillL = value >= 0 ? 50 : ((value - min) / span) * 100
-  const fillW = Math.abs((value / span) * 100)
   return (
     <div className="flex items-center gap-2">
       <span className="flex items-center gap-1 w-[68px] flex-shrink-0 text-[10px]" style={{ color:'#9e9e9e' }}>
         {Icon && <Icon size={10} style={{ color:'#7a7a7a' }} />}{label}
       </span>
-      <div className="relative flex-1 h-1.5 rounded-full overflow-visible" style={{ background:'#3a3a3a' }}>
-        {/* center tick */}
-        <div className="absolute top-[-2px] bottom-[-2px]" style={{ left:'50%', width:1, background:'#555' }} />
-        <div className="absolute inset-y-0 rounded-full"
-             style={{ background:accent, left:`${fillL}%`, width:`${fillW}%` }} />
-        <input type="range" min={min} max={max} value={value}
-               onChange={e => onChange(+e.target.value)}
-               className="absolute inset-0 w-full opacity-0 cursor-pointer h-4 -top-1.5" />
-      </div>
+      <RangeSlider min={min} max={max} value={value} onChange={onChange}
+             className="flex-1" accent={accent} trackColor="rgba(255,255,255,0.15)" aria-label={label} />
       <input type="number" min={min} max={max} value={value}
              onChange={e => onChange(Math.max(min,Math.min(max,+e.target.value)))}
              className="w-10 h-5 text-[10px] text-center rounded outline-none"

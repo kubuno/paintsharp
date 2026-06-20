@@ -3,6 +3,7 @@
 // agnostic: the host supplies `refresh` (paint the thumbnail), `screenToDoc`
 // (map a viewport corner to doc space) and zoom/pan callbacks.
 import { useEffect, useRef } from 'react'
+import { RangeSlider } from '@ui'
 
 export function Navigator({ docW, docH, refresh, screenToDoc, onCenter, zoom, onZoom, viewW, viewH, C }: {
   docW:number; docH:number; refresh:(cv:HTMLCanvasElement)=>void
@@ -52,8 +53,8 @@ export function Navigator({ docW, docH, refresh, screenToDoc, onCenter, zoom, on
         <input type="number" min={2} max={2000} value={Math.round(zoom*100)} onChange={e=>onZoom(Math.max(2,Math.min(2000,+e.target.value))/100)}
                className="w-12 h-5 text-[10px] text-center outline-none" style={{ background:'#252525', color:C.textDim, border:`1px solid ${C.border}`, borderRadius:2 }} />
         <span className="text-[10px]" style={{ color:C.textDim }}>%</span>
-        <input type="range" min={2} max={2000} value={Math.round(zoom*100)} onChange={e=>onZoom(+e.target.value/100)}
-               className="flex-1" style={{ accentColor:C.accent }} />
+        <RangeSlider min={2} max={2000} value={Math.round(zoom*100)} onChange={v=>onZoom(v/100)}
+               className="flex-1" accent={C.accent} trackColor="rgba(255,255,255,0.15)" aria-label="Zoom" />
       </div>
     </div>
   )

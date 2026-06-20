@@ -15,7 +15,7 @@ import {
   ChevronsDownUp, FolderPlus, Folder, FolderOpen, GripVertical,
 } from 'lucide-react'
 import polygonClipping from 'polygon-clipping'
-import { Dropdown, Checkbox, GradientField, DEFAULT_GRADIENT, type Gradient } from '@ui'
+import { Dropdown, Checkbox, GradientField, RangeSlider, DEFAULT_GRADIENT, type Gradient } from '@ui'
 import { apexApi, type VectorPageData, type VectorElement, type PathPoint, type PathElement, type TextElement, type GroupElement, type FillStyle } from './api'
 import { C as SHELL_C, EditorShell, DockArea, ColorField, paintsharpMenus, useContextMenu, type CtxItem } from './ui'
 import { EmbedShell } from './EmbedShell'
@@ -2803,10 +2803,12 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                       {/* Fill opacity — independent from the border opacity. */}
                       <label className="flex items-center gap-2">
                         <span className="text-[9px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_opacity')}</span>
-                        <input
-                          type="range" min={0} max={100} className="flex-1"
+                        <RangeSlider
+                          min={0} max={100} className="flex-1"
+                          accent={C.accent} trackColor="rgba(255,255,255,0.15)"
                           value={selectedEl.fill.opacity}
-                          onChange={e => updateSelected({ fill: { ...selectedEl.fill, opacity: Number(e.target.value) } as typeof selectedEl.fill })}
+                          onChange={v => updateSelected({ fill: { ...selectedEl.fill, opacity: v } as typeof selectedEl.fill })}
+                          aria-label={t('apex_opacity')}
                         />
                         <input
                           type="number" min={0} max={100}
@@ -2856,10 +2858,12 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                       {/* Border opacity — independent from the fill opacity. */}
                       <label className="flex items-center gap-2">
                         <span className="text-[9px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_opacity')}</span>
-                        <input
-                          type="range" min={0} max={100} className="flex-1"
+                        <RangeSlider
+                          min={0} max={100} className="flex-1"
+                          accent={C.accent} trackColor="rgba(255,255,255,0.15)"
                           value={selectedEl.stroke.opacity}
-                          onChange={e => updateSelected({ stroke: { ...selectedEl.stroke!, opacity: Number(e.target.value) } })}
+                          onChange={v => updateSelected({ stroke: { ...selectedEl.stroke!, opacity: v } })}
+                          aria-label={t('apex_opacity')}
                         />
                         <input
                           type="number" min={0} max={100}

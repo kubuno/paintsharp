@@ -7,6 +7,7 @@
 // path list (so re-opening a frame restores full editability).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { PenTool, MousePointer2, RotateCcw, Trash2, X } from 'lucide-react'
+import { RangeSlider } from '@ui'
 
 export interface VPath {
   id: string
@@ -156,7 +157,7 @@ export function ApexQuickVector({ width, height, cssWidth, cssHeight, initialPat
           {SWATCHES.map(s => <button key={s} onClick={() => setColor(s)} className="w-4 h-4 rounded-full border border-white/20" style={{ background: s }} />)}
         </div>
         <div className="w-px h-5" style={{ background: '#3a3a3a' }} />
-        <input type="range" min={1} max={60} value={strokeW} onChange={e => setStrokeW(+e.target.value)} className="w-16 accent-[#e8824a]" title="Width" />
+        <RangeSlider min={1} max={60} value={strokeW} onChange={setStrokeW} className="w-16" accent="#e8824a" trackColor="rgba(255,255,255,0.15)" aria-label="Width" />
         <span className="text-[10px] w-5 text-center" style={{ color: '#bbb' }}>{strokeW}</span>
         <button onClick={() => setFilled(f => !f)} title="Fill" className="px-1.5 h-6 rounded text-[10px]" style={{ color: filled ? '#e8824a' : '#bbb', background: filled ? '#e8824a22' : 'transparent', border: '1px solid #3a3a3a' }}>Fill</button>
         <div className="w-px h-5" style={{ background: '#3a3a3a' }} />
