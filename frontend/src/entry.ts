@@ -15,6 +15,7 @@ import {
   FileTypeRegistry,
   FaviconRegistry,
   SlotRegistry,
+  ModuleSettingsRegistry,
   useSidebarStore,
   useToolbarStore,
   SDK_VERSION,
@@ -73,6 +74,9 @@ export function register() {
 
   // Favicon de l'onglet quand on est dans PaintSharp (sinon favicon Kubuno).
   FaviconRegistry.register('paintsharp', '/paintsharp-logo.svg')
+
+  // The header gear button opens the per-user PaintSharp settings while in /paintsharp.
+  ModuleSettingsRegistry.register('paintsharp')
 
   WaffleAppRegistry.register('paintsharp', 'PaintSharp', [
     { id: 'paintsharp',             label: 'PaintSharp',      Icon: PaintsharpLogo, path: '/paintsharp' },
