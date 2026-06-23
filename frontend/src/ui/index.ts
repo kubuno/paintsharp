@@ -5,8 +5,11 @@ export { ColorPicker, harmonyColors } from './ColorPicker'
 export type { Scheme } from './ColorPicker'
 export { ColorField } from './ColorField'
 export { useContextMenu, type CtxItem } from './ContextMenu'
-export { DockArea } from './Dock'
-export type { DockPanel, DockController, DockLayout, DockGroup, PanelId } from './Dock'
+// Use the CORE dock (via @kubuno/sdk) so every Dock improvement (column/row
+// resize, float snapping, roll-up/maximize, VS-style dock guides) is shared
+// instead of duplicated. The old local `./Dock` copy was removed.
+export { DockArea } from '@kubuno/sdk'
+export type { DockPanel, DockController } from '@kubuno/sdk'
 export { Navigator } from './Navigator'
 export { MenuBar, type MenuItem } from './MenuBar'
 export { paintsharpMenus, type PaintsharpMenu } from './menus'

@@ -1,12 +1,172 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@kubuno/sdk'
-import { Palette, Save, ChevronLeft, ExternalLink, Check } from 'lucide-react'
-import { Link } from 'react-router-dom'
-import { Toggle, Button, Tabs, NumberInput, RangeSlider } from '@ui'
+import { api, useAuthStore } from '@kubuno/sdk'
+import { Palette, Save, ArrowLeft, ExternalLink, Check } from 'lucide-react'
+import { Toggle, Button, Radio, NumberInput, RangeSlider } from '@ui'
+import { useModulePrefs } from './userPrefs'
 
-type Tab = 'vertex' | 'media' | 'canvas' | 'about'
+// ── Per-user preferences (backend, cross-device via core users.preferences) ─────
+
+interface PaintsharpPrefs {
+  editorTheme: string   // 'dark' | 'light'
+  showGrid:    boolean
+  showRuler:   boolean
+  snapping:    boolean
+  autosave:    boolean
+  brushCursor: string   // 'small' | 'medium' | 'large'
+  units:       string   // 'px' | 'cm'
+}
+
+const DEFAULT_PREFS: PaintsharpPrefs = {
+  editorTheme: 'dark', showGrid: true, showRuler: true,
+  snapping: true, autosave: true, brushCursor: 'medium', units: 'px',
+}
+
+// ── Mail-style layout helpers ───────────────────────────────────────────────────
+
+function SettingsRow({ label, description, children }: {
+  label: string; description?: string; children: React.ReactNode
+}) {
+  return (
+    <div className="flex items-start gap-8 py-4 border-b border-[#e8eaed] last:border-0">
+      <div className="w-60 flex-shrink-0">
+        <p className="text-sm text-[#202124] font-normal">{label}</p>
+        {description && <p className="text-xs text-text-tertiary mt-0.5 leading-relaxed">{description}</p>}
+      </div>
+      <div className="flex-1">{children}</div>
+    </div>
+  )
+}
+
+function RadioGroup({ options, value, onChange }: {
+  options: { value: string; label: string }[]; value: string; onChange: (v: string) => void
+}) {
+  return (
+    <div className="flex flex-col items-start gap-2">
+      {options.map(opt => (
+        <Radio key={opt.value} checked={value === opt.value} onChange={() => onChange(opt.value)} label={opt.label} />
+      ))}
+    </div>
+  )
+}
+
+// ── Préférences tab (per-user, backend-persisted) ───────────────────────────────
+
+function PreferencesTab() {
+  const { t } = useTranslation('paintsharp')
+  const { prefs: saved, update } = useModulePrefs<PaintsharpPrefs>('paintsharp', DEFAULT_PREFS)
+  const [prefs, setPrefs] = useState<PaintsharpPrefs>(saved)
+  const [savedFlag, setSavedFlag] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const set = <K extends keyof PaintsharpPrefs>(key: K, value: PaintsharpPrefs[K]) =>
+    setPrefs(p => ({ ...p, [key]: value }))
+
+  const save = async () => {
+    setBusy(true)
+    try {
+      await update(prefs)
+      setSavedFlag(true)
+      setTimeout(() => setSavedFlag(false), 2500)
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div>
+      <SettingsRow
+        label={t('pref_editor_theme', { defaultValue: 'Thème de l\'éditeur' })}
+        description={t('pref_editor_theme_desc', { defaultValue: 'Apparence des espaces de travail créatifs (Apex, Layer, Vertex, Motion).' })}
+      >
+        <RadioGroup
+          value={prefs.editorTheme}
+          onChange={v => set('editorTheme', v)}
+          options={[
+            { value: 'dark',  label: t('pref_editor_theme_dark',  { defaultValue: 'Sombre' }) },
+            { value: 'light', label: t('pref_editor_theme_light', { defaultValue: 'Clair' }) },
+          ]}
+        />
+      </SettingsRow>
+
+      <SettingsRow label={t('pref_grid', { defaultValue: 'Grille' })}>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <Toggle checked={prefs.showGrid} onChange={() => set('showGrid', !prefs.showGrid)} />
+          <span className="text-sm text-text-primary">{t('pref_grid_on', { defaultValue: 'Afficher la grille sur le canevas' })}</span>
+        </label>
+      </SettingsRow>
+
+      <SettingsRow label={t('pref_ruler', { defaultValue: 'Règle' })}>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <Toggle checked={prefs.showRuler} onChange={() => set('showRuler', !prefs.showRuler)} />
+          <span className="text-sm text-text-primary">{t('pref_ruler_on', { defaultValue: 'Afficher les règles sur les bords du canevas' })}</span>
+        </label>
+      </SettingsRow>
+
+      <SettingsRow
+        label={t('pref_snapping', { defaultValue: 'Magnétisme' })}
+        description={t('pref_snapping_desc', { defaultValue: 'Aligner automatiquement les objets sur la grille et les repères.' })}
+      >
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <Toggle checked={prefs.snapping} onChange={() => set('snapping', !prefs.snapping)} />
+          <span className="text-sm text-text-primary">{t('pref_snapping_on', { defaultValue: 'Activer le magnétisme' })}</span>
+        </label>
+      </SettingsRow>
+
+      <SettingsRow
+        label={t('pref_autosave', { defaultValue: 'Auto-sauvegarde' })}
+        description={t('pref_autosave_desc', { defaultValue: 'Enregistrer automatiquement vos modifications pendant le travail.' })}
+      >
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <Toggle checked={prefs.autosave} onChange={() => set('autosave', !prefs.autosave)} />
+          <span className="text-sm text-text-primary">{t('pref_autosave_on', { defaultValue: 'Activer l\'auto-sauvegarde' })}</span>
+        </label>
+      </SettingsRow>
+
+      <SettingsRow
+        label={t('pref_brush_cursor', { defaultValue: 'Taille du curseur de pinceau' })}
+        description={t('pref_brush_cursor_desc', { defaultValue: 'Taille de l\'indicateur de pinceau dans les éditeurs raster.' })}
+      >
+        <RadioGroup
+          value={prefs.brushCursor}
+          onChange={v => set('brushCursor', v)}
+          options={[
+            { value: 'small',  label: t('pref_brush_cursor_small',  { defaultValue: 'Petit' }) },
+            { value: 'medium', label: t('pref_brush_cursor_medium', { defaultValue: 'Moyen' }) },
+            { value: 'large',  label: t('pref_brush_cursor_large',  { defaultValue: 'Grand' }) },
+          ]}
+        />
+      </SettingsRow>
+
+      <SettingsRow
+        label={t('pref_units', { defaultValue: 'Unités' })}
+        description={t('pref_units_desc', { defaultValue: 'Unité de mesure affichée dans les éditeurs.' })}
+      >
+        <RadioGroup
+          value={prefs.units}
+          onChange={v => set('units', v)}
+          options={[
+            { value: 'px', label: t('pref_units_px', { defaultValue: 'Pixels (px)' }) },
+            { value: 'cm', label: t('pref_units_cm', { defaultValue: 'Centimètres (cm)' }) },
+          ]}
+        />
+      </SettingsRow>
+
+      <div className="pt-5 flex items-center gap-3">
+        <Button onClick={save} loading={busy}>
+          {savedFlag
+            ? <><Check size={14} className="mr-1.5 inline" />{t('settings_saved', { defaultValue: 'Enregistré' })}</>
+            : t('settings_save_changes', { defaultValue: 'Enregistrer les modifications' })}
+        </Button>
+        <Button variant="ghost" onClick={() => setPrefs(saved)}>
+          {t('common_cancel', { defaultValue: 'Annuler' })}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ── Admin-only global settings (instance-wide, via /admin/settings) ─────────────
 
 interface PaintsharpSettings {
   'paintsharp.max_scene_bytes':         number
@@ -28,13 +188,8 @@ function formatMb(bytes: number): string {
 function mbFromBytes(bytes: number): number { return Math.round(bytes / 1048576) }
 function bytesFromMb(mb: number): number    { return mb * 1048576 }
 
-// ── Vertex & Assets settings ──────────────────────────────────────────────────
-
-function VertexTab() {
-  const { t } = useTranslation('paintsharp')
-  const qc = useQueryClient()
-
-  const { data: settings } = useQuery({
+function useAdminSettings() {
+  return useQuery({
     queryKey: ['admin-settings'],
     queryFn: () =>
       api.get<{ settings: { key: string; value: unknown }[] }>('/admin/settings').then((r) => {
@@ -43,6 +198,14 @@ function VertexTab() {
         return map as unknown as PaintsharpSettings
       }),
   })
+}
+
+// ── Vertex & Assets settings (admin) ────────────────────────────────────────────
+
+function VertexTab() {
+  const { t } = useTranslation('paintsharp')
+  const qc = useQueryClient()
+  const { data: settings } = useAdminSettings()
 
   const maxScene = settings ? mbFromBytes(settings['paintsharp.max_scene_bytes'] as number ?? 52428800) : 50
   const maxAsset = settings ? mbFromBytes(settings['paintsharp.max_asset_bytes'] as number ?? 104857600) : 100
@@ -163,21 +326,12 @@ function VertexTab() {
   )
 }
 
-// ── Media (Motion) settings ───────────────────────────────────────────────────
+// ── Media (Motion) settings (admin) ─────────────────────────────────────────────
 
 function MediaTab() {
   const { t } = useTranslation('paintsharp')
   const qc = useQueryClient()
-
-  const { data: settings } = useQuery({
-    queryKey: ['admin-settings'],
-    queryFn: () =>
-      api.get<{ settings: { key: string; value: unknown }[] }>('/admin/settings').then((r) => {
-        const map: Record<string, unknown> = {}
-        r.data.settings.forEach((s) => { map[s.key] = s.value })
-        return map as unknown as PaintsharpSettings
-      }),
-  })
+  const { data: settings } = useAdminSettings()
 
   const maxMedia = settings ? mbFromBytes(settings['paintsharp.max_media_bytes'] as number ?? 5368709120) : 5120
 
@@ -246,21 +400,12 @@ function MediaTab() {
   )
 }
 
-// ── Canvas defaults (Keyframe / Layer / Apex) ─────────────────────────────────
+// ── Canvas defaults (Keyframe / Layer / Apex) (admin) ───────────────────────────
 
 function CanvasTab() {
   const { t } = useTranslation('paintsharp')
   const qc = useQueryClient()
-
-  const { data: settings } = useQuery({
-    queryKey: ['admin-settings'],
-    queryFn: () =>
-      api.get<{ settings: { key: string; value: unknown }[] }>('/admin/settings').then((r) => {
-        const map: Record<string, unknown> = {}
-        r.data.settings.forEach((s) => { map[s.key] = s.value })
-        return map as unknown as PaintsharpSettings
-      }),
-  })
+  const { data: settings } = useAdminSettings()
 
   const defW   = settings ? (settings['paintsharp.default_canvas_width']  as number ?? 1920) : 1920
   const defH   = settings ? (settings['paintsharp.default_canvas_height'] as number ?? 1080) : 1080
@@ -399,7 +544,7 @@ function CanvasTab() {
   )
 }
 
-// ── About ─────────────────────────────────────────────────────────────────────
+// ── About ───────────────────────────────────────────────────────────────────────
 
 function AboutTab() {
   const { t } = useTranslation('paintsharp')
@@ -462,8 +607,8 @@ function AboutTab() {
         <div className="px-5 py-4">
           <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-3">{t('settings_technologies_label')}</p>
           <div className="flex flex-wrap gap-2">
-            {['Rust', 'Axum 0.7', 'SQLx 0.8', 'PostgreSQL 16', 'tokio', 'WebSocket', 'Three.js', 'Canvas 2D', 'Fabric.js (Apex)'].map(t => (
-              <span key={t} className="text-xs px-2 py-1 rounded-lg bg-surface-2 text-text-secondary font-mono">{t}</span>
+            {['Rust', 'Axum 0.7', 'SQLx 0.8', 'PostgreSQL 16', 'tokio', 'WebSocket', 'Three.js', 'Canvas 2D', 'Fabric.js (Apex)'].map(tech => (
+              <span key={tech} className="text-xs px-2 py-1 rounded-lg bg-surface-2 text-text-secondary font-mono">{tech}</span>
             ))}
           </div>
         </div>
@@ -481,43 +626,61 @@ function AboutTab() {
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Main page (mail-style breadcrumb + tab bar) ─────────────────────────────────
+
+type Tab = 'preferences' | 'vertex' | 'media' | 'canvas' | 'about'
 
 export default function PaintsharpSettingsPage() {
   const { t } = useTranslation('paintsharp')
-  const [tab, setTab] = useState<Tab>('vertex')
+  const isAdmin = useAuthStore(s => s.user?.role === 'admin')
+  const [tab, setTab] = useState<Tab>('preferences')
 
-  const TABS: { id: Tab; label: string }[] = [
-    { id: 'vertex', label: t('settings_tab_vertex') },
-    { id: 'media',  label: t('settings_tab_media') },
-    { id: 'canvas', label: t('settings_tab_canvas') },
-    { id: 'about',  label: t('settings_tab_about') },
+  // Admin-only tabs hold instance-wide settings (via /admin/settings); hidden for non-admins.
+  const tabs: { id: Tab; label: string; adminOnly?: boolean }[] = [
+    { id: 'preferences', label: t('settings_tab_preferences', { defaultValue: 'Préférences' }) },
+    { id: 'vertex',      label: t('settings_tab_vertex'), adminOnly: true },
+    { id: 'media',       label: t('settings_tab_media'),  adminOnly: true },
+    { id: 'canvas',      label: t('settings_tab_canvas'), adminOnly: true },
+    { id: 'about',       label: t('settings_tab_about') },
   ]
+  const visibleTabs = tabs.filter(tb => !tb.adminOnly || isAdmin)
 
   return (
-    <div className="max-w-2xl">
-      <div className="flex items-center gap-3 mb-6">
-        <Link to="/admin?tab=modules" className="p-1.5 rounded-lg hover:bg-surface-2 text-text-secondary hover:text-text-primary transition-colors">
-          <ChevronLeft size={18} />
+    <div className="flex flex-col h-full bg-white overflow-hidden">
+      {/* Breadcrumb header */}
+      <div className="flex items-center gap-2 px-6 py-2.5 border-b border-[#e8eaed] flex-shrink-0" style={{ background: '#f8f9fa' }}>
+        <Link to="/paintsharp" className="flex items-center gap-1.5 text-sm text-[#1a73e8] hover:underline">
+          <ArrowLeft size={14} />
+          PaintSharp
         </Link>
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-               style={{ background: '#1a1a2e' }}>
-            <Palette size={16} style={{ color: '#e8824a' }} />
-          </div>
-          <div>
-            <h1 className="text-lg font-medium text-text-primary">{t('settings_page_title')}</h1>
-            <p className="text-xs text-text-tertiary">{t('settings_page_subtitle')}</p>
-          </div>
+        <span className="text-text-tertiary text-sm">/</span>
+        <div className="flex items-center gap-1.5">
+          <Palette size={15} className="text-text-secondary" />
+          <span className="text-sm text-text-primary">{t('settings_page_title', { defaultValue: 'Réglages' })}</span>
         </div>
       </div>
 
-      <Tabs tabs={TABS} value={tab} onChange={setTab} className="mb-6" />
+      {/* Tab bar (Gmail-style) */}
+      <div className="flex items-end border-b border-[#e8eaed] px-4 flex-shrink-0 overflow-x-auto" style={{ background: '#fff' }}>
+        {visibleTabs.map(tb => (
+          <button key={tb.id} onClick={() => setTab(tb.id)}
+            className={`px-4 py-3 text-sm border-b-2 -mb-px transition-colors whitespace-nowrap ${
+              tab === tb.id ? 'border-[#1a73e8] text-[#1a73e8] font-medium' : 'border-transparent text-[#5f6368] hover:text-[#202124] hover:bg-[#f1f3f4]'}`}>
+            {tb.label}
+          </button>
+        ))}
+      </div>
 
-      {tab === 'vertex' && <VertexTab />}
-      {tab === 'media'  && <MediaTab />}
-      {tab === 'canvas' && <CanvasTab />}
-      {tab === 'about'  && <AboutTab />}
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-8 py-6">
+          {tab === 'preferences' && <PreferencesTab />}
+          {tab === 'vertex' && isAdmin && <VertexTab />}
+          {tab === 'media'  && isAdmin && <MediaTab />}
+          {tab === 'canvas' && isAdmin && <CanvasTab />}
+          {tab === 'about'  && <AboutTab />}
+        </div>
+      </div>
     </div>
   )
 }
