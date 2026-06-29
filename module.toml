@@ -1,7 +1,7 @@
 [module]
 id            = "paintsharp"
 display_name  = "PaintSharp"
-version       = "0.1.0"
+version       = "0.1.2"
 description   = "Suite créative — Layer (raster), Apex (vectoriel), Motion (vidéo), Vertex (3D), Keyframe (animation 2D), PdfWriter (édition PDF)."
 author        = "Kubuno Contributors"
 license       = "AGPL-3.0"
@@ -87,8 +87,51 @@ id       = "paintsharp-trash"
 label    = "Corbeille"
 icon     = "Trash2"
 path     = "/paintsharp/trash"
+launchable = false
 position = 99
 section  = "secondary"
+
+# ── Settings manifest ───────────────────────────────────────────────────────────
+# Declarative source of truth for the module's parameters. The core seeds the
+# instance-level rows (scope global|overridable) into core.settings and resolves the
+# effective value (user override ?? global default) per user. These admin-only,
+# instance-wide settings are edited from the core admin console, not from a route
+# inside the module.
+#   scope = "global"      → admin only, instance-wide
+#   scope = "user"        → per-user only
+#   scope = "overridable" → admin default, each user may override it
+
+[[settings]]
+key     = "max_scene_bytes"
+scope   = "global"
+type    = "int"
+default = 52428800
+label   = "Taille maximale d'une scène"
+description = "Poids maximal autorisé pour un fichier de scène, en octets."
+
+[[settings]]
+key     = "max_asset_bytes"
+scope   = "global"
+type    = "int"
+default = 104857600
+label   = "Taille maximale d'un asset"
+description = "Poids maximal autorisé pour un asset importé (texture, modèle…), en octets."
+
+[[settings]]
+key     = "max_texture_size"
+scope   = "global"
+type    = "int"
+default = 4096
+label   = "Résolution maximale des textures"
+description = "Dimension maximale (en pixels) des textures importées."
+
+[[settings]]
+key     = "enable_collaboration"
+scope   = "global"
+type    = "bool"
+default = true
+label   = "Édition collaborative"
+description = "Autoriser l'édition collaborative en temps réel sur les documents."
 
 [events]
 subscribed = ["UserDeleted"]
