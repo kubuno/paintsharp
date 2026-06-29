@@ -1,6 +1,6 @@
 [package]
 name        = "kubuno-paintsharp"
-version     = "0.1.2"
+version     = "0.1.3"
 edition     = "2021"
 description = "Kubuno PaintSharp — module d'édition 3D"
 license     = "AGPL-3.0"
@@ -48,7 +48,7 @@ lopdf              = "0.34"
 [workspace]
 
 [workspace.package]
-version      = "0.1.2"
+version      = "0.1.3"
 edition      = "2021"
 authors      = ["Kubuno Contributors"]
 license      = "AGPL-3.0"
