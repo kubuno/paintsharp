@@ -1,7 +1,7 @@
 [module]
 id            = "paintsharp"
 display_name  = "PaintSharp"
-version       = "0.1.2"
+version       = "0.1.3"
 description   = "Suite créative — Layer (raster), Apex (vectoriel), Motion (vidéo), Vertex (3D), Keyframe (animation 2D), PdfWriter (édition PDF)."
 author        = "Kubuno Contributors"
 license       = "AGPL-3.0"
