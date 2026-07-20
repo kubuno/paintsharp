@@ -10,6 +10,7 @@ export function paintsharpMenus(t: TFunction, o: {
   onSave?: () => void
   onExport?: () => void
   exportLabel?: string
+  fileExtra?: MenuItem[]                 // extra items inserted after Export in Fichier
   onClose?: () => void
   onUndo?: () => void
   onRedo?: () => void
@@ -28,6 +29,7 @@ export function paintsharpMenus(t: TFunction, o: {
   const file: MenuItem[] = []
   if (o.onSave)   file.push({ label: t('common_save'), onClick: o.onSave, shortcut: 'Ctrl+S' })
   if (o.onExport) file.push({ label: o.exportLabel ?? t('menu_export'), onClick: o.onExport })
+  if (o.fileExtra?.length) file.push(...o.fileExtra)
   if ((file.length) && o.onClose) file.push('sep')
   if (o.onClose)  file.push({ label: t('menu_close'), onClick: o.onClose })
   if (file.length) menus.push({ label: t('menu_file'), items: file })

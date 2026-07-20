@@ -456,3 +456,97 @@ pub async fn open_by_file(
     .ok_or_else(|| crate::errors::PaintsharpError::NotFound(format!("Aucun projet lié au fichier {}", dto.file_id)))?;
     Ok(axum::Json(serde_json::json!({ "id": id })))
 }
+
+// ── Raster → vector tracing (visioncortex engine) ─────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct TraceDto {
+    /// Image as a data URL (`data:image/png;base64,…`) or raw base64.
+    pub image: String,
+    // VTracer-style knobs; every field optional, defaults = VTracer defaults.
+    pub color_mode:       Option<String>,   // "color" | "binary"
+    pub hierarchical:     Option<String>,   // "stacked" | "cutout"
+    pub mode:             Option<String>,   // "spline" | "polygon" | "pixel"
+    pub filter_speckle:   Option<usize>,    // 0..=64
+    pub color_precision:  Option<i32>,      // 1..=8
+    pub layer_difference: Option<i32>,      // 0..=128
+    pub corner_threshold: Option<i32>,      // 0..=180 (deg)
+    pub length_threshold: Option<f64>,      // 3.5..=10
+    pub splice_threshold: Option<i32>,      // 0..=180 (deg)
+}
+
+/// Longest image side the tracer will accept — larger inputs are downscaled by
+/// the client; anything bigger than this is a mistake and gets refused instead
+/// of pinning a worker thread for minutes.
+const TRACE_MAX_SIDE: u32 = 3000;
+
+pub async fn trace_image(
+    Extension(_user): Extension<PaintsharpUser>,
+    Json(dto): Json<TraceDto>,
+) -> Result<Json<Value>> {
+    use crate::services::vtrace;
+
+    // Strip a data-URL header if present, then decode.
+    let b64 = dto.image.rsplit(',').next().unwrap_or(&dto.image).trim();
+    let bytes = {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .map_err(|_| PaintsharpError::Validation("image: base64 invalide".into()))?
+    };
+
+    let mut cfg = vtrace::Config::default();
+    if let Some(v) = dto.color_mode.as_deref() {
+        cfg.color_mode = match v {
+            "color" => vtrace::ColorMode::Color,
+            "binary" => vtrace::ColorMode::Binary,
+            _ => return Err(PaintsharpError::Validation("color_mode".into())),
+        };
+    }
+    if let Some(v) = dto.hierarchical.as_deref() {
+        cfg.hierarchical = match v {
+            "stacked" => vtrace::Hierarchical::Stacked,
+            "cutout" => vtrace::Hierarchical::Cutout,
+            _ => return Err(PaintsharpError::Validation("hierarchical".into())),
+        };
+    }
+    if let Some(v) = dto.mode.as_deref() {
+        use visioncortex::PathSimplifyMode as M;
+        cfg.mode = match v {
+            "spline" => M::Spline,
+            "polygon" => M::Polygon,
+            "pixel" => M::None,
+            _ => return Err(PaintsharpError::Validation("mode".into())),
+        };
+    }
+    if let Some(v) = dto.filter_speckle   { cfg.filter_speckle   = v.min(64); }
+    if let Some(v) = dto.color_precision  { cfg.color_precision  = v.clamp(1, 8); }
+    if let Some(v) = dto.layer_difference { cfg.layer_difference = v.clamp(0, 128); }
+    if let Some(v) = dto.corner_threshold { cfg.corner_threshold = v.clamp(0, 180); }
+    if let Some(v) = dto.length_threshold { cfg.length_threshold = v.clamp(3.5, 10.0); }
+    if let Some(v) = dto.splice_threshold { cfg.splice_threshold = v.clamp(0, 180); }
+
+    // Decode + trace on a blocking thread: both are CPU-bound.
+    let svg = tokio::task::spawn_blocking(move || -> std::result::Result<String, String> {
+        let img = image::load_from_memory(&bytes).map_err(|e| format!("image illisible: {e}"))?;
+        let (w, h) = (img.width(), img.height());
+        if w == 0 || h == 0 {
+            return Err("image vide".into());
+        }
+        if w.max(h) > TRACE_MAX_SIDE {
+            return Err(format!("image trop grande ({w}×{h}, max {TRACE_MAX_SIDE}px)"));
+        }
+        let rgba = img.to_rgba8();
+        let color_image = visioncortex::ColorImage {
+            pixels: rgba.as_raw().to_vec(),
+            width: w as usize,
+            height: h as usize,
+        };
+        Ok(vtrace::convert(color_image, cfg)?.to_svg())
+    })
+    .await
+    .map_err(|e| PaintsharpError::Internal(anyhow::anyhow!("trace: {e}")))?
+    .map_err(PaintsharpError::Validation)?;
+
+    Ok(Json(json!({ "svg": svg })))
+}

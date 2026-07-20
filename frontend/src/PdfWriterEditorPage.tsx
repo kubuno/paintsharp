@@ -13,19 +13,27 @@ import {
   Stamp, PenLine, TextCursorInput, CheckSquare,
   Loader2, X, Star, Image as ImageIcon, Wand2,
   Undo2, Redo2, Copy, ArrowUp, ArrowDown,
-  Hand, Maximize2, Check, ScanText,
+  Hand, Maximize2, Check, ScanText, Printer,
+  Scissors, ClipboardPaste, Bold, Italic,
+  TextAlignStart, TextAlignCenter, TextAlignEnd,
+  AlignStartVertical, AlignCenterVertical, AlignEndVertical,
+  AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
+  AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { pdfWriterApi, type Annotation, type PdfSignature } from './api'
+import { uid } from './uid'
+import { pdfWriterApi, type Annotation, type PdfSignature, type TextAnnotation, type ShapeAnnotation } from './api'
 import { extractPageElements } from './pdfExtract'
-import { buildAnnotatedPdf, type ExportPage } from './pdfExport'
+import { buildAnnotatedPdf, svgPathBounds, type ExportPage } from './pdfExport'
 import { useAuthStore } from '@kubuno/sdk'
 import { useConfirm } from '@kubuno/sdk'
 import { ConfirmDialog } from '@ui'
-import { Button, MenuDropdown, RangeSlider, type MenuItem } from '@ui'
+import { Button, MenuDropdown, RangeSlider, FontSizeField, type MenuItem } from '@ui'
 import { C, EditorShell, DockArea, ColorField, paintsharpMenus } from './ui'
 import { useDebouncedAutosave } from './useAutosave'
 import { recognizeImage, disposeOcr, type OcrLang } from './pdfOcr'
+import { usePdfFonts } from './pdfFonts'
+import { PdfSignatureDialog, type PlacedSignature } from './PdfSignatureDialog'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -86,10 +94,14 @@ export default function PdfWriterEditorPage() {
   // Édition de texte en place (double-clic) + déplacement/redimensionnement d'éléments.
   const [editingTextId, setEditingTextId] = useState<string | null>(null)
   const [converting, setConverting]     = useState(false)
-  // Drag d'élément(s) : déplacement (potentiellement groupé) ou redimensionnement (élément unique).
+  // Drag d'élément(s) : déplacement (potentiellement groupé), redimensionnement
+  // ou rotation (élément unique, poignée dédiée).
   const elDragRef = useRef<{
-    id: string; mode: 'move' | 'resize'; handle?: string; startX: number; startY: number
+    id: string; mode: 'move' | 'resize' | 'rotate'; handle?: string; startX: number; startY: number
     orig: { x: number; y: number; width: number; height: number }
+    origRot?: number                                  // rotation de départ (mode rotate)
+    center?: { x: number; y: number }                 // centre de rotation (points PDF)
+    startAngle?: number                               // angle curseur→centre au mousedown
     group?: { id: string; x: number; y: number }[]   // positions d'origine pour un déplacement groupé
     moved?: boolean                                   // a réellement bougé (sinon = simple clic)
   } | null>(null)
@@ -101,12 +113,32 @@ export default function PdfWriterEditorPage() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; id: string } | null>(null)
   // Menu des niveaux de zoom (façon Acrobat).
   const [zoomMenu, setZoomMenu] = useState<{ x: number; y: number } | null>(null)
-  // OCR (reconnaissance de texte) — état d'avancement + menu de langue.
-  const [ocrMenu, setOcrMenu]       = useState<{ x: number; y: number } | null>(null)
+  // OCR (reconnaissance de texte) — dialogue d'options + état d'avancement.
+  const [ocrDialog, setOcrDialog]   = useState(false)
+  const [ocrLang, setOcrLang]       = useState<OcrLang>('fra+eng')
+  const [ocrScope, setOcrScope]     = useState<'page' | 'doc'>('page')
+  const [ocrMode, setOcrMode]       = useState<'editable' | 'invisible'>('editable')
   const [ocrRunning, setOcrRunning] = useState(false)
   const [ocrStatus, setOcrStatus]   = useState('')
   const [ocrPct, setOcrPct]         = useState(0)
   const [ocrResultMsg, setOcrResultMsg] = useState<string | null>(null)
+  // Presse-papiers interne (couper / copier / coller d'annotations).
+  const clipboardRef = useRef<Annotation[]>([])
+  const [clipCount, setClipCount] = useState(0)
+  // Version de l'historique → recalcul de canUndo/canRedo au rendu.
+  const [histVer, setHistVer] = useState(0)
+  // Signature en attente de placement (clic sur la page).
+  const pendingSigRef = useRef<PlacedSignature | null>(null)
+  // Tampon personnalisé (texte + couleur libres).
+  const [customStampText, setCustomStampText]   = useState('')
+  const [customStampColor, setCustomStampColor] = useState('#d93025')
+  // Polices proposées (intégrées + System/Fonts) et police par défaut du texte.
+  const fonts = usePdfFonts()
+  const fontsRef = useRef(fonts)
+  fontsRef.current = fonts
+  const [fontFamily, setFontFamily] = useState('Helvetica')
+  // Impression en cours (export → iframe cachée → print).
+  const [printing, setPrinting] = useState(false)
 
   // ── Navigation du canevas (pan / zoom façon Acrobat) ────────────────────────
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -237,12 +269,61 @@ export default function PdfWriterEditorPage() {
     onSuccess: () => refreshDoc(),
   })
 
+  // Remappe des annotations pour une rotation de page de +90° horaire : les
+  // objets restent « collés » au contenu (comme Acrobat). Point (x,y) de
+  // l'ancien espace affiché (hauteur oldH) → (oldH − y, x) dans le nouveau.
+  const remapAnnotations90 = (anns: Annotation[], oldH: number): Annotation[] =>
+    anns.map(a => {
+      const an = a as unknown as {
+        type: string; x: number; y: number; width?: number; height?: number
+        points?: [number, number][]; rotation?: number
+      }
+      if (an.points?.length) {
+        const pts = an.points.map(p => [oldH - p[1], p[0]] as [number, number])
+        return { ...a, points: pts, x: 0, y: 0 } as Annotation
+      }
+      if (an.type === 'line' || an.type === 'arrow') {
+        // Vecteur exact via ses deux extrémités (pas de champ rotation à gérer).
+        const p1 = { x: oldH - an.y, y: an.x }
+        const p2 = { x: oldH - (an.y + (an.height ?? 0)), y: an.x + (an.width ?? 0) }
+        return { ...a, x: p1.x, y: p1.y, width: p2.x - p1.x, height: p2.y - p1.y } as Annotation
+      }
+      const w = an.width ?? 20, h = an.height ?? 20
+      const cx = an.x + w / 2, cy = an.y + h / 2
+      const ncx = oldH - cy, ncy = cx
+      const rot = ((an.rotation ?? 0) + 90) % 360
+      return { ...a, x: ncx - w / 2, y: ncy - h / 2, rotation: rot === 0 ? undefined : rot } as Annotation
+    })
+
+  // Pivote une page de +90° en remappant d'abord ses annotations, pour qu'elles
+  // suivent le contenu.
+  const rotatePagePlus90 = useCallback(async (n: number) => {
+    const meta = docData?.pages?.find(p => p.page_number === n)
+    const rot = meta?.rotation ?? (n === currentPage ? (pageData?.rotation ?? 0) : 0)
+    const bw = meta?.width ?? pageData?.width ?? 595
+    const bh = meta?.height ?? pageData?.height ?? 842
+    const oldH = rot % 180 !== 0 ? bw : bh   // hauteur AFFICHÉE avant rotation
+    try {
+      if (n === currentPage) {
+        const remapped = remapAnnotations90(annotationsRef.current, oldH)
+        setAnnotations(remapped)
+        await pdfWriterApi.savePage(id!, n, { annotations: remapped })
+      } else {
+        const r = await pdfWriterApi.getPage(id!, n)
+        const remapped = remapAnnotations90((r.data.annotations as Annotation[]) ?? [], oldH)
+        await pdfWriterApi.savePage(id!, n, { annotations: remapped })
+      }
+    } catch { /* remap best-effort : la rotation reste appliquée */ }
+    rotatePageMut.mutate({ n, rot: (rot + 90) % 360 })
+  }, [docData?.pages, currentPage, pageData?.rotation, pageData?.width, pageData?.height, id, rotatePageMut])
+
   // Sync annotations quand on change de page (réinitialise l'historique annuler/rétablir)
   useEffect(() => {
     if (pageData) {
       setAnnotations((pageData.annotations as Annotation[]) ?? [])
       clearSel()
       historyRef.current = { past: [], future: [] }
+      setHistVer(v => v + 1)
     }
   }, [pageData])
 
@@ -274,20 +355,28 @@ export default function PdfWriterEditorPage() {
     return () => { cancelled = true }
   }, [id, token])
 
+  // Index de la page dans le binaire source : suit les réorganisations. Tant que
+  // les métadonnées serveur n'ont pas répondu, on suppose l'ordre d'origine.
+  const srcIdx = pageData ? (pageData.source_index ?? null) : currentPage - 1
+  const dbRot  = pageData?.rotation ?? 0
+  const hasSourcePage = !!pdfDoc && srcIdx != null && srcIdx >= 0 && srcIdx < (pdfDoc?.numPages ?? 0)
+
   // Rendu de la page courante (sauf si la page est « extraite » → page blanche + éléments)
   useLayoutEffect(() => {
-    if (!pdfDoc || !canvasRef.current || isExtracted) return
+    if (!pdfDoc || !canvasRef.current || isExtracted || !hasSourcePage) return
     let cancelled = false
 
-    pdfDoc.getPage(currentPage).then(page => {
+    pdfDoc.getPage((srcIdx as number) + 1).then(page => {
       if (cancelled) return
       pageRef.current = page
       // Logical viewport (CSS px) drives the overlay/coordinate space; the canvas
       // backing store is oversampled by the device pixel ratio so text stays crisp
-      // at any zoom — like Acrobat's rendering.
+      // at any zoom — like Acrobat's rendering. The DB rotation is applied on top
+      // of the page's intrinsic /Rotate.
+      const rot    = (((page.rotate + dbRot) % 360) + 360) % 360
       const dpr    = Math.min(window.devicePixelRatio || 1, 3)
-      const vp     = page.getViewport({ scale })
-      const vpHi   = page.getViewport({ scale: scale * dpr })
+      const vp     = rot === page.rotate ? page.getViewport({ scale }) : page.getViewport({ scale, rotation: rot })
+      const vpHi   = rot === page.rotate ? page.getViewport({ scale: scale * dpr }) : page.getViewport({ scale: scale * dpr, rotation: rot })
       const canvas = canvasRef.current!
       canvas.width        = Math.round(vpHi.width)
       canvas.height       = Math.round(vpHi.height)
@@ -300,17 +389,21 @@ export default function PdfWriterEditorPage() {
     })
 
     return () => { cancelled = true }
-  }, [pdfDoc, currentPage, scale, isExtracted])
+  }, [pdfDoc, currentPage, scale, isExtracted, srcIdx, dbRot, hasSourcePage])
 
   // Dimensions de page (points) — issues de la page serveur, sinon A4 par défaut.
-  const pageW = pageData?.width  ?? 595
-  const pageH = pageData?.height ?? 842
+  // La rotation 90/270 échange largeur et hauteur AFFICHÉES (espace annotations).
+  const basePageW = pageData?.width  ?? 595
+  const basePageH = pageData?.height ?? 842
+  const rotSwap = dbRot % 180 !== 0
+  const pageW = rotSwap ? basePageH : basePageW
+  const pageH = rotSwap ? basePageW : basePageH
 
-  // ── Rendu d'une page VIERGE quand il n'y a pas de binaire PDF ───────────────
-  // (document créé sans import → l'API source renvoie 404 ; on dessine alors
-  //  une vraie page blanche dimensionnée, au lieu d'un canvas 300×150 résiduel.)
+  // ── Rendu d'une page VIERGE quand il n'y a pas de page source ───────────────
+  // (document créé sans import — ou page ajoutée après import : l'API source ne
+  //  la contient pas ; on dessine alors une vraie page blanche dimensionnée.)
   useLayoutEffect(() => {
-    if ((pdfDoc && !isExtracted) || loading || !canvasRef.current) return
+    if ((pdfDoc && !isExtracted && hasSourcePage) || loading || !canvasRef.current) return
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
     const w = Math.max(1, Math.round(pageW * scale))
     const h = Math.max(1, Math.round(pageH * scale))
@@ -322,7 +415,7 @@ export default function PdfWriterEditorPage() {
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, w, h)
     syncOverlaySize(w, h, dpr)
-  }, [pdfDoc, loading, scale, pageW, pageH, currentPage, isExtracted])
+  }, [pdfDoc, loading, scale, pageW, pageH, currentPage, isExtracted, hasSourcePage])
 
   // ── Calcul du zoom initial ────────────────────────────────────────────────
   useEffect(() => {
@@ -368,19 +461,25 @@ export default function PdfWriterEditorPage() {
     h.past.push(clone(annotationsRef.current))
     if (h.past.length > 60) h.past.shift()
     h.future = []
+    setHistVer(v => v + 1)
   }, [])
   const undo = useCallback(() => {
     const h = historyRef.current
     if (!h.past.length) return
     h.future.push(clone(annotationsRef.current))
     setAnnotations(h.past.pop()!); clearSel(); setDirty(true)
+    setHistVer(v => v + 1)
   }, [])
   const redo = useCallback(() => {
     const h = historyRef.current
     if (!h.future.length) return
     h.past.push(clone(annotationsRef.current))
     setAnnotations(h.future.pop()!); clearSel(); setDirty(true)
+    setHistVer(v => v + 1)
   }, [])
+  void histVer // (lu implicitement : déclenche le re-rendu de canUndo/canRedo)
+  const canUndo = historyRef.current.past.length > 0
+  const canRedo = historyRef.current.future.length > 0
 
   const addAnnotation = useCallback((ann: Annotation) => {
     snapshot()
@@ -438,7 +537,7 @@ export default function PdfWriterEditorPage() {
     const src = annotationsRef.current.find(a => a.id === aid)
     if (!src) return
     snapshot()
-    const copy = { ...clone([src])[0], id: crypto.randomUUID() } as Annotation & { x: number; y: number }
+    const copy = { ...clone([src])[0], id: uid() } as Annotation & { x: number; y: number }
     copy.x += 12; copy.y += 12
     setAnnotations(prev => [...prev, copy]); selectOnly(copy.id); setDirty(true)
   }, [snapshot])
@@ -456,6 +555,102 @@ export default function PdfWriterEditorPage() {
     })
     setDirty(true)
   }, [snapshot])
+
+  // ── Presse-papiers interne (couper / copier / coller) ───────────────────────
+  const copySelection = useCallback(() => {
+    const set = new Set(selectedIds)
+    const items = annotationsRef.current.filter(a => set.has(a.id))
+    if (!items.length) return
+    clipboardRef.current = clone(items)
+    setClipCount(items.length)
+  }, [selectedIds])
+  const cutSelection = useCallback(() => {
+    if (!selectedIds.length) return
+    copySelection()
+    deleteSelected()
+  }, [selectedIds, copySelection, deleteSelected])
+  const pasteClipboard = useCallback(() => {
+    const items = clipboardRef.current
+    if (!items.length) return
+    snapshot()
+    const copies = clone(items).map(a => {
+      const c = { ...a, id: uid(), page: currentPage } as Annotation & { x: number; y: number; points?: [number, number][] }
+      if (c.points) c.points = c.points.map(p => [p[0] + 16, p[1] + 16] as [number, number])
+      c.x += 16; c.y += 16
+      return c as Annotation
+    })
+    setAnnotations(prev => [...prev, ...copies])
+    setSelectedIds(copies.map(c => c.id))
+    setDirty(true)
+  }, [snapshot, currentPage])
+
+  // ── Alignement / distribution de la sélection multiple ─────────────────────
+  type AlignKind = 'left' | 'center-h' | 'right' | 'top' | 'center-v' | 'bottom'
+  const moveAnnBy = (a: Annotation, dx: number, dy: number): Annotation => {
+    const an = a as unknown as { points?: [number, number][]; x: number; y: number }
+    if (an.points) return { ...a, points: an.points.map(p => [p[0] + dx, p[1] + dy] as [number, number]), x: an.x + dx, y: an.y + dy } as Annotation
+    return { ...a, x: an.x + dx, y: an.y + dy } as Annotation
+  }
+  const alignSelected = useCallback((kind: AlignKind) => {
+    const set = new Set(selectedIds)
+    const sel = annotationsRef.current.filter(a => set.has(a.id))
+    if (sel.length < 2) return
+    snapshot()
+    const boxes = new Map(sel.map(a => [a.id, bboxOf(a)]))
+    const xs = sel.map(a => boxes.get(a.id)!)
+    const left   = Math.min(...xs.map(b => b.x)),        right  = Math.max(...xs.map(b => b.x + b.w))
+    const top    = Math.min(...xs.map(b => b.y)),        bottom = Math.max(...xs.map(b => b.y + b.h))
+    const midX   = (left + right) / 2,                   midY   = (top + bottom) / 2
+    setAnnotations(prev => prev.map(a => {
+      if (!set.has(a.id)) return a
+      const b = boxes.get(a.id)!
+      let dx = 0, dy = 0
+      if (kind === 'left') dx = left - b.x
+      else if (kind === 'right') dx = right - (b.x + b.w)
+      else if (kind === 'center-h') dx = midX - (b.x + b.w / 2)
+      else if (kind === 'top') dy = top - b.y
+      else if (kind === 'bottom') dy = bottom - (b.y + b.h)
+      else if (kind === 'center-v') dy = midY - (b.y + b.h / 2)
+      return moveAnnBy(a, dx, dy)
+    }))
+    setDirty(true)
+  }, [selectedIds, snapshot, bboxOf])
+  const distributeSelected = useCallback((axis: 'h' | 'v') => {
+    const set = new Set(selectedIds)
+    const sel = annotationsRef.current.filter(a => set.has(a.id))
+    if (sel.length < 3) return
+    snapshot()
+    const entries = sel.map(a => ({ a, b: bboxOf(a) }))
+    entries.sort((p, q) => axis === 'h' ? (p.b.x + p.b.w / 2) - (q.b.x + q.b.w / 2) : (p.b.y + p.b.h / 2) - (q.b.y + q.b.h / 2))
+    const first = entries[0], last = entries[entries.length - 1]
+    const c0 = axis === 'h' ? first.b.x + first.b.w / 2 : first.b.y + first.b.h / 2
+    const c1 = axis === 'h' ? last.b.x + last.b.w / 2 : last.b.y + last.b.h / 2
+    const step = (c1 - c0) / (entries.length - 1)
+    const targets = new Map(entries.map((e, i) => [e.a.id, c0 + step * i]))
+    setAnnotations(prev => prev.map(a => {
+      if (!targets.has(a.id)) return a
+      const b = bboxOf(a)
+      const cur = axis === 'h' ? b.x + b.w / 2 : b.y + b.h / 2
+      const d = targets.get(a.id)! - cur
+      return moveAnnBy(a, axis === 'h' ? d : 0, axis === 'h' ? 0 : d)
+    }))
+    setDirty(true)
+  }, [selectedIds, snapshot, bboxOf])
+
+  // ── Rotation : helpers ──────────────────────────────────────────────────────
+  const rotationOf = (a: Annotation): number => ((a as { rotation?: number }).rotation ?? 0)
+  // Ramène un point (points PDF) dans le repère NON pivoté d'un élément, pour
+  // que le hit-test par boîte englobante reste valable sur un objet pivoté.
+  const unrotatePoint = (a: Annotation, pt: { x: number; y: number }): { x: number; y: number } => {
+    const rot = rotationOf(a)
+    if (!rot) return pt
+    const b = bboxOf(a)
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2
+    const rad = (-rot * Math.PI) / 180
+    const dx = pt.x - cx, dy = pt.y - cy
+    return { x: cx + dx * Math.cos(rad) - dy * Math.sin(rad), y: cy + dx * Math.sin(rad) + dy * Math.cos(rad) }
+  }
+  const hitTestR = (a: Annotation, pt: { x: number; y: number }): boolean => hitTest(a, unrotatePoint(a, pt))
 
   // Test de présence d'un point (en points PDF) sur un élément (boîte englobante).
   const hitTest = (a: Annotation, pt: { x: number; y: number }): boolean => {
@@ -496,7 +691,7 @@ export default function PdfWriterEditorPage() {
     if (!page || converting) return
     setConverting(true)
     try {
-      const els = await extractPageElements(page, currentPage)
+      const els = await extractPageElements(page, currentPage, fontsRef.current)
       setAnnotations(els)
       clearSel()
       await pdfWriterApi.savePage(id!, currentPage, { annotations: els })
@@ -521,7 +716,7 @@ export default function PdfWriterEditorPage() {
     ;(async () => {
       const page = await pdfDoc.getPage(pnum)
       if (cancelled) return
-      const els = await extractPageElements(page, pnum)
+      const els = await extractPageElements(page, pnum, fontsRef.current)
       if (cancelled) return
       setAnnotations(els); clearSel()
       await pdfWriterApi.savePage(id!, pnum, { annotations: els })
@@ -544,7 +739,7 @@ export default function PdfWriterEditorPage() {
         const w = Math.min(pageW * 0.5, probe.width || 200)
         const h = w * ratio
         addAnnotation({
-          id: crypto.randomUUID(), type: 'image', page: currentPage,
+          id: uid(), type: 'image', page: currentPage,
           x: pageW / 2 - w / 2, y: pageH / 2 - h / 2, width: w, height: h,
           src, opacity: 1, createdAt: new Date().toISOString(),
         } as Annotation)
@@ -634,6 +829,8 @@ export default function PdfWriterEditorPage() {
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
   }, [])
 
+  const totalPages = docData?.page_count ?? pdfDoc?.numPages ?? 1
+
   // Raccourcis clavier : annuler/rétablir, suppression, déplacement aux flèches,
   // zoom (Ctrl ±/0), tout sélectionner, échap.
   useEffect(() => {
@@ -645,10 +842,16 @@ export default function PdfWriterEditorPage() {
       if (mod && k === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo() }
       else if (mod && k === 'y') { e.preventDefault(); redo() }
       else if (mod && k === 'a') { e.preventDefault(); setSelectedIds(annotationsRef.current.map(a => a.id)) }
+      else if (mod && k === 'c') { e.preventDefault(); copySelection() }
+      else if (mod && k === 'x') { e.preventDefault(); cutSelection() }
+      else if (mod && k === 'v') { e.preventDefault(); pasteClipboard() }
+      else if (mod && k === 'd') { e.preventDefault(); if (selectedIds.length === 1) duplicateAnn(selectedIds[0]) }
       else if (mod && (k === '+' || k === '=')) { e.preventDefault(); zoomBy(1.15) }
       else if (mod && k === '-') { e.preventDefault(); zoomBy(1 / 1.15) }
       else if (mod && k === '0') { e.preventDefault(); fitToPage() }
-      else if (e.key === 'Escape') { setEditingTextId(null); setMarquee(null); marqueeStartRef.current = null; clearSel() }
+      else if (e.key === 'PageUp')   { e.preventDefault(); setCurrentPage(n => Math.max(1, n - 1)) }
+      else if (e.key === 'PageDown') { e.preventDefault(); setCurrentPage(n => Math.min(totalPages, n + 1)) }
+      else if (e.key === 'Escape') { setEditingTextId(null); setMarquee(null); marqueeStartRef.current = null; pendingSigRef.current = null; clearSel() }
       else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.length) { e.preventDefault(); deleteSelected() }
       else if (e.key === 'ArrowUp')    { e.preventDefault(); nudgeSelected(0, e.shiftKey ? -10 : -1) }
       else if (e.key === 'ArrowDown')  { e.preventDefault(); nudgeSelected(0, e.shiftKey ?  10 :  1) }
@@ -657,45 +860,49 @@ export default function PdfWriterEditorPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [undo, redo, deleteSelected, selectedIds.length, nudgeSelected, zoomBy, fitToPage, clearSel])
+  }, [undo, redo, deleteSelected, selectedIds, nudgeSelected, zoomBy, fitToPage, clearSel, copySelection, cutSelection, pasteClipboard, duplicateAnn, totalPages])
 
   const pxToPoint = (px: number) => px / scale  // canvas px → PDF points
 
-  const totalPages = docData?.page_count ?? pdfDoc?.numPages ?? 1
-
   // ── Export : aplatir toutes les annotations dans un vrai PDF ────────────────
   const [exporting, setExporting] = useState(false)
+  // Construit le PDF final (source réordonnée/pivotée + annotations aplaties).
+  const buildExportBlob = useCallback(async (): Promise<Blob> => {
+    // Persist the current page first so its in-memory annotations are included.
+    await pdfWriterApi.savePage(id!, currentPage, { annotations: annotationsRef.current })
+
+    // Gather every page's size + annotations (annotations live per-page server-side).
+    const pageList: ExportPage[] = (docData?.pages ?? []).map(p => ({
+      page_number: p.page_number, width: p.width, height: p.height, rotation: p.rotation,
+      sourceIndex: p.source_index,
+    }))
+    if (pageList.length === 0) pageList.push({ page_number: 1, width: pageW, height: pageH, rotation: dbRot, sourceIndex: srcIdx })
+
+    const annotationsByPage = new Map<number, Annotation[]>()
+    await Promise.all(pageList.map(async p => {
+      if (p.page_number === currentPage) { annotationsByPage.set(p.page_number, annotationsRef.current); return }
+      try {
+        const r = await pdfWriterApi.getPage(id!, p.page_number)
+        annotationsByPage.set(p.page_number, (r.data.annotations as Annotation[]) ?? [])
+      } catch { annotationsByPage.set(p.page_number, []) }
+    }))
+
+    // Fetch the source PDF bytes (404 = blank document → pdf-lib builds fresh pages).
+    let sourceBytes: ArrayBuffer | null = null
+    try {
+      const resp = await fetch(pdfWriterApi.sourceUrl(id!), { headers: { Authorization: `Bearer ${token}` } })
+      if (resp.ok) sourceBytes = await resp.arrayBuffer()
+    } catch { /* no source → blank */ }
+
+    const bytes = await buildAnnotatedPdf({ sourceBytes, pages: pageList, annotationsByPage })
+    return new Blob([bytes as BlobPart], { type: 'application/pdf' })
+  }, [id, currentPage, docData?.pages, pageW, pageH, token, dbRot, srcIdx])
+
   const handleExport = useCallback(async () => {
     if (!id || exporting) return
     setExporting(true)
     try {
-      // Persist the current page first so its in-memory annotations are included.
-      await pdfWriterApi.savePage(id, currentPage, { annotations: annotationsRef.current })
-
-      // Gather every page's size + annotations (annotations live per-page server-side).
-      const pageList: ExportPage[] = (docData?.pages ?? []).map(p => ({
-        page_number: p.page_number, width: p.width, height: p.height, rotation: p.rotation,
-      }))
-      if (pageList.length === 0) pageList.push({ page_number: 1, width: pageW, height: pageH, rotation: 0 })
-
-      const annotationsByPage = new Map<number, Annotation[]>()
-      await Promise.all(pageList.map(async p => {
-        if (p.page_number === currentPage) { annotationsByPage.set(p.page_number, annotationsRef.current); return }
-        try {
-          const r = await pdfWriterApi.getPage(id, p.page_number)
-          annotationsByPage.set(p.page_number, (r.data.annotations as Annotation[]) ?? [])
-        } catch { annotationsByPage.set(p.page_number, []) }
-      }))
-
-      // Fetch the source PDF bytes (404 = blank document → pdf-lib builds fresh pages).
-      let sourceBytes: ArrayBuffer | null = null
-      try {
-        const resp = await fetch(pdfWriterApi.sourceUrl(id), { headers: { Authorization: `Bearer ${token}` } })
-        if (resp.ok) sourceBytes = await resp.arrayBuffer()
-      } catch { /* no source → blank */ }
-
-      const bytes = await buildAnnotatedPdf({ sourceBytes, pages: pageList, annotationsByPage })
-      const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' })
+      const blob = await buildExportBlob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -705,7 +912,31 @@ export default function PdfWriterEditorPage() {
     } finally {
       setExporting(false)
     }
-  }, [id, exporting, currentPage, docData?.pages, docData?.title, pageW, pageH, token])
+  }, [id, exporting, buildExportBlob, docData?.title])
+
+  // ── Impression : PDF aplati → iframe cachée → boîte de dialogue du navigateur ─
+  const printFrameRef = useRef<HTMLIFrameElement | null>(null)
+  const handlePrint = useCallback(async () => {
+    if (!id || printing) return
+    setPrinting(true)
+    try {
+      const blob = await buildExportBlob()
+      const url = URL.createObjectURL(blob)
+      printFrameRef.current?.remove()
+      const frame = document.createElement('iframe')
+      frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;'
+      frame.src = url
+      frame.onload = () => {
+        try { frame.contentWindow?.focus(); frame.contentWindow?.print() } catch { /* blocked */ }
+        setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      }
+      document.body.appendChild(frame)
+      printFrameRef.current = frame
+    } finally {
+      setPrinting(false)
+    }
+  }, [id, printing, buildExportBlob])
+  useEffect(() => () => { printFrameRef.current?.remove() }, [])
 
   // ── OCR : reconnaissance de texte (façon Acrobat « Reconnaître le texte ») ───
   // Rend la page source en image haute résolution, lance l'OCR WASM côté
@@ -719,53 +950,93 @@ export default function PdfWriterEditorPage() {
     return t('pdf_ocr_working', { defaultValue: 'Traitement…' })
   }, [t])
 
-  const runOcr = useCallback(async (lang: OcrLang) => {
-    setOcrMenu(null)
+  // Lance l'OCR : portée page courante ou document entier ; mode « texte
+  // éditable » (fond blanc qui remplace visuellement le scan) ou « couche
+  // invisible » (texte transparent superposé → document recherchable, aspect
+  // intact — l'équivalent de « image + texte caché » d'Acrobat).
+  const runOcr = useCallback(async (opts: { lang: OcrLang; scope: 'page' | 'doc'; mode: 'editable' | 'invisible' }) => {
+    setOcrDialog(false)
     if (!pdfDoc || ocrRunning) return
     setOcrRunning(true); setOcrResultMsg(null); setOcrPct(0)
     setOcrStatus(t('pdf_ocr_preparing', { defaultValue: 'Préparation de la page…' }))
     try {
-      const page = await pdfDoc.getPage(currentPage)
-      // Cible ~2000 px de large pour une bonne précision sans exploser la mémoire.
-      const ocrScale = Math.min(3, Math.max(1.6, 2000 / (pageData?.width ?? pageW)))
-      const vp = page.getViewport({ scale: ocrScale })
-      const cv = document.createElement('canvas')
-      cv.width = Math.round(vp.width); cv.height = Math.round(vp.height)
-      const ctx = cv.getContext('2d')
-      if (!ctx) throw new Error('canvas 2d indisponible')
-      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cv.width, cv.height)
-      await page.render({ canvas: cv, canvasContext: ctx, viewport: vp }).promise
-      const res = await recognizeImage(cv, lang, (status, p) => { setOcrStatus(ocrStatusLabel(status)); setOcrPct(Math.round(p * 100)) })
-      const now = new Date().toISOString()
-      const newAnns: Annotation[] = res.words
-        .filter(w => w.confidence >= 30 && w.text.trim().length > 0)
-        .map(w => {
-          const x = w.x0 / ocrScale, y = w.y0 / ocrScale
-          const width = Math.max(4, (w.x1 - w.x0) / ocrScale)
-          const height = Math.max(6, (w.y1 - w.y0) / ocrScale)
-          return {
-            id: crypto.randomUUID(), type: 'text', page: currentPage,
-            x, y, width, height,
-            content: w.text, fontSize: Math.max(6, +(height * 0.82).toFixed(1)),
-            fontFamily: 'sans-serif', color: '#111111', bold: false, italic: false, align: 'left',
-            backgroundColor: '#ffffff', createdAt: now,
-          } as Annotation
-        })
-      if (newAnns.length) {
-        snapshot()
-        setAnnotations(prev => [...prev, ...newAnns])
-        setDirty(true)
-        setOcrResultMsg(t('pdf_ocr_done', { defaultValue: '{{count}} mot(s) reconnu(s) et insérés comme texte éditable.', count: newAnns.length }))
-      } else {
-        setOcrResultMsg(t('pdf_ocr_empty', { defaultValue: 'Aucun texte n’a été détecté sur cette page.' }))
+      const metas = (docData?.pages ?? []).filter(p => p.source_index != null && p.source_index < pdfDoc.numPages)
+      const targets = opts.scope === 'doc'
+        ? metas.map(p => ({ n: p.page_number, src: p.source_index as number, rot: p.rotation, w: p.width }))
+        : hasSourcePage ? [{ n: currentPage, src: srcIdx as number, rot: dbRot, w: basePageW }] : []
+      if (!targets.length) {
+        setOcrResultMsg(t('pdf_ocr_no_source', { defaultValue: 'Aucune page numérisée à reconnaître.' }))
+        return
       }
+      let total = 0
+      const nb = targets.length
+      for (let i = 0; i < nb; i++) {
+        const tgt = targets[i]
+        const pagePrefix = nb > 1 ? `${t('pdf_page', { defaultValue: 'Page' })} ${i + 1}/${nb} — ` : ''
+        const page = await pdfDoc.getPage(tgt.src + 1)
+        // Cible ~2000 px de large pour une bonne précision sans exploser la mémoire.
+        const ocrScale = Math.min(3, Math.max(1.6, 2000 / (tgt.w || 595)))
+        // N'imposer une rotation au viewport QUE si elle diffère de celle de la
+        // page (pdf.js v6 : un paramètre `rotation` explicite peut invalider le
+        // canal de rendu déjà ouvert pour cette page).
+        const rot = (((page.rotate + tgt.rot) % 360) + 360) % 360
+        const vp = rot === page.rotate ? page.getViewport({ scale: ocrScale }) : page.getViewport({ scale: ocrScale, rotation: rot })
+        const cv = document.createElement('canvas')
+        cv.width = Math.round(vp.width); cv.height = Math.round(vp.height)
+        const ctx = cv.getContext('2d')
+        if (!ctx) throw new Error('canvas 2d indisponible')
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cv.width, cv.height)
+        // Hors-écran : `canvas: null` + intent 'print' → canal de rendu séparé.
+        // (pdf.js v6 associe un canal par page/intent : réutiliser l'intent
+        // 'display' ferait peindre le worker DANS le canvas principal.)
+        await page.render({ canvas: null, canvasContext: ctx, viewport: vp, intent: 'print' }).promise
+        const res = await recognizeImage(cv, opts.lang, (status, p) => {
+          setOcrStatus(pagePrefix + ocrStatusLabel(status))
+          setOcrPct(Math.round(((i + p) / nb) * 100))
+        })
+        const now = new Date().toISOString()
+        // Un élément par LIGNE reconnue : édition naturelle et pages allégées.
+        const newAnns: Annotation[] = res.lines
+          .filter(l => l.confidence >= 30 && l.text.trim().length > 0)
+          .map(l => {
+            const x = l.x0 / ocrScale, y = l.y0 / ocrScale
+            const width = Math.max(4, (l.x1 - l.x0) / ocrScale)
+            const height = Math.max(6, (l.y1 - l.y0) / ocrScale)
+            return {
+              id: uid(), type: 'text', page: tgt.n,
+              x, y, width: width + 4, height,
+              content: l.text, fontSize: Math.max(5, +(height * 0.78).toFixed(1)),
+              fontFamily: 'Helvetica', color: '#111111', bold: false, italic: false, align: 'left',
+              ...(opts.mode === 'editable' ? { backgroundColor: '#ffffff' } : { invisible: true }),
+              createdAt: now,
+            } as Annotation
+          })
+        total += newAnns.length
+        if (!newAnns.length) continue
+        if (tgt.n === currentPage) {
+          snapshot()
+          setAnnotations(prev => [...prev, ...newAnns])
+          setDirty(true)
+        } else {
+          // Autre page : fusionner avec ses annotations persistées puis sauver.
+          try {
+            const r = await pdfWriterApi.getPage(id!, tgt.n)
+            const existing = (r.data.annotations as Annotation[]) ?? []
+            await pdfWriterApi.savePage(id!, tgt.n, { annotations: [...existing, ...newAnns] })
+          } catch { /* page inaccessible : ignorée */ }
+        }
+      }
+      qc.invalidateQueries({ queryKey: ['pdf-page', id] })
+      setOcrResultMsg(total
+        ? t('pdf_ocr_done_lines', { defaultValue: '{{count}} ligne(s) de texte reconnue(s) et insérée(s).', count: total })
+        : t('pdf_ocr_empty', { defaultValue: 'Aucun texte n’a été détecté.' }))
     } catch (err) {
       console.error('[OCR]', err)
       setOcrResultMsg(t('pdf_ocr_error', { defaultValue: 'La reconnaissance a échoué. Réessayez.' }))
     } finally {
       setOcrRunning(false)
     }
-  }, [pdfDoc, currentPage, pageData, pageW, ocrRunning, snapshot, ocrStatusLabel, t])
+  }, [pdfDoc, currentPage, ocrRunning, snapshot, ocrStatusLabel, t, docData?.pages, hasSourcePage, srcIdx, dbRot, basePageW, id, qc])
 
   // Libère le worker OCR (et le cœur WASM) au démontage de l'éditeur.
   useEffect(() => () => { disposeOcr() }, [])
@@ -792,7 +1063,7 @@ export default function PdfWriterEditorPage() {
     const last = pts[pts.length - 1]
     ctx.lineTo(last[0] * scale, last[1] * scale)
     ctx.strokeStyle = selectedColor
-    ctx.lineWidth = 2
+    ctx.lineWidth = 2 * scale
     ctx.lineCap = 'round'; ctx.lineJoin = 'round'
     ctx.stroke()
   }
@@ -824,12 +1095,28 @@ export default function PdfWriterEditorPage() {
     shiftRef.current = e.shiftKey
     const { x, y } = coordsFromEvent(e)
 
+    // Signature en attente : le clic la pose, centrée sous le curseur.
+    if (activeTool === 'signature' && pendingSigRef.current) {
+      const sig = pendingSigRef.current
+      pendingSigRef.current = null
+      const w = Math.min(200, pageW * 0.4)
+      const h = Math.max(20, w * (sig.ratio || 0.35))
+      addAnnotation({
+        id: uid(), type: 'signature', page: currentPage,
+        x: pxToPoint(x) - w / 2, y: pxToPoint(y) - h / 2, width: w, height: h,
+        signatureData: sig.data, color: sig.color,
+        createdAt: new Date().toISOString(),
+      } as Annotation)
+      setActiveTool('select')
+      return
+    }
+
     // Outil sélection : saisir l'élément le plus haut sous le curseur (déplacement,
     // éventuellement groupé). Maj-clic = ajouter/retirer de la sélection. Clic dans
     // le vide = rectangle de sélection élastique.
     if (activeTool === 'select') {
       const pt = { x: pxToPoint(x), y: pxToPoint(y) }
-      const hit = [...annotations].reverse().find(a => hitTest(a, pt))
+      const hit = [...annotations].reverse().find(a => hitTestR(a, pt))
       if (hit) {
         if (e.shiftKey) { toggleSel(hit.id); return }
         // Conserver une sélection multiple si on saisit un élément déjà sélectionné.
@@ -862,17 +1149,22 @@ export default function PdfWriterEditorPage() {
 
     const ptX = pxToPoint(x)
     const ptY = pxToPoint(y)
-    const newId = crypto.randomUUID()
+    const newId = uid()
 
     if (activeTool === 'text') {
+      const tid = uid()
       addAnnotation({
-        id: newId, type: 'text', page: currentPage,
-        x: ptX, y: ptY, width: 200, height: 40,
-        content: t('pdf_default_text'), fontSize, fontFamily: 'sans-serif',
-        color: '#000000', bold: false, italic: false, align: 'left',
+        id: tid, type: 'text', page: currentPage,
+        x: ptX, y: ptY, width: 220, height: Math.max(40, fontSize * 1.6),
+        content: t('pdf_default_text'), fontSize, fontFamily,
+        color: selectedColor === '#ffff00' ? '#000000' : selectedColor,
+        bold: false, italic: false, align: 'left',
         createdAt: new Date().toISOString(),
       })
       setActiveTool('select')
+      // Ouvre directement l'édition en place (double-clic implicite, façon Acrobat).
+      snapshot()
+      setEditingTextId(tid)
       return
     }
 
@@ -892,9 +1184,10 @@ export default function PdfWriterEditorPage() {
         id: newId, type: 'stamp', page: currentPage,
         x: ptX - 80, y: ptY - 20,
         stampType: activeStamp as never,
+        ...(activeStamp === 'custom' ? { customLabel: customStampText || 'STAMP', color: customStampColor } : {}),
         width: 160, height: 40, opacity: 1,
         createdAt: new Date().toISOString(),
-      })
+      } as Annotation)
       setActiveTool('select')
       return
     }
@@ -928,11 +1221,36 @@ export default function PdfWriterEditorPage() {
     const { x, y } = coordsFromEvent(e)
     const ptX = pxToPoint(x), ptY = pxToPoint(y)
 
-    // Déplacement (éventuellement groupé) / redimensionnement d'un élément en cours.
+    // Déplacement (éventuellement groupé) / redimensionnement / rotation en cours.
     if (elDragRef.current) {
       if (!dragSnappedRef.current) { snapshot(); dragSnappedRef.current = true } // historique
       const { mode, handle, startX, startY, orig } = elDragRef.current
       let dx = pxToPoint(x - startX), dy = pxToPoint(y - startY)
+      if (mode === 'rotate') {
+        const d = elDragRef.current
+        const c = d.center!
+        const ang = Math.atan2(ptY - c.y, ptX - c.x)
+        let deg = (d.origRot ?? 0) + ((ang - (d.startAngle ?? 0)) * 180) / Math.PI
+        // Maj = crans de 15° ; petit aimant autour de 0/90/180/270.
+        if (shiftRef.current) deg = Math.round(deg / 15) * 15
+        deg = ((deg % 360) + 360) % 360
+        for (const snap of [0, 90, 180, 270, 360]) if (Math.abs(deg - snap) < 3) deg = snap % 360
+        updateAnn(d.id, { rotation: deg === 0 ? undefined : Math.round(deg * 10) / 10 })
+        elDragRef.current.moved = true
+        return
+      }
+      if (mode === 'resize') {
+        // Un objet pivoté se redimensionne dans SON repère : on projette le delta
+        // curseur sur les axes locaux de l'élément.
+        const el = annotationsRef.current.find(a => a.id === elDragRef.current!.id)
+        const rot = el ? rotationOf(el) : 0
+        if (rot) {
+          const rad = (-rot * Math.PI) / 180
+          const ldx = dx * Math.cos(rad) - dy * Math.sin(rad)
+          const ldy = dx * Math.sin(rad) + dy * Math.cos(rad)
+          dx = ldx; dy = ldy
+        }
+      }
       if (mode === 'move') {
         // Maj = contraindre au seul axe dominant (déplacement droit).
         if (shiftRef.current) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0 }
@@ -1014,11 +1332,10 @@ export default function PdfWriterEditorPage() {
 
   const handleCanvasMouseUp = (e: React.MouseEvent) => {
     if (elDragRef.current) {
-      const moved = elDragRef.current.moved
+      // Drag sans mouvement = simple clic : aucun snapshot n'a été pris (il n'est
+      // capturé qu'au premier mousemove), donc rien à nettoyer ici.
       elDragRef.current = null; dragSnappedRef.current = false; dragOrigRef.current = new Map()
       setGuides({ v: [], h: [] })
-      // Drag sans mouvement = simple clic : ne pas créer d'entrée d'historique inutile.
-      if (!moved && historyRef.current.past.length) historyRef.current.past.pop()
       return
     }
 
@@ -1044,7 +1361,7 @@ export default function PdfWriterEditorPage() {
 
     const { x, y } = coordsFromEvent(e)
     const ptX = pxToPoint(x), ptY = pxToPoint(y)
-    const newId = crypto.randomUUID()
+    const newId = uid()
 
     if (drawing && activeTool === 'freehand') {
       setDrawing(false)
@@ -1094,7 +1411,22 @@ export default function PdfWriterEditorPage() {
   // ── Rendu SVG des annotations ─────────────────────────────────────────────
 
   const selectedSet = new Set(selectedIds)
+  // Chaque annotation pivotée est enveloppée dans un <g rotate> autour du centre
+  // de sa boîte englobante (le corps est rendu dans le repère non pivoté).
   const renderAnnotations = () => annotations.map(ann => {
+    const body = renderAnnBody(ann)
+    if (!body) return null
+    const rot = rotationOf(ann)
+    if (!rot) return body
+    const b = bboxOf(ann)
+    return (
+      <g key={`rot-${ann.id}`} transform={`rotate(${rot} ${(b.x + b.w / 2) * scale} ${(b.y + b.h / 2) * scale})`}>
+        {body}
+      </g>
+    )
+  })
+
+  const renderAnnBody = (ann: Annotation) => {
     const isSelected = selectedSet.has(ann.id)
     const sel = isSelected ? 'drop-shadow(0 0 3px #1a73e8)' : undefined
 
@@ -1127,6 +1459,20 @@ export default function PdfWriterEditorPage() {
 
       case 'text': {
         const a = ann as import('./api').TextAnnotation
+        if (a.invisible) {
+          // Couche OCR invisible : sélectionnable (cadre en pointillés au survol de
+          // la sélection) mais transparente — le scan reste visible dessous.
+          return (
+            <rect
+              key={ann.id}
+              x={px(a.x)} y={px(a.y)} width={px(a.width)} height={px(a.height)}
+              fill="transparent"
+              stroke={isSelected ? '#1a73e8' : 'none'} strokeWidth={1} strokeDasharray="3,2"
+              style={{ cursor: 'pointer' }}
+              onClick={onSelect}
+            />
+          )
+        }
         return (
           <g key={ann.id} style={{ cursor: 'pointer' }} onClick={onSelect}>
             {/* Le cadre de sélection + poignées est rendu par renderResizeHandles (évite le doublon).
@@ -1156,7 +1502,9 @@ export default function PdfWriterEditorPage() {
                     color:      a.color,
                     fontWeight: a.bold ? 'bold' : 'normal',
                     fontStyle:  a.italic ? 'italic' : 'normal',
+                    textDecoration: a.underline ? 'underline' : undefined,
                     textAlign:  a.align,
+                    lineHeight: 1.2,
                     width:      '100%',
                     height:     '100%',
                     overflow:   'hidden',
@@ -1212,7 +1560,7 @@ export default function PdfWriterEditorPage() {
             d={d}
             fill="none"
             stroke={a.color}
-            strokeWidth={a.strokeWidth}
+            strokeWidth={a.strokeWidth * scale}
             strokeLinecap="round"
             strokeLinejoin="round"
             opacity={a.opacity}
@@ -1225,13 +1573,16 @@ export default function PdfWriterEditorPage() {
       case 'rect':
       case 'ellipse': {
         const a = ann as import('./api').ShapeAnnotation
+        const dash = a.lineStyle === 'dashed' ? `${Math.max(4, a.strokeWidth * 3) * scale},${Math.max(3, a.strokeWidth * 2) * scale}`
+          : a.lineStyle === 'dotted' ? `${Math.max(0.8, a.strokeWidth * 0.8) * scale},${Math.max(2.5, a.strokeWidth * 2) * scale}` : undefined
         if (a.type === 'rect') {
           return (
             <rect
               key={ann.id}
               x={px(a.x)} y={px(a.y)} width={px(a.width)} height={px(a.height)}
               fill={a.fillColor || 'none'} fillOpacity={a.fillOpacity || 0}
-              stroke={a.strokeColor} strokeWidth={a.strokeWidth}
+              stroke={a.strokeColor} strokeWidth={a.strokeWidth * scale}
+              strokeDasharray={dash} strokeLinecap="round"
               opacity={a.opacity}
               style={{ filter: sel, cursor: 'pointer' }}
               onClick={onSelect}
@@ -1244,7 +1595,8 @@ export default function PdfWriterEditorPage() {
             cx={px(a.x + a.width / 2)} cy={px(a.y + a.height / 2)}
             rx={px(a.width / 2)} ry={px(a.height / 2)}
             fill={a.fillColor || 'none'} fillOpacity={a.fillOpacity || 0}
-            stroke={a.strokeColor} strokeWidth={a.strokeWidth}
+            stroke={a.strokeColor} strokeWidth={a.strokeWidth * scale}
+            strokeDasharray={dash} strokeLinecap="round"
             opacity={a.opacity}
             style={{ filter: sel, cursor: 'pointer' }}
             onClick={onSelect}
@@ -1257,18 +1609,23 @@ export default function PdfWriterEditorPage() {
         const a = ann as import('./api').ShapeAnnotation
         const x1 = px(a.x), y1 = px(a.y)
         const x2 = px(a.x + a.width), y2 = px(a.y + a.height)
+        const dash = a.lineStyle === 'dashed' ? `${Math.max(4, a.strokeWidth * 3) * scale},${Math.max(3, a.strokeWidth * 2) * scale}`
+          : a.lineStyle === 'dotted' ? `${Math.max(0.8, a.strokeWidth * 0.8) * scale},${Math.max(2.5, a.strokeWidth * 2) * scale}` : undefined
         return (
           <g key={ann.id} style={{ filter: sel, cursor: 'pointer' }} onClick={onSelect}>
             {a.type === 'arrow' && (
               <defs>
-                <marker id={`arrow-${ann.id}`} markerWidth={10} markerHeight={7} refX={10} refY={3.5} orient="auto">
+                <marker id={`arrow-${ann.id}`} markerWidth={10} markerHeight={7} refX={9} refY={3.5} orient="auto" markerUnits="strokeWidth">
                   <polygon points="0 0, 10 3.5, 0 7" fill={a.strokeColor} />
                 </marker>
               </defs>
             )}
+            {/* Zone de saisie élargie invisible (les lignes fines sont dures à attraper). */}
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={Math.max(10, a.strokeWidth * scale + 8)} />
             <line
               x1={x1} y1={y1} x2={x2} y2={y2}
-              stroke={a.strokeColor} strokeWidth={a.strokeWidth}
+              stroke={a.strokeColor} strokeWidth={a.strokeWidth * scale}
+              strokeDasharray={dash} strokeLinecap="round"
               opacity={a.opacity}
               markerEnd={a.type === 'arrow' ? `url(#arrow-${ann.id})` : undefined}
             />
@@ -1278,21 +1635,25 @@ export default function PdfWriterEditorPage() {
 
       case 'stamp': {
         const a = ann as import('./api').StampAnnotation
-        const s = STAMP_TYPES.find(st => st.key === a.stampType)
+        const isCustom = a.stampType === 'custom'
+        const s = isCustom
+          ? { color: a.color || '#d93025', label: (a.customLabel || 'STAMP').toUpperCase() }
+          : (() => { const st = STAMP_TYPES.find(x => x.key === a.stampType); return st ? { color: st.color, label: t(st.labelKey) } : null })()
         if (!s) return null
+        const fs = Math.min(20, Math.max(8, a.height * 0.42)) * scale
         return (
           <g key={ann.id} style={{ filter: sel, cursor: 'pointer', opacity: a.opacity }} onClick={onSelect}>
             <rect
               x={px(a.x)} y={px(a.y)} width={px(a.width)} height={px(a.height)}
-              fill="none" stroke={s.color} strokeWidth={2.5} rx={3}
+              fill="none" stroke={s.color} strokeWidth={2.5 * scale} rx={3 * scale}
             />
             <text
-              x={px(a.x + a.width / 2)} y={px(a.y + a.height / 2) + 5}
-              textAnchor="middle" fill={s.color}
-              fontSize={14} fontWeight="bold" fontFamily="sans-serif"
+              x={px(a.x + a.width / 2)} y={px(a.y + a.height / 2)}
+              textAnchor="middle" dominantBaseline="central" fill={s.color}
+              fontSize={fs} fontWeight="bold" fontFamily="Helvetica, Arial, sans-serif"
               letterSpacing="1"
             >
-              {t(s.labelKey)}
+              {s.label}
             </text>
           </g>
         )
@@ -1314,15 +1675,23 @@ export default function PdfWriterEditorPage() {
             />
           )
         }
-        // SVG path
+        // SVG path (coordonnées du pad de signature) : mis à l'échelle pour tenir
+        // dans la boîte posée, centré, ratio conservé — cohérent avec l'export.
+        const b = svgPathBounds(a.signatureData)
+        const s = b ? Math.min(px(a.width) / b.w, px(a.height) / b.h) : 1
+        const tx = b ? px(a.x) - b.x * s + (px(a.width) - b.w * s) / 2 : px(a.x)
+        const ty = b ? px(a.y) - b.y * s + (px(a.height) - b.h * s) / 2 : px(a.y)
         return (
           <g
             key={ann.id}
-            transform={`translate(${px(a.x)}, ${px(a.y)})`}
+            transform={`translate(${tx}, ${ty}) scale(${s})`}
             style={{ filter: sel, cursor: 'pointer' }}
             onClick={onSelect}
           >
-            <path d={a.signatureData} fill="none" stroke="#1a1a1a" strokeWidth={1.5} />
+            <path d={a.signatureData} fill="none" stroke={a.color || '#1a1a1a'}
+              strokeWidth={s > 0 ? (1.5 * scale) / s : 1.5} strokeLinecap="round" strokeLinejoin="round" />
+            {/* Zone cliquable pleine boîte (le path seul est difficile à attraper). */}
+            <rect x={b ? b.x : 0} y={b ? b.y : 0} width={b ? b.w : 10} height={b ? b.h : 10} fill="transparent" stroke="none" />
           </g>
         )
       }
@@ -1387,7 +1756,7 @@ export default function PdfWriterEditorPage() {
       default:
         return null
     }
-  })
+  }
 
   // ── Poignées de redimensionnement / cadres de sélection ─────────────────────
   const renderResizeHandles = () => {
@@ -1410,15 +1779,37 @@ export default function PdfWriterEditorPage() {
     if (!a || a.width == null || a.height == null) return null
     const S = 8
     const ann = annotations.find(x => x.id === selectedId)!
+    const rot = rotationOf(ann)
+    const cx = a.x + a.width / 2, cy = a.y + a.height / 2
     const pts: Array<[string, number, number]> = [
       ['nw', a.x, a.y], ['n', a.x + a.width / 2, a.y], ['ne', a.x + a.width, a.y],
       ['e', a.x + a.width, a.y + a.height / 2], ['se', a.x + a.width, a.y + a.height],
       ['s', a.x + a.width / 2, a.y + a.height], ['sw', a.x, a.y + a.height], ['w', a.x, a.y + a.height / 2],
     ]
+    // Poignée de rotation : au-dessus du bord supérieur, reliée par un petit trait.
+    const rotY = a.y - 22 / scale
+    const startRotate = (e: React.MouseEvent) => {
+      e.stopPropagation()
+      const { x: mx, y: my } = coordsFromEvent(e)
+      const c = { x: cx, y: cy }
+      elDragRef.current = {
+        id: ann.id, mode: 'rotate', startX: mx, startY: my,
+        orig: { x: a.x, y: a.y, width: a.width!, height: a.height! },
+        origRot: rot, center: c,
+        startAngle: Math.atan2(pxToPoint(my) - c.y, pxToPoint(mx) - c.x),
+      }
+    }
     return (
-      <g>
+      <g transform={rot ? `rotate(${rot} ${px(cx)} ${px(cy)})` : undefined}>
         <rect x={px(a.x)} y={px(a.y)} width={px(a.width)} height={px(a.height)}
           fill="none" stroke="#1a73e8" strokeWidth={1} strokeDasharray="4,2" pointerEvents="none" />
+        <line x1={px(cx)} y1={px(a.y)} x2={px(cx)} y2={px(rotY)} stroke="#1a73e8" strokeWidth={1} pointerEvents="none" />
+        <circle cx={px(cx)} cy={px(rotY)} r={5.5}
+          fill="#fff" stroke="#1a73e8" strokeWidth={1.5}
+          style={{ cursor: 'grab' }}
+          onMouseDown={startRotate}>
+          <title>{t('pdf_rotate_handle', { defaultValue: 'Pivoter (Maj = par 15°)' })}</title>
+        </circle>
         {pts.map(([h, hx, hy]) => (
           <rect key={h} x={px(hx) - S / 2} y={px(hy) - S / 2} width={S} height={S}
             fill="#fff" stroke="#1a73e8" strokeWidth={1.5}
@@ -1500,130 +1891,132 @@ export default function PdfWriterEditorPage() {
     if (panActive)                    return panning ? 'grabbing' : 'grab'
     if (activeTool === 'select')      return 'default'
     if (activeTool === 'text')        return 'text'
+    if (activeTool === 'signature')   return 'copy'
     return 'crosshair'
   }, [activeTool, panActive, panning])
 
   // ── Panel propriétés annotation sélectionnée ──────────────────────────────
   const selectedAnn = annotations.find(a => a.id === selectedId)
 
-  // ── Signature panel ───────────────────────────────────────────────────────
-  const sigCanvasRef = useRef<HTMLCanvasElement>(null)
-  const [sigDrawing, setSigDrawing] = useState(false)
-  const [sigPts, setSigPts] = useState<[number, number][]>([])
-  const [sigStrokes, setSigStrokes] = useState<[number, number][][]>([])
+  // Snapshot d'historique « une fois par rafale » : les sliders émettent des
+  // dizaines de changements ; on ne capture qu'au début de chaque geste (clé +
+  // fenêtre de 800 ms), pour un Ctrl+Z qui annule le geste entier.
+  const burstRef = useRef<{ key: string; at: number }>({ key: '', at: 0 })
+  const snapshotOnce = useCallback((key: string) => {
+    const now = Date.now()
+    if (burstRef.current.key !== key || now - burstRef.current.at > 800) snapshot()
+    burstRef.current = { key, at: now }
+  }, [snapshot])
 
-  const handleSigMouseDown = (e: React.MouseEvent) => {
-    const rect = sigCanvasRef.current!.getBoundingClientRect()
-    setSigDrawing(true)
-    setSigPts([[e.clientX - rect.left, e.clientY - rect.top]])
-  }
+  // Applique un patch à toute la sélection (éventuellement filtrée par types).
+  const updateSelProps = useCallback((patch: Record<string, unknown>, types?: string[], burstKey?: string) => {
+    const set = new Set(selectedIds)
+    if (!set.size) return
+    if (burstKey) snapshotOnce(burstKey); else snapshot()
+    setAnnotations(prev => prev.map(a =>
+      set.has(a.id) && (!types || types.includes(a.type)) ? { ...a, ...patch } as Annotation : a))
+    setDirty(true)
+  }, [selectedIds, snapshot, snapshotOnce])
 
-  const handleSigMouseMove = (e: React.MouseEvent) => {
-    if (!sigDrawing || !sigCanvasRef.current) return
-    const rect = sigCanvasRef.current.getBoundingClientRect()
-    const pt: [number, number] = [e.clientX - rect.left, e.clientY - rect.top]
-    setSigPts(prev => [...prev, pt])
-    const ctx = sigCanvasRef.current.getContext('2d')!
-    if (sigPts.length > 0) {
-      const last = sigPts[sigPts.length - 1]
-      ctx.beginPath()
-      ctx.moveTo(last[0], last[1])
-      ctx.lineTo(pt[0], pt[1])
-      ctx.strokeStyle = '#1a1a1a'
-      ctx.lineWidth   = 2
-      ctx.lineCap     = 'round'
-      ctx.stroke()
-    }
-  }
+  // Types présents dans la sélection (pour afficher les bons contrôles).
+  const selTypes = useMemo(() => new Set<string>(annotations.filter(a => selectedIds.includes(a.id)).map(a => a.type)), [annotations, selectedIds])
+  const selHas = (...ts: string[]) => ts.some(x => selTypes.has(x))
 
-  const handleSigMouseUp = () => {
-    setSigDrawing(false)
-    if (sigPts.length > 1) {
-      setSigStrokes(prev => [...prev, sigPts])
-    }
-    setSigPts([])
-  }
-
-  const clearSig = () => {
-    setSigStrokes([])
-    setSigPts([])
-    if (sigCanvasRef.current) {
-      sigCanvasRef.current.getContext('2d')?.clearRect(0, 0, 360, 120)
-    }
-  }
-
-  const placeSigMut = useMutation({
-    mutationFn: (data: string) => pdfWriterApi.createSignature({ name: t('pdf_signature_name'), sig_type: 'draw', data }),
-    onSuccess: (_res, data) => {
-      const newId = crypto.randomUUID()
-      addAnnotation({
-        id: newId, type: 'signature', page: currentPage,
-        x: 80, y: 80, width: 160, height: 60,
-        signatureData: data,
-        createdAt: new Date().toISOString(),
-      })
-      setShowSigPanel(false)
-      clearSig()
-      qc.invalidateQueries({ queryKey: ['pdf-signatures'] })
-    },
+  // ── Signatures : enregistrement / suppression / placement au clic ───────────
+  const createSigMut = useMutation({
+    mutationFn: (data: { name: string; sig_type: string; data: string }) => pdfWriterApi.createSignature(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['pdf-signatures'] }),
   })
-
-  const placeSig = () => {
-    // Convertir le canvas de signature en SVG path
-    const allStrokes = [...sigStrokes]
-    if (sigPts.length > 1) allStrokes.push(sigPts)
-    if (allStrokes.length === 0) return
-
-    const paths = allStrokes.map(pts =>
-      pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')
-    ).join(' ')
-
-    placeSigMut.mutate(paths)
-  }
-
-  const placeSavedSig = (sig: PdfSignature) => {
-    const newId = crypto.randomUUID()
-    addAnnotation({
-      id: newId, type: 'signature', page: currentPage,
-      x: 80, y: 80, width: 160, height: 60,
-      signatureData: sig.data,
-      createdAt: new Date().toISOString(),
-    })
+  const deleteSigMut = useMutation({
+    mutationFn: (sigId: string) => pdfWriterApi.deleteSignature(sigId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['pdf-signatures'] }),
+  })
+  // Le dialogue renvoie la signature choisie → on passe en mode « placement » :
+  // le prochain clic sur la page pose la signature, centrée sous le curseur.
+  const startSigPlacement = (sig: PlacedSignature) => {
+    pendingSigRef.current = sig
     setShowSigPanel(false)
+    setHandTool(false)
+    setActiveTool('signature')
   }
 
-  // ── Miniatures pages ──────────────────────────────────────────────────────
+  // ── Miniatures pages (rendu via l'index source ; glisser-déposer = réordonner) ─
+  const pageMetaOf = (num: number) => docData?.pages?.find(p => p.page_number === num)
+  const reorderMut = useMutation({
+    mutationFn: (order: number[]) => pdfWriterApi.reorderPages(id!, order),
+    onSuccess: () => refreshDoc(),
+  })
+  const [dragPage, setDragPage] = useState<number | null>(null)
+  const [dropTarget, setDropTarget] = useState<number | null>(null)
+  const handlePageDrop = (from: number, to: number) => {
+    setDragPage(null); setDropTarget(null)
+    if (from === to || reorderMut.isPending) return
+    // Nouvel ordre : `order[i] = ancien numéro de la page qui devient i+1`.
+    const order = Array.from({ length: totalPages }, (_, i) => i + 1)
+    order.splice(from - 1, 1)
+    order.splice(to - 1, 0, from)
+    reorderMut.mutate(order)
+    setCurrentPage(to)
+  }
+
   const ThumbPage = ({ num }: { num: number }) => {
     const cRef = useRef<HTMLCanvasElement>(null)
+    const meta = pageMetaOf(num)
+    const mSrc = meta ? (meta.source_index ?? null) : num - 1
+    const mRot = meta?.rotation ?? 0
     useEffect(() => {
       if (!cRef.current) return
       const canvas = cRef.current
-      if (pdfDoc) {
-        pdfDoc.getPage(num).then(page => {
-          const vp = page.getViewport({ scale: 0.18 })
+      if (pdfDoc && mSrc != null && mSrc < pdfDoc.numPages) {
+        pdfDoc.getPage(mSrc + 1).then(page => {
+          const rot = (((page.rotate + mRot) % 360) + 360) % 360
+          const vp = rot === page.rotate ? page.getViewport({ scale: 0.18 }) : page.getViewport({ scale: 0.18, rotation: rot })
           canvas.width  = vp.width
           canvas.height = vp.height
           page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport: vp })
         })
       } else {
-        // Vignette d'une page vierge.
-        canvas.width  = Math.round(pageW * 0.12)
-        canvas.height = Math.round(pageH * 0.12)
+        // Vignette d'une page vierge (dimensions affichées, rotation comprise).
+        const w = meta?.width ?? 595, h = meta?.height ?? 842
+        const swap = mRot % 180 !== 0
+        canvas.width  = Math.round((swap ? h : w) * 0.12)
+        canvas.height = Math.round((swap ? w : h) * 0.12)
         const ctx = canvas.getContext('2d')!
         ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height)
       }
-    }, [num])
+    }, [num, mSrc, mRot, meta?.width, meta?.height])
 
     return (
-      <div className={`group relative flex flex-col items-center gap-1 p-1.5 rounded transition-all ${
-        num === currentPage ? 'bg-[#5a9bdc33] ring-1 ring-primary' : 'hover:bg-[#454545]'}`}>
-        <button onClick={() => setCurrentPage(num)} className="flex flex-col items-center gap-1">
+      <div
+        draggable
+        onDragStart={(e) => { setDragPage(num); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(num)) }}
+        onDragOver={(e) => {
+          // Le numéro glissé est lu dans le DataTransfer au drop : l'état React ne
+          // sert qu'au retour visuel (il peut être en retard d'un rendu).
+          if (e.dataTransfer.types.includes('text/plain')) {
+            e.preventDefault(); e.dataTransfer.dropEffect = 'move'
+            if (dragPage !== num) setDropTarget(num)
+          }
+        }}
+        onDragLeave={() => { if (dropTarget === num) setDropTarget(null) }}
+        onDrop={(e) => {
+          e.preventDefault()
+          const from = dragPage ?? parseInt(e.dataTransfer.getData('text/plain'), 10)
+          if (!Number.isNaN(from) && from >= 1) handlePageDrop(from, num)
+        }}
+        onDragEnd={() => { setDragPage(null); setDropTarget(null) }}
+        className={`group relative flex flex-col items-center gap-1 p-1.5 rounded transition-all ${
+          num === currentPage ? 'bg-[#5a9bdc33] ring-1 ring-primary' : 'hover:bg-[#454545]'} ${
+          dragPage === num ? 'opacity-40' : ''} ${
+          dropTarget === num ? (dragPage != null && dragPage < num ? 'border-b-2 border-[#5a9bdc]' : 'border-t-2 border-[#5a9bdc]') : ''}`}
+      >
+        <button onClick={() => setCurrentPage(num)} className="flex flex-col items-center gap-1 cursor-grab active:cursor-grabbing">
           <canvas ref={cRef} className="rounded shadow-sm border border-[#212121] max-w-[80px]" />
           <span className="text-[10px] text-[#8e8e8e]">{num}</span>
         </button>
         {/* Actions au survol : pivoter / supprimer */}
         <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button title={t('pdf_rotate_page')} onClick={() => rotatePageMut.mutate({ n: num, rot: 90 })}
+          <button title={t('pdf_rotate_page')} onClick={() => rotatePagePlus90(num)}
                   className="p-1 rounded bg-[#1e1e1ecc] hover:bg-[#454545] text-[#d6d6d6]"><RotateCw size={11} /></button>
           <button title={t('pdf_delete_page')} disabled={totalPages <= 1}
                   onClick={() => deletePageMut.mutate(num)}
@@ -1654,6 +2047,8 @@ export default function PdfWriterEditorPage() {
     ) },
     properties: { label: t('pdf_properties'), render: () => (
       <div className="flex flex-col" style={{ background: C.panel }}>
+            {/* ── Réglages de l'outil (défauts des prochains objets) ── */}
+            {!selectedAnn && (<>
             <div className="px-3 py-2 border-b border-[#212121]">
               <p className="text-[11px] text-[#8e8e8e] mb-1.5">{t('pdf_color')}</p>
               <div className="flex items-center gap-2">
@@ -1672,20 +2067,239 @@ export default function PdfWriterEditorPage() {
                 </div>
               </div>
             </div>
-
-            {/* Font size */}
             <div className="px-3 py-2 border-b border-[#212121]">
-              <p className="text-[11px] text-[#8e8e8e] mb-1.5">{t('pdf_text_size')}</p>
-              <div className="flex items-center gap-2">
-                <RangeSlider
-                  min={8} max={72} value={fontSize}
-                  onChange={setFontSize}
-                  className="flex-1" accent="#5a9bdc" trackColor="rgba(255,255,255,0.15)"
-                  aria-label={t('pdf_text_size')}
-                />
-                <span className="text-xs text-[#8e8e8e] w-7 text-right">{fontSize}</span>
-              </div>
+              <p className="text-[11px] text-[#8e8e8e] mb-1.5">{t('pdf_default_font', { defaultValue: 'Police du texte' })}</p>
+              <FontSizeField theme="dark" height={26} fontSize={12} fontWidth={150} sizeWidth={64}
+                font={fontFamily} onFontChange={setFontFamily} fonts={fonts}
+                size={String(Math.round(fontSize))} onSizeChange={v => setFontSize(Number(v))}
+                sizes={[6, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72, 96]} minSize={6} maxSize={96} />
             </div>
+            </>)}
+
+            {/* ── Objet(s) sélectionné(s) ── */}
+            {selectedAnn && (
+              <div className="px-3 py-2 border-b border-[#212121]">
+                <p className="text-[11px] text-[#8e8e8e] mb-1.5">
+                  {selectedIds.length > 1
+                    ? t('pdf_selected_count', { defaultValue: '{{count}} objets sélectionnés', count: selectedIds.length })
+                    : t(`pdf_anntype_${selectedAnn.type.replace(/-/g, '_')}`)}
+                </p>
+
+                {/* Géométrie (sélection simple avec boîte) */}
+                {selectedIds.length === 1 && (selectedAnn as { width?: number }).width != null && (() => {
+                  const a = selectedAnn as unknown as { x: number; y: number; width: number; height: number; rotation?: number }
+                  const num = (label: string, value: number, set: (v: number) => void, min = -10000, max = 10000) => (
+                    <label className="flex items-center gap-1 text-[10px] text-[#8e8e8e]">
+                      {label}
+                      <input type="number" value={Math.round(value * 10) / 10}
+                        onChange={e => { const v = +e.target.value; if (!Number.isNaN(v)) set(Math.max(min, Math.min(max, v))) }}
+                        className="w-[52px] h-5 text-[11px] text-center outline-none rounded-sm"
+                        style={{ background: '#252525', color: C.text, border: `1px solid ${C.border}` }} />
+                    </label>
+                  )
+                  return (
+                    <div className="grid grid-cols-2 gap-1.5 mb-2">
+                      {num('X', a.x, v => updateSelProps({ x: v }, undefined, 'geo-x'))}
+                      {num('Y', a.y, v => updateSelProps({ y: v }, undefined, 'geo-y'))}
+                      {num('L', a.width, v => updateSelProps({ width: Math.max(4, v) }, undefined, 'geo-w'), 4)}
+                      {num('H', a.height, v => updateSelProps({ height: Math.max(4, v) }, undefined, 'geo-h'), 4)}
+                      {num('∠°', a.rotation ?? 0, v => updateSelProps({ rotation: ((v % 360) + 360) % 360 || undefined }, undefined, 'geo-r'), -360, 360)}
+                    </div>
+                  )
+                })()}
+
+                {/* Texte : police, taille, styles, alignement, couleurs */}
+                {selHas('text') && !(selectedAnn as TextAnnotation).invisible && (() => {
+                  const a = selectedAnn as TextAnnotation
+                  const tgl = (active: boolean, icon: React.ReactNode, title: string, patch: Record<string, unknown>) => (
+                    <button title={title} onClick={() => updateSelProps(patch, ['text'])}
+                      className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${
+                        active ? 'bg-[#5a9bdc33] text-[#5a9bdc]' : 'text-[#8e8e8e] hover:bg-[#454545]'}`}>
+                      {icon}
+                    </button>
+                  )
+                  return (
+                    <div className="flex flex-col gap-2 mb-2">
+                      <FontSizeField theme="dark" height={26} fontSize={12} fontWidth={150} sizeWidth={64}
+                        font={a.fontFamily} onFontChange={v => updateSelProps({ fontFamily: v }, ['text'])} fonts={fonts}
+                        size={String(Math.round(a.fontSize))} onSizeChange={v => updateSelProps({ fontSize: Number(v) }, ['text'], 'fontsize')}
+                        sizes={[6, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 72, 96]} minSize={6} maxSize={96} />
+                      <div className="flex items-center gap-1">
+                        {tgl(a.bold, <Bold size={13} />, t('pdf_bold', { defaultValue: 'Gras' }), { bold: !a.bold })}
+                        {tgl(a.italic, <Italic size={13} />, t('pdf_italic', { defaultValue: 'Italique' }), { italic: !a.italic })}
+                        {tgl(!!a.underline, <Underline size={13} />, t('pdf_underline', { defaultValue: 'Souligné' }), { underline: !a.underline })}
+                        <div className="w-px h-4 bg-[#454545] mx-0.5" />
+                        {tgl(a.align === 'left', <TextAlignStart size={13} />, t('pdf_align_text_left', { defaultValue: 'Aligné à gauche' }), { align: 'left' })}
+                        {tgl(a.align === 'center', <TextAlignCenter size={13} />, t('pdf_align_text_center', { defaultValue: 'Centré' }), { align: 'center' })}
+                        {tgl(a.align === 'right', <TextAlignEnd size={13} />, t('pdf_align_text_right', { defaultValue: 'Aligné à droite' }), { align: 'right' })}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-[#8e8e8e]">{t('pdf_text_color', { defaultValue: 'Texte' })}</span>
+                          <ColorField t={t} C={C} color={a.color} onChange={v => updateSelProps({ color: v }, ['text'], 'txtcol')} width={26} height={22} />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-[#8e8e8e]">{t('pdf_text_bg', { defaultValue: 'Fond' })}</span>
+                          <ColorField t={t} C={C} color={a.backgroundColor || '#ffffff'} onChange={v => updateSelProps({ backgroundColor: v }, ['text'], 'txtbg')} width={26} height={22} />
+                          {a.backgroundColor && (
+                            <button onClick={() => updateSelProps({ backgroundColor: undefined }, ['text'])}
+                              title={t('pdf_no_fill', { defaultValue: 'Aucun' })}
+                              className="text-[10px] text-[#8e8e8e] hover:text-[#d6d6d6] underline">{t('pdf_none', { defaultValue: 'aucun' })}</button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Formes : contour, épaisseur, style de trait, remplissage */}
+                {selHas('rect', 'ellipse', 'line', 'arrow') && (() => {
+                  const a = annotations.find(x => selectedIds.includes(x.id) && ['rect', 'ellipse', 'line', 'arrow'].includes(x.type)) as ShapeAnnotation
+                  const SH = ['rect', 'ellipse', 'line', 'arrow']
+                  return (
+                    <div className="flex flex-col gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-[#8e8e8e] w-14">{t('pdf_stroke', { defaultValue: 'Contour' })}</span>
+                        <ColorField t={t} C={C} color={a.strokeColor} onChange={v => updateSelProps({ strokeColor: v }, SH, 'stroke')} width={26} height={22} />
+                        <RangeSlider min={0.5} max={12} step={0.5} value={a.strokeWidth}
+                          onChange={v => updateSelProps({ strokeWidth: v }, SH.concat('freehand'), 'strokew')}
+                          className="flex-1" accent="#5a9bdc" trackColor="rgba(255,255,255,0.15)"
+                          aria-label={t('pdf_stroke_width', { defaultValue: 'Épaisseur' })} />
+                        <span className="text-xs text-[#8e8e8e] w-6 text-right">{a.strokeWidth}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {(['solid', 'dashed', 'dotted'] as const).map(ls => (
+                          <button key={ls} onClick={() => updateSelProps({ lineStyle: ls === 'solid' ? undefined : ls }, SH)}
+                            title={t(`pdf_line_${ls}`, { defaultValue: ls === 'solid' ? 'Continu' : ls === 'dashed' ? 'Tirets' : 'Pointillés' })}
+                            className={`flex-1 h-7 flex items-center justify-center rounded transition-colors ${
+                              (a.lineStyle ?? 'solid') === ls ? 'bg-[#5a9bdc33] text-[#5a9bdc]' : 'text-[#8e8e8e] hover:bg-[#454545]'}`}>
+                            <svg width="34" height="6"><line x1="1" y1="3" x2="33" y2="3" stroke="currentColor" strokeWidth="2"
+                              strokeDasharray={ls === 'dashed' ? '6,4' : ls === 'dotted' ? '1.5,3.5' : undefined} strokeLinecap="round" /></svg>
+                          </button>
+                        ))}
+                      </div>
+                      {['rect', 'ellipse'].includes(a.type) && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-[#8e8e8e] w-14">{t('pdf_fill', { defaultValue: 'Fond' })}</span>
+                          <ColorField t={t} C={C} color={a.fillColor || '#ffffff'} onChange={v => updateSelProps({ fillColor: v, fillOpacity: a.fillOpacity ?? 0.35 }, SH, 'fill')} width={26} height={22} />
+                          {a.fillColor
+                            ? (<>
+                              <RangeSlider min={0.05} max={1} step={0.05} value={a.fillOpacity ?? 0.35}
+                                onChange={v => updateSelProps({ fillOpacity: v }, SH, 'fillop')}
+                                className="flex-1" accent="#5a9bdc" trackColor="rgba(255,255,255,0.15)"
+                                aria-label={t('pdf_fill_opacity', { defaultValue: 'Opacité du fond' })} />
+                              <button onClick={() => updateSelProps({ fillColor: undefined }, SH)}
+                                className="text-[10px] text-[#8e8e8e] hover:text-[#d6d6d6] underline">{t('pdf_none', { defaultValue: 'aucun' })}</button>
+                            </>)
+                            : <span className="text-[10px] text-[#8e8e8e]">{t('pdf_no_fill', { defaultValue: 'Aucun' })}</span>}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* Encre / surlignage : couleur */}
+                {selHas('freehand', 'highlight', 'underline', 'strikethrough') && (() => {
+                  const a = annotations.find(x => selectedIds.includes(x.id) && ['freehand', 'highlight', 'underline', 'strikethrough'].includes(x.type)) as unknown as { color: string; strokeWidth?: number }
+                  const MK = ['freehand', 'highlight', 'underline', 'strikethrough']
+                  return (
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[10px] text-[#8e8e8e] w-14">{t('pdf_color')}</span>
+                      <ColorField t={t} C={C} color={a.color} onChange={v => updateSelProps({ color: v }, MK, 'mkcol')} width={26} height={22} />
+                      {a.strokeWidth != null && (
+                        <RangeSlider min={0.5} max={12} step={0.5} value={a.strokeWidth}
+                          onChange={v => updateSelProps({ strokeWidth: v }, ['freehand'], 'inkw')}
+                          className="flex-1" accent="#5a9bdc" trackColor="rgba(255,255,255,0.15)"
+                          aria-label={t('pdf_stroke_width', { defaultValue: 'Épaisseur' })} />
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* Opacité (types qui la portent) */}
+                {selHas('image', 'stamp', 'highlight', 'freehand', 'rect', 'ellipse', 'line', 'arrow') && (() => {
+                  const a = selectedAnn as unknown as { opacity?: number }
+                  const OP = ['image', 'stamp', 'highlight', 'freehand', 'rect', 'ellipse', 'line', 'arrow']
+                  return (
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[10px] text-[#8e8e8e] w-14">{t('pdf_opacity', { defaultValue: 'Opacité' })}</span>
+                      <RangeSlider min={0.1} max={1} step={0.05} value={a.opacity ?? 1}
+                        onChange={v => updateSelProps({ opacity: v }, OP, 'opacity')}
+                        className="flex-1" accent="#5a9bdc" trackColor="rgba(255,255,255,0.15)"
+                        aria-label={t('pdf_opacity', { defaultValue: 'Opacité' })} />
+                      <span className="text-xs text-[#8e8e8e] w-8 text-right">{Math.round(((a.opacity ?? 1) * 100))}%</span>
+                    </div>
+                  )
+                })()}
+
+                {/* Tampon personnalisé : texte + couleur */}
+                {selHas('stamp') && (selectedAnn as import('./api').StampAnnotation).stampType === 'custom' && (() => {
+                  const a = selectedAnn as import('./api').StampAnnotation
+                  return (
+                    <div className="flex items-center gap-2 mb-2">
+                      <input value={a.customLabel ?? ''} onChange={e => updateSelProps({ customLabel: e.target.value }, ['stamp'], 'stamptxt')}
+                        placeholder={t('pdf_stamp_custom_text', { defaultValue: 'Texte du tampon' })}
+                        className="flex-1 h-6 px-1.5 text-[11px] outline-none rounded-sm"
+                        style={{ background: '#252525', color: C.text, border: `1px solid ${C.border}` }} />
+                      <ColorField t={t} C={C} color={a.color || '#d93025'} onChange={v => updateSelProps({ color: v }, ['stamp'], 'stampcol')} width={26} height={22} />
+                    </div>
+                  )
+                })()}
+
+                {/* Champ de formulaire : libellé, nom, requis */}
+                {selHas('form-text', 'form-checkbox', 'form-date', 'form-dropdown') && (() => {
+                  const a = selectedAnn as import('./api').FormFieldAnnotation
+                  const FF = ['form-text', 'form-checkbox', 'form-date', 'form-dropdown']
+                  return (
+                    <div className="flex flex-col gap-1.5 mb-2">
+                      <input value={a.label ?? ''} onChange={e => updateSelProps({ label: e.target.value }, FF, 'fflabel')}
+                        placeholder={t('pdf_form_label', { defaultValue: 'Libellé' })}
+                        className="h-6 px-1.5 text-[11px] outline-none rounded-sm"
+                        style={{ background: '#252525', color: C.text, border: `1px solid ${C.border}` }} />
+                      <input value={a.fieldName} onChange={e => updateSelProps({ fieldName: e.target.value }, FF, 'ffname')}
+                        placeholder={t('pdf_form_name', { defaultValue: 'Nom technique' })}
+                        className="h-6 px-1.5 text-[11px] outline-none rounded-sm font-mono"
+                        style={{ background: '#252525', color: C.textDim, border: `1px solid ${C.border}` }} />
+                      <label className="flex items-center gap-2 text-[11px] text-[#8e8e8e] cursor-pointer select-none">
+                        <input type="checkbox" checked={a.required} onChange={e => updateSelProps({ required: e.target.checked }, FF)} />
+                        {t('pdf_form_required', { defaultValue: 'Champ requis' })}
+                      </label>
+                    </div>
+                  )
+                })()}
+
+                {/* Alignement (sélection multiple) */}
+                {selectedIds.length > 1 && (
+                  <div className="flex items-center gap-0.5 mb-2">
+                    {([
+                      ['left', <AlignStartVertical key="a" size={13} />], ['center-h', <AlignCenterVertical key="b" size={13} />], ['right', <AlignEndVertical key="c" size={13} />],
+                      ['top', <AlignStartHorizontal key="d" size={13} />], ['center-v', <AlignCenterHorizontal key="e" size={13} />], ['bottom', <AlignEndHorizontal key="f" size={13} />],
+                    ] as [AlignKind, React.ReactNode][]).map(([k, icon]) => (
+                      <button key={k} onClick={() => alignSelected(k)} title={t(`pdf_align_${k.replace('-', '_')}`, { defaultValue: k })}
+                        className="w-7 h-7 flex items-center justify-center rounded text-[#8e8e8e] hover:bg-[#454545] transition-colors">
+                        {icon}
+                      </button>
+                    ))}
+                    <div className="w-px h-4 bg-[#454545] mx-0.5" />
+                    <button onClick={() => distributeSelected('h')} disabled={selectedIds.length < 3} title={t('pdf_distribute_h', { defaultValue: 'Répartir horizontalement' })}
+                      className="w-7 h-7 flex items-center justify-center rounded text-[#8e8e8e] hover:bg-[#454545] disabled:opacity-30 transition-colors">
+                      <AlignHorizontalSpaceBetween size={13} />
+                    </button>
+                    <button onClick={() => distributeSelected('v')} disabled={selectedIds.length < 3} title={t('pdf_distribute_v', { defaultValue: 'Répartir verticalement' })}
+                      className="w-7 h-7 flex items-center justify-center rounded text-[#8e8e8e] hover:bg-[#454545] disabled:opacity-30 transition-colors">
+                      <AlignVerticalSpaceBetween size={13} />
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  onClick={deleteSelected}
+                  className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-[#e84a4a] hover:bg-[#3a1a1a] rounded-lg w-full transition-colors"
+                >
+                  <Trash2 size={12} /> {t('common_delete')}
+                </button>
+              </div>
+            )}
 
             {/* Page courante — gestion */}
             <div className="px-3 py-2 border-b border-[#212121]">
@@ -1724,11 +2338,7 @@ export default function PdfWriterEditorPage() {
                   <Trash2 size={12} /> {t('pdf_delete_page')}
                 </button>
                 <button
-                  onClick={() => {
-                    pdfWriterApi.rotatePage(id!, currentPage, 90).then(() => {
-                      qc.invalidateQueries({ queryKey: ['pdf-page', id, currentPage] })
-                    })
-                  }}
+                  onClick={() => rotatePagePlus90(currentPage)}
                   className="flex items-center gap-1.5 px-2 py-1.5 text-xs bg-[#2a2a2a] hover:bg-[#454545] rounded-lg transition-colors"
                 >
                   <RotateCw size={12} /> {t('pdf_rotate_90')}
@@ -1736,19 +2346,6 @@ export default function PdfWriterEditorPage() {
               </div>
             </div>
 
-            {/* Annotation sélectionnée */}
-            {selectedAnn && (
-              <div className="px-3 py-2">
-                <p className="text-[11px] text-[#8e8e8e] mb-1.5">{t('pdf_selected_annotation')}</p>
-                <p className="text-xs text-[#d6d6d6] mb-1">{t(`pdf_anntype_${selectedAnn.type.replace(/-/g, '_')}`)}</p>
-                <button
-                  onClick={deleteSelected}
-                  className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-[#e84a4a] hover:bg-[#3a1a1a] rounded-lg w-full transition-colors"
-                >
-                  <Trash2 size={12} /> {t('common_delete')}
-                </button>
-              </div>
-            )}
       </div>
     ) },
   }
@@ -1786,9 +2383,52 @@ export default function PdfWriterEditorPage() {
         menus={paintsharpMenus(t, {
           onSave:   handleSave,
           onExport: handleExport, exportLabel: t('common_export'),
+          fileExtra: [
+            { label: t('pdf_print', { defaultValue: 'Imprimer…' }), onClick: handlePrint, shortcut: 'Ctrl+P' },
+          ],
           onClose:  () => navigate('/paintsharp/pdfwriter'),
-          onZoomIn:  () => setScale(s => Math.min(4.0, +(s + 0.1).toFixed(1))),
-          onZoomOut: () => setScale(s => Math.max(0.3, +(s - 0.1).toFixed(1))),
+          onUndo: undo, onRedo: redo, canUndo, canRedo,
+          editExtra: [
+            { label: t('common_cut', { defaultValue: 'Couper' }), onClick: cutSelection, disabled: !selectedIds.length, shortcut: 'Ctrl+X' },
+            { label: t('common_copy', { defaultValue: 'Copier' }), onClick: copySelection, disabled: !selectedIds.length, shortcut: 'Ctrl+C' },
+            { label: t('common_paste', { defaultValue: 'Coller' }), onClick: pasteClipboard, disabled: clipCount === 0, shortcut: 'Ctrl+V' },
+            { label: t('common_duplicate', { defaultValue: 'Dupliquer' }), onClick: () => { if (selectedId) duplicateAnn(selectedId) }, disabled: !selectedId, shortcut: 'Ctrl+D' },
+            'sep',
+            { label: t('pdf_select_all', { defaultValue: 'Tout sélectionner' }), onClick: () => setSelectedIds(annotations.map(a => a.id)), shortcut: 'Ctrl+A' },
+            { label: t('common_delete', { defaultValue: 'Supprimer' }), onClick: deleteSelected, disabled: !selectedIds.length, shortcut: 'Suppr' },
+          ],
+          extraMenus: [
+            { label: t('pdf_menu_insert', { defaultValue: 'Insertion' }), items: [
+              { label: t('pdf_tool_text', { defaultValue: 'Zone de texte' }), onClick: () => setActiveTool('text') },
+              { label: t('pdf_add_image', { defaultValue: 'Image' }), onClick: () => imgInputRef.current?.click() },
+              { label: t('pdf_tool_sticky_note', { defaultValue: 'Note' }), onClick: () => setActiveTool('sticky-note') },
+              'sep',
+              { label: t('pdf_tool_stamp', { defaultValue: 'Tampon' }), onClick: () => { setShowStampPicker(true) } },
+              { label: t('pdf_tool_signature', { defaultValue: 'Signature' }), onClick: () => setShowSigPanel(true) },
+              'sep',
+              { label: t('pdf_tool_form_text', { defaultValue: 'Champ texte' }), onClick: () => setActiveTool('form-text') },
+              { label: t('pdf_tool_form_checkbox', { defaultValue: 'Case à cocher' }), onClick: () => setActiveTool('form-checkbox') },
+            ] },
+            { label: t('pdf_menu_page', { defaultValue: 'Page' }), items: [
+              { label: t('pdf_add_after', { defaultValue: 'Ajouter une page après' }), onClick: () => addPageMut.mutate(currentPage) },
+              { label: t('pdf_delete_page', { defaultValue: 'Supprimer la page' }), onClick: () => deletePageMut.mutate(currentPage), disabled: totalPages <= 1 },
+              { label: t('pdf_rotate_90', { defaultValue: 'Pivoter de 90°' }), onClick: () => rotatePagePlus90(currentPage) },
+              'sep',
+              { label: t('pdf_prev_page', { defaultValue: 'Page précédente' }), onClick: () => setCurrentPage(n => Math.max(1, n - 1)), disabled: currentPage <= 1, shortcut: 'PgUp' },
+              { label: t('pdf_next_page', { defaultValue: 'Page suivante' }), onClick: () => setCurrentPage(n => Math.min(totalPages, n + 1)), disabled: currentPage >= totalPages, shortcut: 'PgDn' },
+            ] },
+            { label: t('pdf_menu_tools', { defaultValue: 'Outils' }), items: [
+              { label: t('pdf_ocr_menu', { defaultValue: 'Reconnaître le texte (OCR)…' }), onClick: () => setOcrDialog(true), disabled: !pdfDoc || ocrRunning },
+              ...(!editMode ? [{ label: t('pdf_edit_content', { defaultValue: 'Modifier le contenu' }), onClick: enableEditMode, disabled: converting }] : []),
+            ] },
+          ],
+          onZoomIn:  () => zoomBy(1.15),
+          onZoomOut: () => zoomBy(1 / 1.15),
+          onFit: fitToPage,
+          viewExtra: [
+            { label: t('pdf_fit_width', { defaultValue: 'Ajuster à la largeur' }), onClick: fitToWidth },
+            { label: t('pdf_zoom_100', { defaultValue: 'Taille réelle (100 %)' }), onClick: () => zoomTo(1), shortcut: 'Ctrl+0' },
+          ],
         })}
         topbarActions={<>
         <div className="flex items-center gap-1 bg-[#2a2a2a] rounded-lg px-1">
@@ -1813,7 +2453,7 @@ export default function PdfWriterEditorPage() {
           </button>
         </div>
 
-        {/* Navigation de pages */}
+        {/* Navigation de pages (numéro éditable, façon Acrobat) */}
         <div className="flex items-center gap-1 bg-[#2a2a2a] rounded-lg px-1">
           <button
             onClick={() => setCurrentPage(n => Math.max(1, n - 1))}
@@ -1822,9 +2462,22 @@ export default function PdfWriterEditorPage() {
           >
             <ChevronLeft size={14} />
           </button>
-          <span className="text-xs text-[#8e8e8e] whitespace-nowrap px-1">
-            {currentPage} / {totalPages}
-          </span>
+          <input
+            key={`pg-${currentPage}`}
+            defaultValue={currentPage}
+            onKeyDown={(e) => {
+              e.stopPropagation()
+              if (e.key === 'Enter') {
+                const v = parseInt((e.target as HTMLInputElement).value, 10)
+                if (!Number.isNaN(v)) setCurrentPage(Math.min(totalPages, Math.max(1, v)))
+                ;(e.target as HTMLInputElement).blur()
+              }
+            }}
+            onBlur={(e) => { e.target.value = String(currentPage) }}
+            title={t('pdf_goto_page', { defaultValue: 'Aller à la page…' })}
+            className="w-9 text-xs text-center bg-transparent text-[#d6d6d6] outline-none rounded py-1 hover:bg-[#454545] focus:bg-[#1e1e1e]"
+          />
+          <span className="text-xs text-[#8e8e8e] whitespace-nowrap pr-1">/ {totalPages}</span>
           <button
             onClick={() => setCurrentPage(n => Math.min(totalPages, n + 1))}
             disabled={currentPage >= totalPages}
@@ -1837,10 +2490,10 @@ export default function PdfWriterEditorPage() {
         <div className="w-px h-5 bg-border mx-1" />
 
         {/* Annuler / Rétablir */}
-        <button onClick={undo} title={t('pdf_undo', { defaultValue: 'Annuler (Ctrl+Z)' })}
-          className="p-1.5 rounded hover:bg-[#454545] text-[#8e8e8e]"><Undo2 size={16} /></button>
-        <button onClick={redo} title={t('pdf_redo', { defaultValue: 'Rétablir (Ctrl+Maj+Z)' })}
-          className="p-1.5 rounded hover:bg-[#454545] text-[#8e8e8e]"><Redo2 size={16} /></button>
+        <button onClick={undo} disabled={!canUndo} title={t('pdf_undo', { defaultValue: 'Annuler (Ctrl+Z)' })}
+          className="p-1.5 rounded hover:bg-[#454545] text-[#8e8e8e] disabled:opacity-30"><Undo2 size={16} /></button>
+        <button onClick={redo} disabled={!canRedo} title={t('pdf_redo', { defaultValue: 'Rétablir (Ctrl+Maj+Z)' })}
+          className="p-1.5 rounded hover:bg-[#454545] text-[#8e8e8e] disabled:opacity-30"><Redo2 size={16} /></button>
 
         <div className="w-px h-5 bg-border mx-1" />
 
@@ -1860,7 +2513,7 @@ export default function PdfWriterEditorPage() {
 
         {/* OCR : reconnaître le texte (façon Acrobat) */}
         <button
-          onClick={(e) => { if (!pdfDoc || ocrRunning) return; const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setOcrMenu({ x: r.left, y: r.bottom + 4 }) }}
+          onClick={() => { if (!pdfDoc || ocrRunning) return; setOcrDialog(true) }}
           disabled={!pdfDoc || ocrRunning}
           title={t('pdf_ocr_hint', { defaultValue: 'Reconnaître le texte de la page (OCR) et l’insérer comme texte éditable' })}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-[#212121] rounded-lg
@@ -1884,6 +2537,18 @@ export default function PdfWriterEditorPage() {
           ref={imgInputRef} type="file" accept="image/*" hidden
           onChange={(e) => { const f = e.target.files?.[0]; if (f) addImageFile(f); e.target.value = '' }}
         />
+
+        {/* Imprimer (PDF aplati → dialogue d'impression du navigateur) */}
+        <button
+          onClick={handlePrint}
+          disabled={printing}
+          title={t('pdf_print_hint', { defaultValue: 'Imprimer le document avec ses annotations' })}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-[#212121] rounded-lg
+                     hover:bg-[#454545] text-[#8e8e8e] transition-colors disabled:opacity-50"
+        >
+          {printing ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />}
+          {t('pdf_print_short', { defaultValue: 'Imprimer' })}
+        </button>
 
         {/* Exporter un vrai PDF avec les annotations fusionnées */}
         <button
@@ -2002,7 +2667,7 @@ export default function PdfWriterEditorPage() {
                   if (activeTool === 'select' && !elDragRef.current && !marqueeStartRef.current && overlayRef.current) {
                     const { x, y } = coordsFromEvent(e)
                     const pt = { x: pxToPoint(x), y: pxToPoint(y) }
-                    const over = annotations.some(a => hitTest(a, pt))
+                    const over = annotations.some(a => hitTestR(a, pt))
                     overlayRef.current.style.cursor = over ? 'move' : 'default'
                   }
                 }}
@@ -2011,16 +2676,22 @@ export default function PdfWriterEditorPage() {
                 onDoubleClick={(e) => {
                   const { x, y } = coordsFromEvent(e)
                   const pt = { x: pxToPoint(x), y: pxToPoint(y) }
-                  const hit = [...annotations].reverse().find(a => a.type === 'text' && hitTest(a, pt))
-                  if (hit) { elDragRef.current = null; selectOnly(hit.id); snapshot(); setEditingTextId(hit.id) }
+                  // Texte / note / champ texte : édition en place. Case à cocher : bascule.
+                  const hit = [...annotations].reverse().find(a =>
+                    ['text', 'sticky-note', 'form-text', 'form-date', 'form-dropdown'].includes(a.type) && hitTestR(a, pt))
+                  if (hit) { elDragRef.current = null; selectOnly(hit.id); snapshot(); setEditingTextId(hit.id); return }
+                  const chk = [...annotations].reverse().find(a => a.type === 'form-checkbox' && hitTestR(a, pt))
+                  if (chk) { snapshot(); updateAnn(chk.id, { value: !(chk as import('./api').FormFieldAnnotation).value }) }
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault()
                   const { x, y } = coordsFromEvent(e)
                   const pt = { x: pxToPoint(x), y: pxToPoint(y) }
-                  const hit = [...annotations].reverse().find(a => hitTest(a, pt))
-                  if (hit) { selectOnly(hit.id); setCtxMenu({ x: e.clientX, y: e.clientY, id: hit.id }) }
-                  else setCtxMenu(null)
+                  const hit = [...annotations].reverse().find(a => hitTestR(a, pt))
+                  if (hit) {
+                    if (!selectedIds.includes(hit.id)) selectOnly(hit.id)
+                    setCtxMenu({ x: e.clientX, y: e.clientY, id: hit.id })
+                  } else setCtxMenu(null)
                 }}
               >
                 {renderAnnotations()}
@@ -2030,27 +2701,73 @@ export default function PdfWriterEditorPage() {
                 {renderMarquee()}
               </svg>
 
-              {/* Éditeur de texte en place (double-clic sur un élément texte) */}
+              {/* Éditeur en place (double-clic) : texte, note ou valeur de champ */}
               {editingTextId && (() => {
-                const a = annotations.find(x => x.id === editingTextId) as import('./api').TextAnnotation | undefined
-                if (!a || a.type !== 'text') return null
-                return (
-                  <textarea
-                    autoFocus
-                    value={a.content}
-                    onChange={(e) => updateAnn(a.id, { content: e.target.value })}
-                    onBlur={() => setEditingTextId(null)}
-                    onKeyDown={(e) => { if (e.key === 'Escape') setEditingTextId(null) }}
-                    className="absolute z-10 resize-none outline outline-2 outline-[#1a73e8] bg-white/95"
-                    style={{
-                      left: a.x * scale, top: a.y * scale,
-                      width: Math.max(60, a.width * scale), height: Math.max(20, a.height * scale),
-                      fontSize: a.fontSize, fontFamily: a.fontFamily, color: a.color,
-                      fontWeight: a.bold ? 'bold' : 'normal', fontStyle: a.italic ? 'italic' : 'normal',
-                      textAlign: a.align, padding: '2px', lineHeight: 1.2,
-                    }}
-                  />
-                )
+                const ann = annotations.find(x => x.id === editingTextId)
+                if (!ann) return null
+                if (ann.type === 'text') {
+                  const a = ann as import('./api').TextAnnotation
+                  return (
+                    <textarea
+                      autoFocus
+                      value={a.content}
+                      onChange={(e) => updateAnn(a.id, { content: e.target.value })}
+                      onBlur={() => setEditingTextId(null)}
+                      onKeyDown={(e) => { if (e.key === 'Escape') setEditingTextId(null); e.stopPropagation() }}
+                      className="absolute z-10 resize-none outline outline-2 outline-[#1a73e8] bg-white/95"
+                      style={{
+                        left: a.x * scale, top: a.y * scale,
+                        width: Math.max(60, a.width * scale), height: Math.max(24, a.height * scale),
+                        // La zone d'édition rend le texte à la MÊME échelle que la page
+                        // (avant : taille en pt écran fixe, décalée dès que zoom ≠ 100 %).
+                        fontSize: a.fontSize * scale, fontFamily: a.fontFamily, color: a.color,
+                        fontWeight: a.bold ? 'bold' : 'normal', fontStyle: a.italic ? 'italic' : 'normal',
+                        textDecoration: a.underline ? 'underline' : undefined,
+                        textAlign: a.align, padding: '2px', lineHeight: 1.2,
+                        transform: a.rotation ? `rotate(${a.rotation}deg)` : undefined,
+                        transformOrigin: 'center',
+                      }}
+                    />
+                  )
+                }
+                if (ann.type === 'sticky-note') {
+                  const a = ann as import('./api').StickyNoteAnnotation
+                  return (
+                    <textarea
+                      autoFocus
+                      value={a.content}
+                      placeholder={t('pdf_empty_note')}
+                      onChange={(e) => updateAnn(a.id, { content: e.target.value })}
+                      onBlur={() => setEditingTextId(null)}
+                      onKeyDown={(e) => { if (e.key === 'Escape') setEditingTextId(null); e.stopPropagation() }}
+                      className="absolute z-10 resize-none outline outline-2 outline-[#1a73e8] rounded"
+                      style={{
+                        left: a.x * scale + 22, top: a.y * scale,
+                        width: 180, height: 100,
+                        background: a.color, color: '#222', fontSize: 12, padding: 6,
+                      }}
+                    />
+                  )
+                }
+                if (ann.type === 'form-text' || ann.type === 'form-date' || ann.type === 'form-dropdown') {
+                  const a = ann as import('./api').FormFieldAnnotation
+                  return (
+                    <input
+                      autoFocus
+                      value={String(a.value ?? '')}
+                      onChange={(e) => updateAnn(a.id, { value: e.target.value })}
+                      onBlur={() => setEditingTextId(null)}
+                      onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') setEditingTextId(null); e.stopPropagation() }}
+                      className="absolute z-10 outline outline-2 outline-[#1a73e8] bg-white"
+                      style={{
+                        left: a.x * scale, top: a.y * scale,
+                        width: Math.max(60, a.width * scale), height: Math.max(20, a.height * scale),
+                        fontSize: 12 * scale, color: '#333', padding: '0 4px',
+                      }}
+                    />
+                  )
+                }
+                return null
               })()}
             </div>
           )}
@@ -2062,17 +2779,39 @@ export default function PdfWriterEditorPage() {
       {ctxMenu && (() => {
         const a = annotations.find(x => x.id === ctxMenu.id)
         if (!a) return null
+        const multi = selectedIds.length > 1
         const items: MenuItem[] = []
         if (a.type === 'text') items.push({ type: 'action', label: t('pdf_ctx_edit_text', { defaultValue: 'Modifier le texte' }), icon: <Type size={14} />, onClick: () => { snapshot(); setEditingTextId(a.id) } })
+        if (a.type === 'sticky-note') items.push({ type: 'action', label: t('pdf_ctx_edit_note', { defaultValue: 'Modifier la note' }), icon: <MessageSquare size={14} />, onClick: () => { snapshot(); setEditingTextId(a.id) } })
         items.push(
-          { type: 'action', label: t('common_duplicate', { defaultValue: 'Dupliquer' }), icon: <Copy size={14} />, onClick: () => duplicateAnn(a.id) },
+          { type: 'action', label: t('common_cut', { defaultValue: 'Couper' }), icon: <Scissors size={14} />, shortcut: 'Ctrl+X', onClick: () => cutSelection() },
+          { type: 'action', label: t('common_copy', { defaultValue: 'Copier' }), icon: <Copy size={14} />, shortcut: 'Ctrl+C', onClick: () => copySelection() },
+          { type: 'action', label: t('common_paste', { defaultValue: 'Coller' }), icon: <ClipboardPaste size={14} />, shortcut: 'Ctrl+V', disabled: clipCount === 0, onClick: () => pasteClipboard() },
+          { type: 'action', label: t('common_duplicate', { defaultValue: 'Dupliquer' }), shortcut: 'Ctrl+D', onClick: () => duplicateAnn(a.id) },
           { type: 'separator' },
+          ...(multi ? [
+            {
+              type: 'submenu', label: t('pdf_ctx_align', { defaultValue: 'Aligner' }), icon: <AlignStartVertical size={14} />, items: [
+                { type: 'action', label: t('pdf_align_left',     { defaultValue: 'Bords gauches' }),        icon: <AlignStartVertical size={14} />,   onClick: () => alignSelected('left') },
+                { type: 'action', label: t('pdf_align_center_h', { defaultValue: 'Centres (vertical)' }),   icon: <AlignCenterVertical size={14} />,  onClick: () => alignSelected('center-h') },
+                { type: 'action', label: t('pdf_align_right',    { defaultValue: 'Bords droits' }),         icon: <AlignEndVertical size={14} />,     onClick: () => alignSelected('right') },
+                { type: 'separator' },
+                { type: 'action', label: t('pdf_align_top',      { defaultValue: 'Bords supérieurs' }),     icon: <AlignStartHorizontal size={14} />, onClick: () => alignSelected('top') },
+                { type: 'action', label: t('pdf_align_center_v', { defaultValue: 'Centres (horizontal)' }), icon: <AlignCenterHorizontal size={14} />, onClick: () => alignSelected('center-v') },
+                { type: 'action', label: t('pdf_align_bottom',   { defaultValue: 'Bords inférieurs' }),     icon: <AlignEndHorizontal size={14} />,   onClick: () => alignSelected('bottom') },
+                { type: 'separator' },
+                { type: 'action', label: t('pdf_distribute_h', { defaultValue: 'Répartir horizontalement' }), icon: <AlignHorizontalSpaceBetween size={14} />, disabled: selectedIds.length < 3, onClick: () => distributeSelected('h') },
+                { type: 'action', label: t('pdf_distribute_v', { defaultValue: 'Répartir verticalement' }),   icon: <AlignVerticalSpaceBetween size={14} />,   disabled: selectedIds.length < 3, onClick: () => distributeSelected('v') },
+              ],
+            } as MenuItem,
+            { type: 'separator' } as MenuItem,
+          ] : []),
           { type: 'action', label: t('pdf_ctx_to_front', { defaultValue: 'Mettre au premier plan' }), icon: <ArrowUp size={14} />, onClick: () => reorderAnn(a.id, 'front') },
           { type: 'action', label: t('pdf_ctx_forward', { defaultValue: 'Avancer' }), onClick: () => reorderAnn(a.id, 'forward') },
           { type: 'action', label: t('pdf_ctx_backward', { defaultValue: 'Reculer' }), onClick: () => reorderAnn(a.id, 'backward') },
           { type: 'action', label: t('pdf_ctx_to_back', { defaultValue: 'Mettre à l’arrière-plan' }), icon: <ArrowDown size={14} />, onClick: () => reorderAnn(a.id, 'back') },
           { type: 'separator' },
-          { type: 'action', label: t('common_delete', { defaultValue: 'Supprimer' }), icon: <Trash2 size={14} />, onClick: () => deleteSelected() },
+          { type: 'action', label: t('common_delete', { defaultValue: 'Supprimer' }), icon: <Trash2 size={14} />, danger: true, onClick: () => deleteSelected() },
         )
         return <MenuDropdown items={items} pos={{ top: ctxMenu.y, left: ctxMenu.x }} onClose={() => setCtxMenu(null)} />
       })()}
@@ -2094,15 +2833,59 @@ export default function PdfWriterEditorPage() {
         return <MenuDropdown items={items} pos={{ top: zoomMenu.y, left: zoomMenu.x }} onClose={() => setZoomMenu(null)} />
       })()}
 
-      {/* ── Menu de langue OCR ── */}
-      {ocrMenu && (() => {
-        const items: MenuItem[] = [
-          { type: 'action', label: t('pdf_ocr_lang_fra_eng', { defaultValue: 'Français + Anglais' }), onClick: () => runOcr('fra+eng') },
-          { type: 'action', label: t('pdf_ocr_lang_fra', { defaultValue: 'Français' }), onClick: () => runOcr('fra') },
-          { type: 'action', label: t('pdf_ocr_lang_eng', { defaultValue: 'Anglais' }), onClick: () => runOcr('eng') },
-        ]
-        return <MenuDropdown items={items} pos={{ top: ocrMenu.y, left: ocrMenu.x }} onClose={() => setOcrMenu(null)} />
-      })()}
+      {/* ── Dialogue d'options OCR (langue · portée · mode) ── */}
+      {ocrDialog && !ocrRunning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 no-print"
+             onClick={() => setOcrDialog(false)}>
+          <div className="bg-[#323232] rounded-2xl shadow-2xl p-5 w-[400px]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-4">
+              <ScanText size={18} className="text-[#5a9bdc]" />
+              <h3 className="text-base font-semibold text-[#d6d6d6]">{t('pdf_ocr_title', { defaultValue: 'Reconnaissance de texte' })}</h3>
+            </div>
+            {([
+              { label: t('pdf_ocr_lang', { defaultValue: 'Langue' }), value: ocrLang, set: (v: string) => setOcrLang(v as typeof ocrLang), opts: [
+                ['fra+eng', t('pdf_ocr_lang_fra_eng', { defaultValue: 'Français + Anglais' })],
+                ['fra',     t('pdf_ocr_lang_fra',     { defaultValue: 'Français' })],
+                ['eng',     t('pdf_ocr_lang_eng',     { defaultValue: 'Anglais' })],
+              ] },
+              { label: t('pdf_ocr_scope', { defaultValue: 'Portée' }), value: ocrScope, set: (v: string) => setOcrScope(v as typeof ocrScope), opts: [
+                ['page', t('pdf_ocr_scope_page', { defaultValue: 'Page courante' })],
+                ['doc',  t('pdf_ocr_scope_doc',  { defaultValue: 'Document entier' })],
+              ] },
+              { label: t('pdf_ocr_mode', { defaultValue: 'Résultat' }), value: ocrMode, set: (v: string) => setOcrMode(v as typeof ocrMode), opts: [
+                ['editable',  t('pdf_ocr_mode_editable',  { defaultValue: 'Texte éditable' })],
+                ['invisible', t('pdf_ocr_mode_invisible', { defaultValue: 'Couche invisible (recherchable)' })],
+              ] },
+            ] as { label: string; value: string; set: (v: string) => void; opts: [string, string][] }[]).map(row => (
+              <div key={row.label} className="mb-3">
+                <p className="text-[11px] text-[#8e8e8e] mb-1.5">{row.label}</p>
+                <div className="flex gap-1.5">
+                  {row.opts.map(([v, lbl]) => (
+                    <button key={v} onClick={() => row.set(v)}
+                            className={`flex-1 text-xs py-1.5 px-2 rounded-lg border transition-colors ${
+                              row.value === v
+                                ? 'bg-[#5a9bdc] border-[#5a9bdc] text-white'
+                                : 'bg-[#2a2a2a] border-[#454545] text-[#8e8e8e] hover:bg-[#3a3a3a]'}`}>
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setOcrDialog(false)}
+                      className="px-3 py-1.5 text-sm rounded-lg border border-[#454545] text-[#8e8e8e] hover:bg-[#3a3a3a]">
+                {t('common_cancel', { defaultValue: 'Annuler' })}
+              </button>
+              <button onClick={() => runOcr({ lang: ocrLang, scope: ocrScope, mode: ocrMode })}
+                      className="px-3 py-1.5 text-sm rounded-lg bg-[#5a9bdc] text-white hover:bg-[#4a8bcc] flex items-center gap-1.5">
+                <ScanText size={14} />
+                {t('pdf_ocr_run', { defaultValue: 'Lancer l’OCR' })}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Fenêtre d'avancement / résultat OCR ── */}
       {(ocrRunning || ocrResultMsg) && (
@@ -2166,84 +2949,42 @@ export default function PdfWriterEditorPage() {
                 <span className="text-[#8e8e8e]">{t(st.labelKey)}</span>
               </button>
             ))}
+            {/* Tampon personnalisé : texte + couleur libres */}
+            <div className="border-t border-[#212121] mt-1 pt-2 flex flex-col gap-1.5">
+              <span className="text-[10px] text-[#8e8e8e] px-1">{t('pdf_stamp_custom', { defaultValue: 'Tampon personnalisé' })}</span>
+              <div className="flex items-center gap-1.5 px-1">
+                <input
+                  value={customStampText}
+                  onChange={e => setCustomStampText(e.target.value)}
+                  placeholder={t('pdf_stamp_custom_text', { defaultValue: 'Texte du tampon' })}
+                  className="flex-1 h-6 px-1.5 text-[11px] outline-none rounded-sm min-w-0"
+                  style={{ background: '#252525', color: C.text, border: `1px solid ${C.border}` }}
+                />
+                <ColorField t={t} C={C} color={customStampColor} onChange={setCustomStampColor} width={24} height={22} />
+              </div>
+              <button
+                disabled={!customStampText.trim()}
+                onClick={() => { setActiveStamp('custom'); setActiveTool('stamp'); setShowStampPicker(false) }}
+                className="mx-1 mb-0.5 px-2 py-1.5 rounded-lg text-xs bg-[#2a2a2a] hover:bg-[#454545] text-[#d6d6d6] disabled:opacity-40 transition-colors"
+              >
+                {t('pdf_stamp_use_custom', { defaultValue: 'Utiliser ce tampon' })}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── Panel signature ── */}
+      {/* ── Dialogue signature (dessiner / taper / importer, aperçus, gestion) ── */}
       {showSigPanel && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 no-print"
-          onClick={() => setShowSigPanel(false)}
-        >
-          <div
-            className="bg-[#323232] rounded-2xl shadow-2xl p-5 w-[440px]"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-[#d6d6d6]">{t('pdf_add_signature')}</h3>
-              <button onClick={() => setShowSigPanel(false)} className="text-[#8e8e8e] hover:text-[#d6d6d6]">
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Signatures sauvegardées */}
-            {sigsData && sigsData.length > 0 && (
-              <div className="mb-4">
-                <p className="text-xs text-[#8e8e8e] mb-2">{t('pdf_saved_signatures')}</p>
-                <div className="flex flex-wrap gap-2">
-                  {sigsData.map(sig => (
-                    <button
-                      key={sig.id}
-                      onClick={() => placeSavedSig(sig)}
-                      className="px-3 py-1.5 border border-[#212121] rounded-lg hover:bg-[#454545] text-sm transition-colors"
-                    >
-                      {sig.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Dessiner une nouvelle signature */}
-            <p className="text-xs text-[#8e8e8e] mb-2">{t('pdf_draw_new_signature')}</p>
-            <canvas
-              ref={sigCanvasRef}
-              width={360}
-              height={120}
-              className="block w-full rounded-xl border-2 border-[#212121]"
-              style={{ touchAction: 'none', cursor: 'crosshair', background: '#fafafa' }}
-              onMouseDown={handleSigMouseDown}
-              onMouseMove={handleSigMouseMove}
-              onMouseUp={handleSigMouseUp}
-              onMouseLeave={handleSigMouseUp}
-            />
-            <div className="flex items-center justify-between mt-3">
-              <button
-                onClick={clearSig}
-                className="text-xs text-[#8e8e8e] hover:text-[#d6d6d6] transition-colors"
-              >
-                {t('pdf_clear')}
-              </button>
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setShowSigPanel(false)}
-                >
-                  {t('common_cancel')}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={placeSig}
-                  disabled={sigStrokes.length === 0 && sigPts.length < 2}
-                >
-                  {t('pdf_place_signature')}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PdfSignatureDialog
+          t={t}
+          sigs={sigsData ?? []}
+          busy={createSigMut.isPending}
+          onPlace={startSigPlacement}
+          onSave={(d) => createSigMut.mutate(d)}
+          onDelete={(sigId) => deleteSigMut.mutate(sigId)}
+          onClose={() => setShowSigPanel(false)}
+        />
       )}
 
       {confirmState && (

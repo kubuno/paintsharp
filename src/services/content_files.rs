@@ -66,6 +66,7 @@ fn subtype_icon(subtype: &str) -> &'static str {
         "motion"    => "Clapperboard", // Motion
         "animation" => "Film",         // Keyframe
         "pdf"       => "FileText",     // PdfWriter
+        "font"      => "Type",         // FontEditor
         _            => "Folder",
     }
 }
@@ -73,6 +74,7 @@ fn subtype_icon(subtype: &str) -> &'static str {
 /// Crée un fichier de contenu Kubuno (JSON gzippé) dans `Paintsharp/<App>/`.
 /// Le dossier `Paintsharp` (module) et le dossier feuille (sous-module) reçoivent
 /// une icône Lucide et sont protégés (non supprimables).
+#[allow(clippy::too_many_arguments)]
 async fn create_kubuno_file(
     state: &AppState, user_id: Uuid, folder_path: &str, title: &str, ext: &str,
     mime: &str, subtype: &str, content: &Value,
@@ -252,6 +254,36 @@ pub async fn create_pdf_file(
     create_kubuno_file(state, user_id, "PaintSharp/PdfWriter", title, "kbpdf", PDFDOC_MIME, "pdf", content).await
 }
 
+// ── FontEditor (création de polices) — `.kbfnt` ──────────────────────────────
+// Contenu = définition complète de la police : infos (famille, style), métriques
+// verticales (unitsPerEm, ascender, descender…), glyphes (contours Bézier en
+// unités de police, y vers le haut) et paires de crénage.
+
+pub const FONT_MIME: &str = "application/vnd.kubuno.font+json";
+
+pub fn empty_font_data(family_name: &str) -> Value {
+    json!({
+        "familyName": family_name,
+        "styleName":  "Regular",
+        "unitsPerEm": 1000,
+        "ascender":   800,
+        "descender":  -200,
+        "capHeight":  700,
+        "xHeight":    500,
+        "glyphs":     {},
+        "kerning":    []
+    })
+}
+
+pub fn font_content_from(font: Value) -> Value {
+    json!({ "version": 1, "font": font })
+}
+
+pub async fn create_font_file(
+    state: &AppState, user_id: Uuid, title: &str, content: &Value,
+) -> Result<Uuid, PaintsharpError> {
+    create_kubuno_file(state, user_id, "PaintSharp/FontEditor", title, "kbfnt", FONT_MIME, "font", content).await
+}
 
 // ── Noms de fichiers : DÉLÉGUÉS à la face client du module `files` ────────────
 pub fn strip_ext(name: &str) -> String { crate::files_client::strip_ext(name) }

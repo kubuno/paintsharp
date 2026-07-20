@@ -34,23 +34,26 @@ pub struct PdfDocumentSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct PdfPage {
-    pub id:          Uuid,
-    pub document_id: Uuid,
-    pub page_number: i32,
-    pub width:       f64,
-    pub height:      f64,
-    pub rotation:    i32,
-    pub created_at:  DateTime<Utc>,
-    pub updated_at:  DateTime<Utc>,
+    pub id:           Uuid,
+    pub document_id:  Uuid,
+    pub page_number:  i32,
+    pub width:        f64,
+    pub height:       f64,
+    pub rotation:     i32,
+    /// Index of the page in the imported source binary (None = no source page).
+    pub source_index: Option<i32>,
+    pub created_at:   DateTime<Utc>,
+    pub updated_at:   DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct PdfPageSummary {
-    pub id:          Uuid,
-    pub page_number: i32,
-    pub width:       f64,
-    pub height:      f64,
-    pub rotation:    i32,
+    pub id:           Uuid,
+    pub page_number:  i32,
+    pub width:        f64,
+    pub height:       f64,
+    pub rotation:     i32,
+    pub source_index: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]

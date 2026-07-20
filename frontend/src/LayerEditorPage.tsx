@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { uid } from './uid'
 import { useDebouncedAutosave } from './useAutosave'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -13,11 +14,13 @@ import {
   Droplet, Palette as PaletteIcon, PenTool,
   Pencil, Wind, Highlighter, PenLine, Sparkles, Fingerprint, PanelRight, Lasso, Wand, Move,
   Copy, Search, FolderClosed, FolderOpen, GripVertical, CornerDownRight, Grid2x2, Star,
+  SprayCan, Feather, X,
 } from 'lucide-react'
-import { Dropdown, RangeSlider } from '@ui'
+import { Dropdown, RangeSlider, FloatingWindow, FontSizeField } from '@ui'
 import { layerApi, type LayerStructureItem } from './api'
 import { C, hexToRgb, rgbToHex, rgbToHsl, hslToRgb, ColorPicker, DockArea, Navigator, OptNum, EditorShell, paintsharpMenus, useContextMenu, type CtxItem, type DockController } from './ui'
 import { EmbedShell } from './EmbedShell'
+import { FILTER_GROUPS, filterDefaults, type FilterFn, type FilterDef } from './layerFilters'
 
 // Palette + colour math now live in the shared Paintsharp UI library (ui/theme.ts).
 
@@ -30,6 +33,7 @@ type Tool = 'select' | 'brush' | 'eraser' | 'eyedrop' | 'fill' | 'hand' | 'crop'
 type BrushPreset = {
   id:             string
   nameKey:        string  // i18n key
+  category:       string  // i18n key of the brush-library group
   Icon:           React.ComponentType<{ size?: number; style?: React.CSSProperties }>
   hardness:       number  // 0..100 default edge softness
   spacing:        number  // dab interval as a fraction of the dab radius (>0)
@@ -44,16 +48,109 @@ type BrushPreset = {
   defaultSize:    number  // suggested size (px) applied on first selection
 }
 
+// The subset of a brush the Brush Studio lets the user tune live (everything but
+// identity/icon). `hardness`, size, opacity and flow already have their own state.
+type BrushDyn = Pick<BrushPreset, 'spacing'|'sizeJitter'|'opacityJitter'|'scatter'|'angle'|'roundness'|'pressureSize'|'pressureOpacity'>
+const extractDyn = (b: BrushPreset): BrushDyn => ({
+  spacing:b.spacing, sizeJitter:b.sizeJitter, opacityJitter:b.opacityJitter, scatter:b.scatter,
+  angle:b.angle, roundness:b.roundness, pressureSize:b.pressureSize, pressureOpacity:b.pressureOpacity,
+})
+
+// Ordered brush-library categories (Procreate-style sets).
+const BRUSH_CATEGORIES = ['sketching','inking','painting','airbrushing','calligraphy','textures'] as const
+
 const BRUSH_PRESETS: BrushPreset[] = [
-  { id:'hard',    nameKey:'layer_brush_preset_hard',   Icon:Circle,      hardness:100, spacing:0.10, flow:1.0,  sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:0,  roundness:1,    pressureSize:true,  pressureOpacity:false, defaultSize:22 },
-  { id:'soft',    nameKey:'layer_brush_preset_soft',   Icon:Brush,       hardness:0,   spacing:0.06, flow:0.85, sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:0,  roundness:1,    pressureSize:true,  pressureOpacity:true,  defaultSize:40 },
-  { id:'pencil',  nameKey:'layer_brush_preset_pencil', Icon:Pencil,      hardness:92,  spacing:0.05, flow:0.9,  sizeJitter:0.05, opacityJitter:0.12, scatter:0.04, angle:0,  roundness:1,    pressureSize:true,  pressureOpacity:true,  defaultSize:6  },
-  { id:'airbrush',nameKey:'layer_brush_preset_airbrush',Icon:Wind,       hardness:0,   spacing:0.04, flow:0.10, sizeJitter:0,    opacityJitter:0.10, scatter:0.25, angle:0,  roundness:1,    pressureSize:false, pressureOpacity:true,  defaultSize:60 },
-  { id:'marker',  nameKey:'layer_brush_preset_marker', Icon:Highlighter, hardness:75,  spacing:0.03, flow:1.0,  sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:0,  roundness:1,    pressureSize:false, pressureOpacity:false, defaultSize:30 },
-  { id:'calligr', nameKey:'layer_brush_preset_calligraphy', Icon:PenLine, hardness:88, spacing:0.05, flow:1.0,  sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:40, roundness:0.28, pressureSize:true,  pressureOpacity:false, defaultSize:34 },
-  { id:'charcoal',nameKey:'layer_brush_preset_charcoal',Icon:Sparkles,   hardness:35,  spacing:0.07, flow:0.55, sizeJitter:0.18, opacityJitter:0.35, scatter:0.45, angle:0,  roundness:0.85, pressureSize:true,  pressureOpacity:true,  defaultSize:46 },
+  { id:'hard',    nameKey:'layer_brush_preset_hard',   category:'layer_brushcat_painting',   Icon:Circle,      hardness:100, spacing:0.10, flow:1.0,  sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:0,  roundness:1,    pressureSize:true,  pressureOpacity:false, defaultSize:22 },
+  { id:'soft',    nameKey:'layer_brush_preset_soft',   category:'layer_brushcat_painting',   Icon:Brush,       hardness:0,   spacing:0.06, flow:0.85, sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:0,  roundness:1,    pressureSize:true,  pressureOpacity:true,  defaultSize:40 },
+  { id:'pencil',  nameKey:'layer_brush_preset_pencil', category:'layer_brushcat_sketching',  Icon:Pencil,      hardness:92,  spacing:0.05, flow:0.9,  sizeJitter:0.05, opacityJitter:0.12, scatter:0.04, angle:0,  roundness:1,    pressureSize:true,  pressureOpacity:true,  defaultSize:6  },
+  { id:'airbrush',nameKey:'layer_brush_preset_airbrush',category:'layer_brushcat_airbrushing',Icon:Wind,       hardness:0,   spacing:0.04, flow:0.10, sizeJitter:0,    opacityJitter:0.10, scatter:0.25, angle:0,  roundness:1,    pressureSize:false, pressureOpacity:true,  defaultSize:60 },
+  { id:'marker',  nameKey:'layer_brush_preset_marker', category:'layer_brushcat_inking',     Icon:Highlighter, hardness:75,  spacing:0.03, flow:1.0,  sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:0,  roundness:1,    pressureSize:false, pressureOpacity:false, defaultSize:30 },
+  { id:'calligr', nameKey:'layer_brush_preset_calligraphy', category:'layer_brushcat_calligraphy', Icon:PenLine, hardness:88, spacing:0.05, flow:1.0,  sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:40, roundness:0.28, pressureSize:true,  pressureOpacity:false, defaultSize:34 },
+  { id:'charcoal',nameKey:'layer_brush_preset_charcoal',category:'layer_brushcat_sketching',  Icon:Sparkles,   hardness:35,  spacing:0.07, flow:0.55, sizeJitter:0.18, opacityJitter:0.35, scatter:0.45, angle:0,  roundness:0.85, pressureSize:true,  pressureOpacity:true,  defaultSize:46 },
+  { id:'ink',     nameKey:'layer_brush_preset_ink',     category:'layer_brushcat_inking',     Icon:PenTool,    hardness:97,  spacing:0.04, flow:1.0,  sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:0,  roundness:1,    pressureSize:true,  pressureOpacity:false, defaultSize:10 },
+  { id:'water',   nameKey:'layer_brush_preset_watercolor',category:'layer_brushcat_painting', Icon:Droplet,  hardness:0,   spacing:0.05, flow:0.16, sizeJitter:0.08, opacityJitter:0.25, scatter:0.05, angle:0,  roundness:1,    pressureSize:true,  pressureOpacity:true,  defaultSize:70 },
+  { id:'spray',   nameKey:'layer_brush_preset_spray',   category:'layer_brushcat_airbrushing',Icon:SprayCan,   hardness:60,  spacing:0.02, flow:0.05, sizeJitter:0.75, opacityJitter:0.55, scatter:1.0,  angle:0,  roundness:1,    pressureSize:false, pressureOpacity:true,  defaultSize:80 },
+  { id:'chalk',   nameKey:'layer_brush_preset_chalk',   category:'layer_brushcat_sketching',  Icon:Feather,    hardness:55,  spacing:0.09, flow:0.7,  sizeJitter:0.3,  opacityJitter:0.45, scatter:0.3,  angle:25, roundness:0.7,  pressureSize:true,  pressureOpacity:true,  defaultSize:38 },
+  // Enriched set (Procreate-like breadth).
+  { id:'fineliner',nameKey:'layer_brush_preset_fineliner',category:'layer_brushcat_inking',  Icon:PenLine,    hardness:100, spacing:0.03, flow:1.0,  sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:0,  roundness:1,    pressureSize:false, pressureOpacity:false, defaultSize:4  },
+  { id:'gouache', nameKey:'layer_brush_preset_gouache', category:'layer_brushcat_painting',   Icon:Brush,      hardness:70,  spacing:0.06, flow:0.9,  sizeJitter:0.04, opacityJitter:0.08, scatter:0.03, angle:0,  roundness:0.95, pressureSize:true,  pressureOpacity:false, defaultSize:48 },
+  { id:'oilpastel',nameKey:'layer_brush_preset_oilpastel',category:'layer_brushcat_sketching',Icon:Pencil,     hardness:45,  spacing:0.08, flow:0.75, sizeJitter:0.22, opacityJitter:0.3,  scatter:0.35, angle:15, roundness:0.8,  pressureSize:true,  pressureOpacity:true,  defaultSize:42 },
+  { id:'stipple', nameKey:'layer_brush_preset_stipple', category:'layer_brushcat_textures',   Icon:SprayCan,   hardness:85,  spacing:0.5,  flow:0.9,  sizeJitter:0.5,  opacityJitter:0.4,  scatter:1.2,  angle:0,  roundness:1,    pressureSize:false, pressureOpacity:false, defaultSize:26 },
+  { id:'grain',   nameKey:'layer_brush_preset_grain',   category:'layer_brushcat_textures',   Icon:Sparkles,   hardness:30,  spacing:0.12, flow:0.6,  sizeJitter:0.6,  opacityJitter:0.6,  scatter:0.7,  angle:0,  roundness:0.9,  pressureSize:true,  pressureOpacity:true,  defaultSize:36 },
 ]
 const DEFAULT_BRUSH = BRUSH_PRESETS[0]
+
+// ── Brush preview renderer (self-contained, for the Brush Studio) ─────────────
+// A cache-free dab sprite (small previews don't need the painting hot-path LRU).
+function previewDabSprite(r: number, hardness: number, hex: string): HTMLCanvasElement {
+  const qr = Math.max(0.5, r)
+  const size = Math.max(1, Math.ceil(qr * 2))
+  const cv = document.createElement('canvas'); cv.width = size; cv.height = size
+  const g = cv.getContext('2d')!
+  const cx = size / 2, cy = size / 2
+  const [cr, cg, cb] = hexToRgb(hex)
+  const grad = g.createRadialGradient(cx, cy, 0, cx, cy, qr)
+  const solid = Math.min(0.98, hardness / 100)
+  grad.addColorStop(0, `rgba(${cr},${cg},${cb},1)`)
+  if (solid > 0) grad.addColorStop(solid, `rgba(${cr},${cg},${cb},1)`)
+  grad.addColorStop(Math.min(1, solid + (1 - solid) * 0.5), `rgba(${cr},${cg},${cb},0.55)`)
+  grad.addColorStop(1, `rgba(${cr},${cg},${cb},0)`)
+  g.fillStyle = grad
+  g.beginPath(); g.arc(cx, cy, qr, 0, Math.PI * 2); g.fill()
+  return cv
+}
+
+// Stamp a representative stroke (a tapered S-curve with a synthetic pressure ramp)
+// so the user sees exactly what a brush and its dynamics do. Mirrors the painting
+// engine's dab spacing/jitter/scatter/pressure logic on a plain 2D canvas.
+function paintPreviewStroke(
+  canvas: HTMLCanvasElement, b: BrushPreset,
+  sizePx: number, opacPct: number, flowPct: number, hex: string,
+) {
+  const ctx = canvas.getContext('2d'); if (!ctx) return
+  const W = canvas.width, H = canvas.height
+  ctx.clearRect(0, 0, W, H)
+  ctx.globalCompositeOperation = 'source-over'
+  const baseRad = Math.max(0.5, Math.min(H * 0.36, sizePx / 2))
+  const strokeOpac = Math.min(1, opacPct / 100)
+  const flow = Math.max(0.01, flowPct / 100)
+  let seed = 0x2545f491
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
+  // Pressure ramp: 0 → 1 → 0 across the stroke for a natural taper.
+  const press = (t: number) => Math.sin(Math.PI * t) * 0.9 + 0.1
+  const pad = baseRad + 4
+  const x0 = pad, x1 = W - pad, midY = H / 2, amp = Math.min(H * 0.28, (H - pad * 2) / 2)
+  const pt = (t: number): [number, number] => [x0 + (x1 - x0) * t, midY - Math.sin(t * Math.PI * 2) * amp]
+  const radAt = (p: number) => { let r = baseRad; if (b.pressureSize) r *= (0.15 + 0.85 * p); if (b.sizeJitter) r *= (1 - b.sizeJitter * rnd()); return r }
+  const alphaAt = (p: number) => { let a = flow * strokeOpac; if (b.pressureOpacity) a *= (0.1 + 0.9 * p); if (b.opacityJitter) a *= (1 - b.opacityJitter * rnd()); return a }
+  const stamp = (x: number, y: number, p: number) => {
+    const r = radAt(p)
+    let ox = x, oy = y
+    if (b.scatter) { const ang = rnd() * Math.PI * 2, d = rnd() * b.scatter * r; ox += Math.cos(ang) * d; oy += Math.sin(ang) * d }
+    if (r < 0.4) return
+    const sprite = previewDabSprite(r, b.hardness, hex)
+    ctx.globalAlpha = Math.min(1, alphaAt(p))
+    if (b.roundness < 1 || b.angle !== 0) {
+      ctx.save(); ctx.translate(ox, oy); if (b.angle) ctx.rotate(b.angle * Math.PI / 180); ctx.scale(1, b.roundness)
+      ctx.drawImage(sprite, -r, -r, r * 2, r * 2); ctx.restore()
+    } else ctx.drawImage(sprite, ox - r, oy - r, r * 2, r * 2)
+  }
+  // March the curve at the brush's dab spacing.
+  const N = 400
+  let carry = 0, px = -1, py = -1
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, p = press(t)
+    const [cx, cy] = pt(t)
+    if (px < 0) { stamp(cx, cy, p); px = cx; py = cy; continue }
+    const dx = cx - px, dy = cy - py, seg = Math.hypot(dx, dy)
+    const spacing = Math.max(0.5, b.spacing * radAt(p) * 2)
+    let dist = carry
+    while (dist < seg) { const f = dist / seg; stamp(px + dx * f, py + dy * f, p); dist += spacing }
+    carry = dist - seg
+    px = cx; py = cy
+  }
+  ctx.globalAlpha = 1
+}
 
 // Colour tags for organising the layers panel (label dot uses the same colour).
 const LAYER_COLORS: { value: string; key: string; dot: string }[] = [
@@ -103,7 +200,95 @@ const blendLabel = (t: TFunction, k: string): string => ({
   luminosity: t('layer_blend_luminosity'),
 }[k] ?? k)
 
-function newId() { return crypto.randomUUID() }
+function newId() { return uid() }
+
+// Zoom presets offered by the status-bar zoom menu (fractions of 100%).
+const ZOOM_PRESETS = [0.0625, 0.125, 0.25, 0.5, 0.66, 1, 1.5, 2, 3, 4, 8]
+
+// Per-program uniform-location cache: getUniformLocation is a driver round-trip
+// and composeLayer runs once per layer per composited frame, so looking these up
+// by name every call shows up on big layer stacks.
+const uniformCache = new WeakMap<WebGLProgram, Map<string, WebGLUniformLocation | null>>()
+function uloc(gl: WebGL2RenderingContext, prog: WebGLProgram, name: string): WebGLUniformLocation | null {
+  let m = uniformCache.get(prog)
+  if (!m) { m = new Map(); uniformCache.set(prog, m) }
+  if (!m.has(name)) m.set(name, gl.getUniformLocation(prog, name))
+  return m.get(name)!
+}
+
+// ── Single-channel (selection mask) morphology & blur ─────────────────────────
+// Separable box blur on a Uint8 mask (used by "feather"). 3 iterations ≈ Gaussian.
+function maskBlur(src: Uint8Array, w: number, h: number, radius: number): Uint8Array {
+  const r = Math.max(1, Math.round(radius / 2))
+  const win = r * 2 + 1
+  let a = new Float32Array(src), b = new Float32Array(src.length)
+  const pass = (s: Float32Array, d: Float32Array, horiz: boolean) => {
+    const outer = horiz ? h : w, inner = horiz ? w : h
+    for (let o = 0; o < outer; o++) {
+      const at = (i: number) => horiz ? o * w + i : i * w + o
+      let sum = 0
+      for (let k = -r; k <= r; k++) sum += s[at(Math.max(0, Math.min(inner - 1, k)))]
+      for (let i = 0; i < inner; i++) {
+        d[at(i)] = sum / win
+        const ia = Math.max(0, Math.min(inner - 1, i - r)), ib = Math.max(0, Math.min(inner - 1, i + r + 1))
+        sum += s[at(ib)] - s[at(ia)]
+      }
+    }
+  }
+  for (let it = 0; it < 3; it++) { pass(a, b, true); pass(b, a, false) }
+  const out = new Uint8Array(src.length)
+  for (let i = 0; i < out.length; i++) out[i] = Math.round(a[i])
+  return out
+}
+// Chebyshev dilation (grow) / erosion (shrink) via two separable max/min passes.
+function maskMorph(src: Uint8Array, w: number, h: number, radius: number, grow: boolean): Uint8Array {
+  const r = Math.max(1, Math.round(radius))
+  const pick = grow ? Math.max : Math.min
+  const pass = (s: Uint8Array, horiz: boolean): Uint8Array => {
+    const d = new Uint8Array(s.length)
+    const outer = horiz ? h : w, inner = horiz ? w : h
+    for (let o = 0; o < outer; o++) {
+      const at = (i: number) => horiz ? o * w + i : i * w + o
+      for (let i = 0; i < inner; i++) {
+        let v = s[at(i)]
+        for (let k = 1; k <= r; k++) {
+          if (i - k >= 0)      v = pick(v, s[at(i - k)])
+          if (i + k < inner)   v = pick(v, s[at(i + k)])
+        }
+        d[at(i)] = v
+      }
+    }
+    return d
+  }
+  return pass(pass(src, true), false)
+}
+
+// Trace the outline of a selection mask (threshold 128) into a doc-space Path2D.
+// Horizontal / vertical boundary edges are merged into runs so the path stays
+// small enough to stroke every ants-animation frame even on large selections.
+function buildSelOutline(m: Uint8Array, w: number, h: number): Path2D {
+  const path = new Path2D()
+  const inside = (x: number, y: number) => x >= 0 && x < w && y >= 0 && y < h && m[y * w + x] >= 128
+  // Horizontal edges (top & bottom of inside cells), merged into runs.
+  for (let y = 0; y <= h; y++) {
+    let run = -1
+    for (let x = 0; x <= w; x++) {
+      const edge = x < w && (inside(x, y) !== inside(x, y - 1))
+      if (edge && run < 0) run = x
+      else if (!edge && run >= 0) { path.moveTo(run, y); path.lineTo(x, y); run = -1 }
+    }
+  }
+  // Vertical edges (left & right of inside cells).
+  for (let x = 0; x <= w; x++) {
+    let run = -1
+    for (let y = 0; y <= h; y++) {
+      const edge = y < h && (inside(x, y) !== inside(x - 1, y))
+      if (edge && run < 0) run = y
+      else if (!edge && run >= 0) { path.moveTo(x, run); path.lineTo(x, y); run = -1 }
+    }
+  }
+  return path
+}
 
 // ── Layer-tree helpers (immutable; the layer list is a tree via `children`) ────
 function findInTree(nodes: LayerStructureItem[], id: string | null): LayerStructureItem | null {
@@ -422,34 +607,50 @@ uniform vec2 uOffset, uScale, uViewport;
 uniform float uRot;
 in vec2 vUv; out vec4 fragColor;
 
-// Scale-aware resampler. Benchmarked against bilinear / trilinear+aniso / bicubic
-// across a full zoom sweep at 0° and 18°: this is the only one that keeps both
-// near-best minification anti-aliasing AND crisp magnification with no ringing.
-//  • Magnification (≥1:1): "sharp bilinear" / texel anti-aliasing — the sample is
-//    snapped to texel centres but the boundary between two texels is anti-aliased
-//    over exactly one screen pixel. Texel interiors stay perfectly crisp (no
-//    bicubic/bilinear blur) while edges are smooth (no NEAREST stair-stepping),
-//    and it works at any zoom and rotation.
-//  • Minification (<1:1): 4×4 footprint supersample (each tap covers a quarter of
-//    the footprint via mips) — anti-aliased without the trilinear over-blur.
+// Scale-aware resampler, three regimes chosen by fp (texels per device pixel):
+//  • fp ≤ ~1 (100% and any magnification): "sharp bilinear" / texel anti-aliasing —
+//    the sample is snapped to texel centres but the boundary between two texels is
+//    anti-aliased over exactly one screen pixel. At exactly 100% this is a 1:1
+//    pixel-perfect blit (the old code fell through to the supersampler at fp==1.0,
+//    which box-blurred the canvas at the single most-used zoom level).
+//  • 1 < fp ≤ 4 (zoom 25%..100%): 4×4 supersample at LOD 0 — each tap covers at
+//    most one texel, so the average is a true box filter. Crisper than the old
+//    trilinear-mip taps AND mip-free, so the doc mipchain no longer has to be
+//    regenerated every brush-stroke frame (that was the main paint-time cost).
+//  • fp > 4 (far zoom-out): 4×4 supersample through the mip chain (textureGrad).
 // dx/dy are dFdx/dFdy(uv), passed from main() so derivatives stay in uniform flow.
 vec4 sampleDoc(vec2 uv, vec2 dx, vec2 dy){
   vec2 ts=vec2(textureSize(uTex,0));
   float fp=max(length(dx*ts), length(dy*ts)); // texels covered per device pixel
-  if(fp<1.0){
+  if(fp<=1.001){
     vec2 px=uv*ts;
     vec2 fl=floor(px)+0.5;
     vec2 w=max((abs(dx)+abs(dy))*ts, vec2(1e-5)); // = fwidth(px), one screen px in texels
     vec2 aa=clamp((px-fl)/w, -0.5, 0.5);
     return textureLod(uTex, (fl+aa)/ts, 0.0);     // LINEAR mag turns the offset into a 1px AA edge
   }
-  vec2 sdx=dx*0.25, sdy=dy*0.25;
+  // Both minification regimes average in PREMULTIPLIED alpha: the doc texture holds
+  // straight (unpremultiplied) RGBA, and a transparent texel stores rgb=0, so a
+  // plain average darkens colour toward black along transparent edges (the classic
+  // halo/fringe). Accumulating rgb·a and dividing by Σa reconstructs the correct
+  // edge colour at no extra tap cost.
   vec4 acc=vec4(0.0);
-  for(int j=0;j<4;j++) for(int i=0;i<4;i++){
-    vec2 o=(vec2(float(i),float(j))+0.5)*0.25-0.5;
-    acc+=textureGrad(uTex, uv+dx*o.x+dy*o.y, sdx, sdy);
+  if(fp<=4.0){
+    for(int j=0;j<4;j++) for(int i=0;i<4;i++){
+      vec2 o=(vec2(float(i),float(j))+0.5)*0.25-0.5;
+      vec4 c=textureLod(uTex, uv+dx*o.x+dy*o.y, 0.0);
+      acc+=vec4(c.rgb*c.a, c.a);
+    }
+  } else {
+    vec2 sdx=dx*0.25, sdy=dy*0.25;
+    for(int j=0;j<4;j++) for(int i=0;i<4;i++){
+      vec2 o=(vec2(float(i),float(j))+0.5)*0.25-0.5;
+      vec4 c=textureGrad(uTex, uv+dx*o.x+dy*o.y, sdx, sdy);
+      acc+=vec4(c.rgb*c.a, c.a);
+    }
   }
-  return acc*0.0625;
+  float a=acc.a*0.0625;
+  return vec4(acc.a>1e-5? acc.rgb/acc.a : vec3(0.0), a);
 }
 
 void main(){
@@ -580,6 +781,9 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   const [brushOpac,    setBrushOpac]   = useState(100)
   const [brushPreset,  setBrushPreset] = useState<string>(DEFAULT_BRUSH.id)
   const [brushSelOpen, setBrushSelOpen] = useState(false)
+  const [brushStudioOpen, setBrushStudioOpen] = useState(false)
+  // Live-editable brush dynamics (Brush Studio) — seeded from the selected preset.
+  const [brushDyn,     setBrushDyn]    = useState<BrushDyn>(() => extractDyn(DEFAULT_BRUSH))
   // Track whether the user manually changed the size (so a preset won't clobber it).
   const sizeTouched    = useRef(false)
   const [fgColor,      setFgColor]     = useState('#000000')
@@ -611,6 +815,21 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   const [hasSel,       setHasSel]      = useState(false) // a pixel selection is active
   const [pressureSens, setPressureSens] = useState(true)
   const [stabilizer,   setStabilizer]  = useState(40)   // 0..100 % smoothing
+  const [brushFlow,    setBrushFlow]   = useState(Math.round(DEFAULT_BRUSH.flow * 100)) // per-dab flow %
+  // Magic-wand / fill options.
+  const [wandTol,      setWandTol]     = useState(32)    // colour tolerance 0..255
+  const [wandContig,   setWandContig]  = useState(true)  // contiguous vs global select-by-colour
+  // Pixel grid overlay at high zoom (persisted preference).
+  const [pixelGrid,    setPixelGrid]   = useState(() => localStorage.getItem('kubuno:paintsharp:pixelGrid') !== '0')
+  // Crop tool: the pending crop rectangle in doc space (null = not started).
+  const [cropRect,     setCropRect]    = useState<{x:number;y:number;w:number;h:number}|null>(null)
+  // Document dimensions mirror (docSize.current) so the status bar tracks crops/rotations.
+  const [docDims,      setDocDims]     = useState<{w:number;h:number}|null>(null)
+  // Parametric filter dialog (floating window with sliders + live preview).
+  const [filterDialog, setFilterDialog] = useState<{ def: FilterDef; values: Record<string, number>; preview: boolean } | null>(null)
+  const filterDialogRef = useRef(filterDialog); filterDialogRef.current = filterDialog
+  // Space bar held → temporary hand tool (Photoshop-style).
+  const [spacePan,     setSpacePan]    = useState(false)
   // Detected input device + its live pressure (pen = stylus/Apple Pencil, touch = finger).
   const [inputKind,    setInputKind]   = useState<'pen'|'touch'|'mouse'|null>(null)
   const [inputPressure,setInputPressure] = useState(0)   // current live pressure 0..1
@@ -645,12 +864,25 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   const progDisp    = useRef<WebGLProgram | null>(null)
   const quadVAO     = useRef<WebGLVertexArrayObject | null>(null)
   const textures    = useRef<Map<string, WebGLTexture>>(new Map())
+  // Layer-array reference for which textures were last ensured (skips the tree walk).
+  const texEnsuredRef = useRef<LayerStructureItem[] | null>(null)
   const fbPair      = useRef<[ReturnType<typeof glFB>, ReturnType<typeof glFB>] | null>(null)
   // Pool of doc-size FB pairs for isolated group compositing (depth-bounded → frugal).
   const fbPoolAll   = useRef<ReturnType<typeof glFB>[]>([])
   const fbPoolFree  = useRef<ReturnType<typeof glFB>[]>([])
   const docSize     = useRef({ w: 1920, h: 1080 })
   const lastSrc     = useRef(0)
+  const displayRaf  = useRef<number | null>(null)   // coalesces view-only redraws
+  // Lazy mip rebuild bookkeeping (mips are only read below 25% zoom).
+  const compositeVersion = useRef(0)   // bumped by every renderComposite
+  const mipVersion       = useRef(-1)  // compositeVersion at last generateMipmap
+  const mipSrc           = useRef(-1)  // which ping-pong texture the mips belong to
+  const mipBuiltAt       = useRef(0)
+  // While a stroke is being extended, compositing is scissored to the region
+  // touched this frame (everything outside is still valid from the previous
+  // frame, because the pass chain has the exact same shape for the whole stroke).
+  const compositeScissor = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const strokeFlushes    = useRef(0)   // frames flushed since stroke start
 
   // Stroke preview: offscreen Canvas 2D + WebGL texture (painted in doc space)
   const strokeCanvasRef  = useRef<HTMLCanvasElement | null>(null)
@@ -670,9 +902,13 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   const boRef    = useRef(brushOpac)
   const fgRef    = useRef(fgColor)
   const brushRef = useRef<BrushPreset>(DEFAULT_BRUSH)
+  // The live brush = preset identity + edited hardness + edited dynamics. Merging
+  // here (rather than reading the raw preset) is what makes the Brush Studio's
+  // sliders — including hardness — actually affect painting.
   useEffect(() => {
-    brushRef.current = BRUSH_PRESETS.find(b => b.id === brushPreset) ?? DEFAULT_BRUSH
-  }, [brushPreset])
+    const preset = BRUSH_PRESETS.find(b => b.id === brushPreset) ?? DEFAULT_BRUSH
+    brushRef.current = { ...preset, hardness: brushHard, ...brushDyn }
+  }, [brushPreset, brushHard, brushDyn])
   useEffect(() => { vsRef.current     = viewState },  [viewState])
   useEffect(() => { rotRef.current     = viewRot },   [viewRot])
   useEffect(() => { layersRef.current = layers },     [layers])
@@ -701,15 +937,53 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   useEffect(() => { pressureSensRef.current = pressureSens }, [pressureSens])
   const stabilizerRef = useRef(stabilizer)
   useEffect(() => { stabilizerRef.current = stabilizer }, [stabilizer])
+  const brushFlowRef = useRef(brushFlow)
+  useEffect(() => { brushFlowRef.current = brushFlow }, [brushFlow])
+  const wandTolRef = useRef(wandTol)
+  useEffect(() => { wandTolRef.current = wandTol }, [wandTol])
+  const wandContigRef = useRef(wandContig)
+  useEffect(() => { wandContigRef.current = wandContig }, [wandContig])
+  const pixelGridRef = useRef(pixelGrid)
+  useEffect(() => {
+    pixelGridRef.current = pixelGrid
+    try { localStorage.setItem('kubuno:paintsharp:pixelGrid', pixelGrid ? '1' : '0') } catch { /* ignore */ }
+    redrawOverlay()
+  }, [pixelGrid]) // eslint-disable-line react-hooks/exhaustive-deps
+  const cropRectRef = useRef(cropRect)
+  useEffect(() => { cropRectRef.current = cropRect; redrawOverlay() }, [cropRect]) // eslint-disable-line react-hooks/exhaustive-deps
+  const spaceHeld = useRef(false)
   // Smoothed brush position (the lagging end of the stabilizer "string") and the
   // last raw cursor position, both in doc space. rawPt drives the end-of-stroke
   // catch-up so the line always reaches where the user lifted.
   const smoothPt = useRef<{x:number;y:number}|null>(null)
   const rawPt    = useRef<{x:number;y:number}|null>(null)
 
-  // Undo/Redo stacks
-  const undoStack = useRef<{id: string; px: Uint8Array}[]>([])
-  const redoStack = useRef<{id: string; px: Uint8Array}[]>([])
+  // Undo/Redo stacks. Entries snapshot only the touched sub-rectangle of a layer
+  // (a brush stroke stores its bounding box, not the whole document), bounded by
+  // a total byte budget instead of a tiny fixed depth — cheap strokes go deep,
+  // whole-layer ops (fills, filters) evict older history sooner.
+  type UndoEntry = { id: string; x: number; y: number; w: number; h: number; px: Uint8Array }
+  const undoStack = useRef<UndoEntry[]>([])
+  const redoStack = useRef<UndoEntry[]>([])
+  const UNDO_MAX_ENTRIES = 60
+  const UNDO_MAX_BYTES   = 384 * 1024 * 1024
+
+  // Internal clipboard (copy/cut/paste as new layer) — doc-size RGBA.
+  const clipboardRef = useRef<{ w: number; h: number; px: Uint8Array } | null>(null)
+  // Last dropped selection (for "Reselect").
+  const lastSelMask  = useRef<Uint8Array | null>(null)
+  // Marching-ants outline: doc-space Path2D rebuilt when the mask changes, plus
+  // the animation phase advanced by a timer while a selection is active.
+  const selPathRef   = useRef<Path2D | null>(null)
+  const antsPhase    = useRef(0)
+  // Crop tool drag state.
+  const cropDrag     = useRef<null | { mode: 'new' | 'move' | 'nw' | 'ne' | 'se' | 'sw'; sx: number; sy: number; start: {x:number;y:number;w:number;h:number} }>(null)
+  // Per-layer texture version + PNG encode cache: autosave re-encodes only the
+  // layers whose pixels actually changed since the previous save.
+  const texVersion   = useRef<Map<string, number>>(new Map())
+  const pngCache     = useRef<Map<string, { v: number; png: string }>>(new Map())
+  // Arrow-key nudge: coalesce a burst of presses into a single undo entry.
+  const nudgeTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Drawing state
   const isDrawing  = useRef(false)
@@ -775,6 +1049,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const W = embedded ? embed!.width : doc!.width
     const H = embedded ? embed!.height : doc!.height
     docSize.current = { w: W, h: H }
+    setDocDims({ w: W, h: H })
 
     const lsRaw = embedded ? [] : ((doc!.layers_structure as LayerStructureItem[]) ?? [])
     // Métadonnée conservée en state (sans les pixels) ; les pixels vont en texture.
@@ -840,10 +1115,10 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   }, [layers]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // View-only changes (pan / zoom / rotation) never touch the pixels, so they
-  // skip the expensive tree compositing and just re-blit the last composite.
+  // skip the expensive tree compositing and just re-blit the last composite —
+  // coalesced to one redraw per frame (see scheduleDisplay).
   useEffect(() => {
-    renderDisplay()
-    redrawOverlay() // keep the selection tint aligned with pan/zoom/rotation
+    scheduleDisplay() // re-blit + overlay, aligned with pan/zoom/rotation
   }, [viewState, viewRot]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Structural changes (load, add/delete/reorder…) refresh thumbnails. Keyed on
@@ -937,8 +1212,46 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const { w, h } = docSize.current
     gl.bindTexture(gl.TEXTURE_2D, tex)
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px)
+    texVersion.current.set(id, (texVersion.current.get(id) ?? 0) + 1)
     renderComposite()
     setThumbNonce(v => v + 1)   // discrete edit → refresh thumbnails
+  }
+
+  // Sub-rectangle texture read/write — the workhorses of dirty-rect undo. A brush
+  // stroke's history entry is only as big as the stroke, not the document.
+  function readTexRect(id: string, x: number, y: number, w: number, h: number): Uint8Array | null {
+    const gl = glRef.current
+    const tex = textures.current.get(id)
+    if (!gl || !tex || w <= 0 || h <= 0) return null
+    const fb = gl.createFramebuffer()!
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb)
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
+    const px = new Uint8Array(w * h * 4)
+    gl.readPixels(x, y, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    gl.deleteFramebuffer(fb)
+    return px
+  }
+
+  function writeTexRect(id: string, x: number, y: number, w: number, h: number, px: Uint8Array) {
+    const gl = glRef.current
+    const tex = textures.current.get(id)
+    if (!gl || !tex || w <= 0 || h <= 0) return
+    gl.bindTexture(gl.TEXTURE_2D, tex)
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px)
+    texVersion.current.set(id, (texVersion.current.get(id) ?? 0) + 1)
+    renderComposite()
+    setThumbNonce(v => v + 1)
+  }
+
+  // Copy a sub-rectangle out of a full-layer pixel buffer.
+  function cropPixels(src: Uint8Array, docW: number, x: number, y: number, w: number, h: number): Uint8Array {
+    const out = new Uint8Array(w * h * 4)
+    for (let row = 0; row < h; row++) {
+      const so = ((y + row) * docW + x) * 4
+      out.set(src.subarray(so, so + w * 4), row * w * 4)
+    }
+    return out
   }
 
   // ── Persistance des pixels (.kblay) ──────────────────────────────────────────
@@ -948,13 +1261,20 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   // verticalement inversé, sans incidence puisque save/load utilisent le même
   // chemin).
   function texToPng(id: string): string | undefined {
+    // Version-keyed cache: autosave serialises the whole tree, but only layers
+    // whose pixels changed since the previous save pay the PNG encode again.
+    const v = texVersion.current.get(id) ?? 0
+    const hit = pngCache.current.get(id)
+    if (hit && hit.v === v) return hit.png
     const px = readTex(id)
     if (!px) return undefined
     const { w, h } = docSize.current
     const c = document.createElement('canvas'); c.width = w; c.height = h
     const ctx = c.getContext('2d'); if (!ctx) return undefined
     ctx.putImageData(new ImageData(new Uint8ClampedArray(px), w, h), 0, 0)
-    return c.toDataURL('image/png')
+    const png = c.toDataURL('image/png')
+    pngCache.current.set(id, { v, png })
+    return png
   }
 
   function loadPngToTex(id: string, dataUrl: string) {
@@ -995,24 +1315,24 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     gl.viewport(0, 0, w, h)
     gl.useProgram(pc)
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, srcTex)
-    gl.uniform1i(gl.getUniformLocation(pc, 'uBase'), 0)
+    gl.uniform1i(uloc(gl, pc, 'uBase'), 0)
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, layerTex)
-    gl.uniform1i(gl.getUniformLocation(pc, 'uLayer'), 1)
-    gl.uniform1f(gl.getUniformLocation(pc, 'uOpacity'), opacity)
-    gl.uniform1i(gl.getUniformLocation(pc, 'uMode'), mode)
+    gl.uniform1i(uloc(gl, pc, 'uLayer'), 1)
+    gl.uniform1f(uloc(gl, pc, 'uOpacity'), opacity)
+    gl.uniform1i(uloc(gl, pc, 'uMode'), mode)
     if (maskTex) {
       gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, maskTex)
-      gl.uniform1i(gl.getUniformLocation(pc, 'uMask'), 2)
-      gl.uniform1i(gl.getUniformLocation(pc, 'uHasMask'), 1)
+      gl.uniform1i(uloc(gl, pc, 'uMask'), 2)
+      gl.uniform1i(uloc(gl, pc, 'uHasMask'), 1)
     } else {
-      gl.uniform1i(gl.getUniformLocation(pc, 'uHasMask'), 0)
+      gl.uniform1i(uloc(gl, pc, 'uHasMask'), 0)
     }
     if (clipTex) {
       gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, clipTex)
-      gl.uniform1i(gl.getUniformLocation(pc, 'uClip'), 3)
-      gl.uniform1i(gl.getUniformLocation(pc, 'uHasClip'), 1)
+      gl.uniform1i(uloc(gl, pc, 'uClip'), 3)
+      gl.uniform1i(uloc(gl, pc, 'uHasClip'), 1)
     } else {
-      gl.uniform1i(gl.getUniformLocation(pc, 'uHasClip'), 0)
+      gl.uniform1i(uloc(gl, pc, 'uHasClip'), 0)
     }
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
   }
@@ -1049,22 +1369,45 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     gl.clear(gl.COLOR_BUFFER_BIT)
     gl.useProgram(pd)
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fb[src].tex)
-    // The display shader does the quality resampling (bicubic / footprint
-    // supersample). It only needs mipmaps available when the view is minified —
-    // judged from the *device-pixel* scale (zoom × dpr), so HiDPI is handled.
-    if (vs.zoom * dpr < 1) {
-      gl.generateMipmap(gl.TEXTURE_2D)
+    // The display shader only reads the mip chain below 25% zoom (above that it
+    // supersamples LOD 0), so mips are rebuilt lazily: only when the view is that
+    // far out AND the composite changed since the last rebuild — and while a
+    // stroke is in progress at most every 150 ms (a full-doc generateMipmap per
+    // brush-dab frame was the single biggest paint-time cost on large documents).
+    if (vs.zoom * dpr < 0.25) {
+      const stale = mipVersion.current !== compositeVersion.current || mipSrc.current !== src
+      const painting = strokePreviewRef.current !== null || maskStroke.current !== null
+      const now = performance.now()
+      if (stale && (!painting || now - mipBuiltAt.current > 150)) {
+        gl.generateMipmap(gl.TEXTURE_2D)
+        mipVersion.current = compositeVersion.current
+        mipSrc.current = src
+        mipBuiltAt.current = now
+      }
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
     } else {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
     }
-    gl.uniform1i(gl.getUniformLocation(pd, 'uTex'), 0)
-    gl.uniform2f(gl.getUniformLocation(pd, 'uOffset'), vs.panX * dpr, vs.panY * dpr)
-    gl.uniform2f(gl.getUniformLocation(pd, 'uScale'),  w * vs.zoom * dpr, h * vs.zoom * dpr)
-    gl.uniform2f(gl.getUniformLocation(pd, 'uViewport'), newW, newH)
-    gl.uniform1f(gl.getUniformLocation(pd, 'uRot'), rotRef.current)
+    gl.uniform1i(uloc(gl, pd, 'uTex'), 0)
+    gl.uniform2f(uloc(gl, pd, 'uOffset'), vs.panX * dpr, vs.panY * dpr)
+    gl.uniform2f(uloc(gl, pd, 'uScale'),  w * vs.zoom * dpr, h * vs.zoom * dpr)
+    gl.uniform2f(uloc(gl, pd, 'uViewport'), newW, newH)
+    gl.uniform1f(uloc(gl, pd, 'uRot'), rotRef.current)
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     gl.bindVertexArray(null)
+  }
+
+  // Coalesce view-only redraws (pan/zoom/rotate) to one per animation frame: a
+  // high-refresh stylus or mouse can emit several pointermove events per frame,
+  // each committing a new viewState — without this each would blit the document
+  // and repaint the overlay again for the same frame.
+  function scheduleDisplay() {
+    if (displayRaf.current != null) return
+    displayRaf.current = requestAnimationFrame(() => {
+      displayRaf.current = null
+      renderDisplay()
+      redrawOverlay()
+    })
   }
 
   function renderComposite() {
@@ -1075,11 +1418,32 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const cv  = canvasRef.current
     if (!gl || !pc || !vao || !fb || !cv) return
 
-    ensureTex(gl)
+    // Texture allocation only has to happen when the layer *structure* changes.
+    // Immutable layer updates hand us a fresh array reference, so a cheap identity
+    // check skips the whole-tree walk on every stroke-flush / view composite.
+    if (texEnsuredRef.current !== layersRef.current) {
+      ensureTex(gl)
+      texEnsuredRef.current = layersRef.current
+    }
 
     const { w, h } = docSize.current
 
     gl.bindVertexArray(vao)
+
+    // Dirty-rect compositing: while a stroke is in progress, every pass (clears
+    // included) is scissored to the region stamped this frame. Outside that
+    // rectangle each ping-pong attachment still holds the previous frame's value
+    // for the same pass — valid because the pass chain is identical across the
+    // stroke — so per-frame cost is O(brush area) instead of O(document area).
+    const sc = compositeScissor.current
+    if (sc) {
+      const sx = Math.max(0, Math.floor(sc.x0)), sy = Math.max(0, Math.floor(sc.y0))
+      const sw = Math.min(w, Math.ceil(sc.x1)) - sx, sh = Math.min(h, Math.ceil(sc.y1)) - sy
+      if (sw > 0 && sh > 0) {
+        gl.enable(gl.SCISSOR_TEST)
+        gl.scissor(sx, sy, sw, sh)   // FB row 0 = doc top row (VERT_COMP convention)
+      }
+    }
 
     // Clear the accumulator fb
     gl.bindFramebuffer(gl.FRAMEBUFFER, fb[0].fb)
@@ -1141,32 +1505,61 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
 
     const src = compositeInto(fb, layersRef.current, 0)
     lastSrc.current = src
+    gl.disable(gl.SCISSOR_TEST)
     gl.bindVertexArray(null)
+    compositeVersion.current++
 
     // Push the freshly composited result to the screen.
     renderDisplay()
   }
 
-  // ── Undo / Redo ───────────────────────────────────────────────────────────
-  function pushUndo(targetId?: string) {
-    const id = targetId ?? activeRef.current
-    if (!id) return
-    const px = readTex(id)
-    if (!px) return
-    undoStack.current.push({ id, px })
-    if (undoStack.current.length > 20) undoStack.current.shift()
+  // ── Undo / Redo (dirty-rect entries under a byte budget) ─────────────────
+  function trimUndo() {
+    let bytes = undoStack.current.reduce((s, e) => s + e.px.byteLength, 0)
+    while (undoStack.current.length > 1 &&
+           (undoStack.current.length > UNDO_MAX_ENTRIES || bytes > UNDO_MAX_BYTES)) {
+      bytes -= undoStack.current.shift()!.px.byteLength
+    }
+  }
+
+  function pushUndoEntry(e: UndoEntry) {
+    undoStack.current.push(e)
+    trimUndo()
     redoStack.current = []
     setUndoCount(undoStack.current.length)
     setRedoCount(0)
   }
 
+  // Full-layer snapshot — for operations that may touch the whole layer
+  // (fill, filters, adjustments, transforms, text…).
+  function pushUndo(targetId?: string) {
+    const id = targetId ?? activeRef.current
+    if (!id) return
+    const px = readTex(id)
+    if (!px) return
+    const { w, h } = docSize.current
+    pushUndoEntry({ id, x: 0, y: 0, w, h, px })
+  }
+
+  // Rect snapshot cut out of a pre-stroke full-layer snapshot: history for a
+  // brush stroke costs O(stroke area), so dozens of strokes fit where a single
+  // whole-document snapshot used to.
+  function pushUndoRect(id: string, snap: Uint8Array, bbox: { x0: number; y0: number; x1: number; y1: number }) {
+    const { w: docW, h: docH } = docSize.current
+    const x0 = Math.max(0, Math.floor(bbox.x0)), y0 = Math.max(0, Math.floor(bbox.y0))
+    const x1 = Math.min(docW, Math.ceil(bbox.x1)), y1 = Math.min(docH, Math.ceil(bbox.y1))
+    const w = x1 - x0, h = y1 - y0
+    if (w <= 0 || h <= 0) return
+    pushUndoEntry({ id, x: x0, y: y0, w, h, px: cropPixels(snap, docW, x0, y0, w, h) })
+  }
+
   function undo() {
     const entry = undoStack.current.pop()
     if (!entry) return
-    // Save current state to redo
-    const cur = readTex(entry.id)
-    if (cur) { redoStack.current.push({ id: entry.id, px: cur }) }
-    writeTex(entry.id, entry.px)
+    // Save the same rect's current pixels for redo.
+    const cur = readTexRect(entry.id, entry.x, entry.y, entry.w, entry.h)
+    if (cur) redoStack.current.push({ ...entry, px: cur })
+    writeTexRect(entry.id, entry.x, entry.y, entry.w, entry.h, entry.px)
     setUndoCount(undoStack.current.length)
     setRedoCount(redoStack.current.length)
   }
@@ -1174,15 +1567,17 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   function redo() {
     const entry = redoStack.current.pop()
     if (!entry) return
-    const cur = readTex(entry.id)
-    if (cur) { undoStack.current.push({ id: entry.id, px: cur }) }
-    writeTex(entry.id, entry.px)
+    const cur = readTexRect(entry.id, entry.x, entry.y, entry.w, entry.h)
+    if (cur) undoStack.current.push({ ...entry, px: cur })
+    writeTexRect(entry.id, entry.x, entry.y, entry.w, entry.h, entry.px)
     setUndoCount(undoStack.current.length)
     setRedoCount(redoStack.current.length)
   }
 
   // ── Adjustments / Filters ──────────────────────────────────────────────────
   const activeLayer = findInTree(layers, activeId)
+  // Status-bar zoom presets menu (MenuDropdown via the shared context-menu hook).
+  const zoomMenu = useContextMenu()
   // Leaving mask editing if the active layer has no mask.
   useEffect(() => { if (!activeLayer?.mask?.enabled && editingMask) setEditingMask(false) }, [activeId, activeLayer?.mask?.enabled]) // eslint-disable-line react-hooks/exhaustive-deps
   const adjustDirty = !adjustIsZero(adjust) || adjInvert || adjGray
@@ -1300,6 +1695,95 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     filtBaseRef.current = null
     setFilter(FILTER_ZERO)
   }
+
+  // Run a filter against a base buffer, honouring the active selection (graded
+  // blend) exactly like Photoshop applies a filter within a selection.
+  function runFilterOnBase(fn: FilterFn, base: Uint8Array): Uint8Array | null {
+    const { w, h } = docSize.current
+    let result: Uint8Array
+    try { result = fn(base, w, h) } catch (e) { console.error('filter failed', e); return null }
+    const sel = selMask.current
+    if (sel) {
+      const out = new Uint8Array(base.length)
+      for (let p = 0; p < w * h; p++) {
+        const cov = sel[p] / 255, i = p * 4
+        if (cov <= 0) { out[i] = base[i]; out[i+1] = base[i+1]; out[i+2] = base[i+2]; out[i+3] = base[i+3]; continue }
+        if (cov >= 1) { out[i] = result[i]; out[i+1] = result[i+1]; out[i+2] = result[i+2]; out[i+3] = result[i+3]; continue }
+        for (let c = 0; c < 4; c++) out[i+c] = Math.round(base[i+c] * (1 - cov) + result[i+c] * cov)
+      }
+      result = out
+    }
+    return result
+  }
+
+  // One-click filter (no parameters): snapshot for undo, apply, upload.
+  function applyLayerFilter(fn: FilterFn) {
+    const id = activeRef.current; if (!id) return
+    const layer = findInTree(layersRef.current, id)
+    if (!layer || layer.locked || layer.children) return
+    const src = readTex(id); if (!src) return
+    const result = runFilterOnBase(fn, src); if (!result) return
+    pushUndo(id)
+    writeTex(id, result)
+  }
+
+  // ── Parametric filter dialog (floating window, live preview) ──────────────────
+  // `filterDialogBase` holds the untouched layer pixels captured on open; every
+  // preview and the final apply run the filter against this base, so dragging a
+  // slider never compounds. Cancel restores the base; OK commits with undo.
+  const filterDialogBase = useRef<{ id: string; px: Uint8Array } | null>(null)
+  const filterPreviewRaf = useRef<number | null>(null)
+
+  function openFilter(def: FilterDef) {
+    const id = activeRef.current; if (!id) return
+    const layer = findInTree(layersRef.current, id)
+    if (!layer || layer.locked || layer.children) return
+    if (def.params.length === 0) { applyLayerFilter(def.make(filterDefaults(def))); return }
+    const src = readTex(id); if (!src) return
+    const snap = new Uint8Array(src.length); snap.set(src)
+    filterDialogBase.current = { id, px: snap }
+    setFilterDialog({ def, values: filterDefaults(def), preview: true })
+  }
+
+  // Debounced on-canvas preview: apply the filter to the pristine base and upload
+  // it to the layer texture without touching undo history.
+  function previewFilter(values: Record<string, number>, on: boolean) {
+    const base = filterDialogBase.current
+    const dlg = filterDialogRef.current
+    if (!base || !dlg) return
+    if (filterPreviewRaf.current != null) { cancelAnimationFrame(filterPreviewRaf.current); filterPreviewRaf.current = null }
+    if (!on) { writeTex(base.id, base.px); return }   // preview off → show original
+    filterPreviewRaf.current = requestAnimationFrame(() => {
+      filterPreviewRaf.current = null
+      const result = runFilterOnBase(dlg.def.make(values), base.px)
+      if (result) writeTex(base.id, result)
+    })
+  }
+
+  function commitFilter() {
+    const base = filterDialogBase.current
+    const dlg = filterDialogRef.current
+    if (!base || !dlg) { closeFilterDialog(false); return }
+    const result = runFilterOnBase(dlg.def.make(dlg.values), base.px)
+    writeTex(base.id, base.px)   // restore, so pushUndo snapshots the true original
+    pushUndo(base.id)
+    if (result) writeTex(base.id, result)
+    closeFilterDialog(true)
+  }
+
+  function closeFilterDialog(committed: boolean) {
+    const base = filterDialogBase.current
+    if (!committed && base) writeTex(base.id, base.px)   // cancel → restore original
+    if (filterPreviewRaf.current != null) { cancelAnimationFrame(filterPreviewRaf.current); filterPreviewRaf.current = null }
+    filterDialogBase.current = null
+    setFilterDialog(null)
+  }
+
+  // Kick off the first on-canvas preview when a filter dialog opens.
+  useEffect(() => {
+    if (filterDialog) previewFilter(filterDialog.values, filterDialog.preview)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterDialog?.def.id])
   useEffect(() => {
     const id = activeRef.current; if (!id) return
     const layer = findInTree(layersRef.current, id)
@@ -1396,7 +1880,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const fA = Math.round(255 * boRef.current / 100)
     if (tR===fR && tG===fG && tB===fB && tA===fA) return
 
-    const TOL = 25
+    const TOL = wandTolRef.current
     const match = (i: number) =>
       Math.abs(px[i]-tR)<=TOL && Math.abs(px[i+1]-tG)<=TOL &&
       Math.abs(px[i+2]-tB)<=TOL && Math.abs(px[i+3]-tA)<=TOL
@@ -1411,7 +1895,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       const x    = pos % w
       const y    = Math.floor(pos / w)
       if (visited[pos]) continue
-      if (sel && !sel[pos]) continue   // confine fill to the active selection
+      if (sel && sel[pos] < 128) continue   // confine fill to the active selection
       const i = pos * 4
       if (!match(i)) continue
       visited[pos] = 1
@@ -1426,27 +1910,108 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   }
 
   // ── Selections (rectangle · ellipse · lasso · magic wand) ───────────────────
+  // Boolean combine mode captured at pointer-down (Shift = add, Alt = subtract,
+  // Shift+Alt = intersect), applied when the new shape commits.
+  const selModeRef = useRef<'replace' | 'add' | 'sub' | 'intersect'>('replace')
+  function selModeFromEvent(e: { shiftKey: boolean; altKey: boolean }): 'replace' | 'add' | 'sub' | 'intersect' {
+    if (e.shiftKey && e.altKey) return 'intersect'
+    if (e.shiftKey) return 'add'
+    if (e.altKey) return 'sub'
+    return 'replace'
+  }
+  function combineSelection(next: Uint8Array): Uint8Array {
+    const prev = selMask.current
+    const mode = selModeRef.current
+    if (!prev || mode === 'replace') return next
+    const out = new Uint8Array(next.length)
+    if (mode === 'add')            for (let i = 0; i < out.length; i++) out[i] = Math.max(prev[i], next[i])
+    else if (mode === 'sub')       for (let i = 0; i < out.length; i++) out[i] = Math.min(prev[i], 255 - next[i])
+    else /* intersect */           for (let i = 0; i < out.length; i++) out[i] = Math.min(prev[i], next[i])
+    return out
+  }
+
   function rebuildSelCanvas() {
     const m = selMask.current
     const { w, h } = docSize.current
-    if (!m) { selCanvas.current = null; return }
+    if (!m) { selCanvas.current = null; selPathRef.current = null; return }
     const cv = selCanvas.current ?? document.createElement('canvas')
     cv.width = w; cv.height = h
     const ctx = cv.getContext('2d')!
     const img = ctx.createImageData(w, h); const d = img.data
-    for (let p = 0; p < m.length; p++) { if (m[p]) { const o=p*4; d[o]=90; d[o+1]=160; d[o+2]=255; d[o+3]=70 } }
+    // Graded tint: a feathered mask shows a proportionally lighter overlay.
+    for (let p = 0; p < m.length; p++) { const v = m[p]; if (v) { const o=p*4; d[o]=90; d[o+1]=160; d[o+2]=255; d[o+3]=(v*52/255)|0 } }
     ctx.putImageData(img, 0, 0)
     selCanvas.current = cv
+    selPathRef.current = buildSelOutline(m, w, h)   // marching-ants outline
   }
   function setSelectionMask(mask: Uint8Array | null) {
     // empty mask → treat as no selection
     if (mask && !mask.some(v => v)) mask = null
+    if (!mask && selMask.current) lastSelMask.current = selMask.current  // for "Reselect"
     selMask.current = mask
     rebuildSelCanvas()
     setHasSel(!!mask)
     redrawOverlay()
   }
   function deselect() { setSelectionMask(null); setSelection(null) }
+  function reselect() { if (!selMask.current && lastSelMask.current) setSelectionMask(lastSelMask.current) }
+  function selectAll() {
+    const { w, h } = docSize.current
+    const m = new Uint8Array(w * h); m.fill(255)
+    selModeRef.current = 'replace'
+    setSelectionMask(m)
+  }
+  function invertSelection() {
+    const { w, h } = docSize.current
+    const prev = selMask.current
+    const m = new Uint8Array(w * h)
+    if (prev) { for (let i = 0; i < m.length; i++) m[i] = 255 - prev[i] } else m.fill(255)
+    setSelectionMask(m)
+  }
+  // Selection from the active layer's alpha (graded — soft edges select softly).
+  function selectFromAlpha() {
+    const id = activeRef.current; if (!id) return
+    const px = readTex(id); if (!px) return
+    const { w, h } = docSize.current
+    const m = new Uint8Array(w * h)
+    for (let p = 0; p < m.length; p++) m[p] = px[p * 4 + 3]
+    selModeRef.current = 'replace'
+    setSelectionMask(m)
+  }
+  function growSelection(r: number)   { const m = selMask.current; if (!m) return; const { w, h } = docSize.current; setSelectionMask(maskMorph(m, w, h, r, true)) }
+  function shrinkSelection(r: number) { const m = selMask.current; if (!m) return; const { w, h } = docSize.current; setSelectionMask(maskMorph(m, w, h, r, false)) }
+  function featherSelection(r: number){ const m = selMask.current; if (!m) return; const { w, h } = docSize.current; setSelectionMask(maskBlur(m, w, h, r)) }
+
+  // Fill the selection (or the whole layer when none) with the foreground colour,
+  // honouring graded (feathered) selection coverage. Clear = erase alpha alike.
+  function fillSelection(clear: boolean) {
+    const id = activeRef.current; if (!id) return
+    const layer = findInTree(layersRef.current, id)
+    if (!layer || layer.locked || layer.children) return
+    const px = readTex(id); if (!px) return
+    pushUndo(id)
+    const sel = selMask.current
+    const [fR, fG, fB] = hexToRgb(fgRef.current)
+    const opac = boRef.current / 100
+    for (let p = 0; p < px.length / 4; p++) {
+      const cov = sel ? sel[p] / 255 : 1
+      if (cov <= 0) continue
+      const i = p * 4
+      if (clear) {
+        px[i + 3] = Math.round(px[i + 3] * (1 - cov))
+        continue
+      }
+      const sA = cov * opac
+      const dA = px[i + 3] / 255
+      const outA = sA + dA * (1 - sA)
+      if (outA < 0.0001) { px[i + 3] = 0; continue }
+      px[i]     = Math.round((fR * sA + px[i]     * dA * (1 - sA)) / outA)
+      px[i + 1] = Math.round((fG * sA + px[i + 1] * dA * (1 - sA)) / outA)
+      px[i + 2] = Math.round((fB * sA + px[i + 2] * dA * (1 - sA)) / outA)
+      px[i + 3] = Math.round(outA * 255)
+    }
+    writeTex(id, px)
+  }
 
   function commitShapeSelection(rect: {x:number;y:number;w:number;h:number}, ellipse: boolean) {
     const { w, h } = docSize.current
@@ -1461,7 +2026,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       for (let y=y0;y<y1;y++) for (let x=x0;x<x1;x++) m[y*w+x]=255
     }
     setSelection(null)
-    setSelectionMask(m)
+    setSelectionMask(combineSelection(m))
   }
   function commitLasso(pts: {x:number;y:number}[]) {
     const { w, h } = docSize.current
@@ -1476,7 +2041,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       xs.sort((p,q)=>p-q)
       for (let k=0;k+1<xs.length;k+=2){ const xa=Math.max(0,Math.ceil(xs[k])), xb=Math.min(w-1,Math.floor(xs[k+1])); for(let x=xa;x<=xb;x++) m[y*w+x]=255 }
     }
-    setSelectionMask(m)
+    setSelectionMask(combineSelection(m))
   }
   function magicSelect(cx: number, cy: number) {
     const id = activeRef.current; if (!id) return
@@ -1484,18 +2049,29 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const { w, h } = docSize.current
     const [sx, sy] = screenToDoc(cx, cy)
     if (sx<0||sx>=w||sy<0||sy>=h) return
-    const ti=(sy*w+sx)*4, tR=px[ti],tG=px[ti+1],tB=px[ti+2],tA=px[ti+3], TOL=32
-    const m = new Uint8Array(w*h), vis = new Uint8Array(w*h)
-    const q=[sx+sy*w]; let head=0
-    while (head<q.length){ const pos=q[head++]; if(vis[pos])continue; const i=pos*4
-      if(Math.abs(px[i]-tR)>TOL||Math.abs(px[i+1]-tG)>TOL||Math.abs(px[i+2]-tB)>TOL||Math.abs(px[i+3]-tA)>TOL) continue
-      vis[pos]=1; m[pos]=255; const x=pos%w,y=(pos/w)|0
-      if(x+1<w)q.push(pos+1); if(x-1>=0)q.push(pos-1); if(y+1<h)q.push(pos+w); if(y-1>=0)q.push(pos-w)
+    const ti=(sy*w+sx)*4, tR=px[ti],tG=px[ti+1],tB=px[ti+2],tA=px[ti+3]
+    const TOL = wandTolRef.current
+    const m = new Uint8Array(w*h)
+    const match = (i: number) =>
+      Math.abs(px[i]-tR)<=TOL && Math.abs(px[i+1]-tG)<=TOL &&
+      Math.abs(px[i+2]-tB)<=TOL && Math.abs(px[i+3]-tA)<=TOL
+    if (wandContigRef.current) {
+      const vis = new Uint8Array(w*h)
+      const q=[sx+sy*w]; let head=0
+      while (head<q.length){ const pos=q[head++]; if(vis[pos])continue
+        if(!match(pos*4)) continue
+        vis[pos]=1; m[pos]=255; const x=pos%w,y=(pos/w)|0
+        if(x+1<w)q.push(pos+1); if(x-1>=0)q.push(pos-1); if(y+1<h)q.push(pos+w); if(y-1>=0)q.push(pos-w)
+      }
+    } else {
+      // Global select-by-colour: every matching pixel in the layer.
+      for (let pos = 0; pos < m.length; pos++) if (match(pos*4)) m[pos]=255
     }
-    setSelectionMask(m)
+    setSelectionMask(combineSelection(m))
   }
 
-  // Draw the active selection (translucent tint) onto the overlay, view-transformed.
+  // Draw the active selection: translucent tint + marching-ants outline (black
+  // underlay + animated white dashes), all view-transformed in one save/restore.
   function drawSelectionOverlay(ctx: CanvasRenderingContext2D) {
     const cv = selCanvas.current; if (!cv) return
     const vs = vsRef.current, rot = rotRef.current, { w, h } = viewSizeRef.current
@@ -1504,15 +2080,106 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     ctx.translate(vs.panX, vs.panY); ctx.scale(vs.zoom, vs.zoom)
     ctx.imageSmoothingEnabled = false
     ctx.drawImage(cv, 0, 0)
+    const path = selPathRef.current
+    if (path) {
+      const lw = 1 / Math.max(vs.zoom, 0.001)
+      ctx.lineWidth = lw
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)'
+      ctx.setLineDash([])
+      ctx.stroke(path)
+      ctx.strokeStyle = '#ffffff'
+      ctx.setLineDash([4 * lw, 4 * lw])
+      ctx.lineDashOffset = -antsPhase.current * lw
+      ctx.stroke(path)
+      ctx.setLineDash([])
+    }
     ctx.restore()
   }
+
+  // Pixel grid: doc-pixel boundaries, drawn only at high zoom where a document
+  // pixel spans ≥ 8 screen px (Photoshop-style). Honors pan/zoom/rotation.
+  function drawPixelGrid(ctx: CanvasRenderingContext2D) {
+    const vs = vsRef.current
+    if (!pixelGridRef.current || vs.zoom < 8) return
+    const { w: vw, h: vh } = viewSizeRef.current
+    const { w: dw, h: dh } = docSize.current
+    // Visible doc range: corners of the viewport mapped to doc space.
+    let minX = dw, minY = dh, maxX = 0, maxY = 0
+    for (const [cx, cy] of [[0,0],[vw,0],[0,vh],[vw,vh]] as [number,number][]) {
+      const [dx, dy] = screenToDoc(cx, cy)
+      minX = Math.min(minX, dx); maxX = Math.max(maxX, dx)
+      minY = Math.min(minY, dy); maxY = Math.max(maxY, dy)
+    }
+    const x0 = Math.max(0, Math.floor(minX)), x1 = Math.min(dw, Math.ceil(maxX))
+    const y0 = Math.max(0, Math.floor(minY)), y1 = Math.min(dh, Math.ceil(maxY))
+    if (x1 <= x0 || y1 <= y0) return
+    const rot = rotRef.current
+    ctx.save()
+    ctx.translate(vw/2, vh/2); ctx.rotate(rot); ctx.translate(-vw/2, -vh/2)
+    ctx.translate(vs.panX, vs.panY); ctx.scale(vs.zoom, vs.zoom)
+    ctx.lineWidth = 1 / vs.zoom
+    ctx.strokeStyle = 'rgba(128,128,128,0.35)'
+    ctx.beginPath()
+    for (let x = x0; x <= x1; x++) { ctx.moveTo(x, y0); ctx.lineTo(x, y1) }
+    for (let y = y0; y <= y1; y++) { ctx.moveTo(x0, y); ctx.lineTo(x1, y) }
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  // Crop tool overlay: darken everything outside the pending crop, plus the
+  // rectangle, its corner handles and a rule-of-thirds grid.
+  function drawCropOverlay(ctx: CanvasRenderingContext2D) {
+    const r = cropRectRef.current
+    if (!r || toolRef.current !== 'crop') return
+    const { w: vw, h: vh } = viewSizeRef.current
+    const c0 = docToScreen(r.x, r.y), c1 = docToScreen(r.x + r.w, r.y)
+    const c2 = docToScreen(r.x + r.w, r.y + r.h), c3 = docToScreen(r.x, r.y + r.h)
+    // Dark veil outside (even-odd fill: viewport minus crop quad).
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(0, 0, vw, vh)
+    ctx.moveTo(c0[0], c0[1]); ctx.lineTo(c1[0], c1[1]); ctx.lineTo(c2[0], c2[1]); ctx.lineTo(c3[0], c3[1]); ctx.closePath()
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'
+    ctx.fill('evenodd')
+    // Border.
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.25
+    ctx.beginPath(); ctx.moveTo(c0[0], c0[1]); ctx.lineTo(c1[0], c1[1]); ctx.lineTo(c2[0], c2[1]); ctx.lineTo(c3[0], c3[1]); ctx.closePath(); ctx.stroke()
+    // Rule of thirds.
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1
+    ctx.beginPath()
+    for (const f of [1/3, 2/3]) {
+      const a = docToScreen(r.x + r.w * f, r.y), b = docToScreen(r.x + r.w * f, r.y + r.h)
+      ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1])
+      const c = docToScreen(r.x, r.y + r.h * f), d = docToScreen(r.x + r.w, r.y + r.h * f)
+      ctx.moveTo(c[0], c[1]); ctx.lineTo(d[0], d[1])
+    }
+    ctx.stroke()
+    // Corner handles.
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#3a7bd5'
+    for (const [hx, hy] of [c0, c1, c2, c3]) { ctx.beginPath(); ctx.rect(hx-4, hy-4, 8, 8); ctx.fill(); ctx.stroke() }
+    ctx.restore()
+  }
+
   function redrawOverlay() {
     const ov = overlayRef.current; if (!ov) return
     const ctx = ov.getContext('2d'); if (!ctx) return
     ctx.clearRect(0,0,ov.width,ov.height)
+    drawPixelGrid(ctx)
     drawSelectionOverlay(ctx)
     drawTransformOverlay(ctx)
+    drawCropOverlay(ctx)
   }
+
+  // Marching-ants animation: advance the dash phase on a light timer while a
+  // selection is active (nothing runs when there is no selection).
+  useEffect(() => {
+    if (!hasSel) return
+    const iv = setInterval(() => {
+      antsPhase.current = (antsPhase.current + 1) % 8
+      if (!isDrawing.current) redrawOverlay()
+    }, 120)
+    return () => clearInterval(iv)
+  }, [hasSel]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Free transform (move / scale / rotate the active layer) ─────────────────
   function xfPoint(dx: number, dy: number): [number,number] {
@@ -1530,7 +2197,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const src=document.createElement('canvas'); src.width=w; src.height=h
     src.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(snap), w, h), 0, 0)
     const dst=document.createElement('canvas'); dst.width=w; dst.height=h
-    const c=dst.getContext('2d')!
+    const c=dst.getContext('2d', { willReadFrequently: true })!
     const { tx,ty,scale,rot } = xf.current, px=w/2, py=h/2
     c.translate(px+tx, py+ty); c.rotate(rot); c.scale(scale,scale); c.translate(-px,-py)
     c.drawImage(src, 0, 0)
@@ -1565,7 +2232,8 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   }
 
   // ── Eyedropper ────────────────────────────────────────────────────────────
-  function pickColor(cx: number, cy: number) {
+  // keepTool: Alt+click sampling from the brush/eraser must not switch tools.
+  function pickColor(cx: number, cy: number, keepTool = false) {
     const gl = glRef.current
     const fb = fbPair.current
     if (!gl || !fb) return
@@ -1580,11 +2248,11 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     const picked = rgbToHex(px[0], px[1], px[2])
     setFgColor(picked); pushColorHistory(picked)
-    setTool('brush')
+    if (!keepTool) setTool('brush')
   }
 
-  // ── Export PNG ────────────────────────────────────────────────────────────
-  function exportPng() {
+  // ── Export (PNG · JPEG) ───────────────────────────────────────────────────
+  function exportImage(format: 'png' | 'jpeg') {
     const gl = glRef.current
     const fb = fbPair.current
     if (!gl || !fb) return
@@ -1601,12 +2269,21 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     // readPixels reads from fb-bottom first; with VERT_COMP, fb-bottom = doc-top
     // so raw[0] = doc-top = Canvas2D row 0 → no flip needed
     const imgd = new ImageData(new Uint8ClampedArray(raw.buffer), w, h)
-    ctx2.putImageData(imgd, 0, 0)
+    if (format === 'jpeg') {
+      // JPEG has no alpha channel: composite over white first.
+      const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h
+      tmp.getContext('2d')!.putImageData(imgd, 0, 0)
+      ctx2.fillStyle = '#ffffff'; ctx2.fillRect(0, 0, w, h)
+      ctx2.drawImage(tmp, 0, 0)
+    } else {
+      ctx2.putImageData(imgd, 0, 0)
+    }
     const a = document.createElement('a')
-    a.download = (doc?.title ?? 'export') + '.png'
-    a.href = c2.toDataURL('image/png')
+    a.download = (doc?.title ?? 'export') + (format === 'jpeg' ? '.jpg' : '.png')
+    a.href = format === 'jpeg' ? c2.toDataURL('image/jpeg', 0.92) : c2.toDataURL('image/png')
     a.click()
   }
+  function exportPng() { exportImage('png') }
 
   // Draw a downscaled snapshot of the composited document into the Navigator canvas.
   function drawNavThumb(canvas: HTMLCanvasElement) {
@@ -1646,7 +2323,10 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const ctx = ov.getContext('2d')
     if (!ctx) return
     ctx.clearRect(0, 0, ov.width, ov.height)
+    drawPixelGrid(ctx)
     drawSelectionOverlay(ctx)   // active pixel selection (always visible)
+    drawTransformOverlay(ctx)   // free-transform box stays visible while hovering
+    drawCropOverlay(ctx)
     // Lasso in-progress polyline (doc points → screen, plus the live cursor segment)
     if (lassoPts.current && lassoPts.current.length) {
       ctx.beginPath()
@@ -1711,6 +2391,8 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     }
     if (!strokeCanvasRef.current) {
       strokeCanvasRef.current = document.createElement('canvas')
+      // First getContext fixes the flags: this canvas is read back every frame.
+      strokeCanvasRef.current.getContext('2d', { willReadFrequently: true })
     }
     const sc = strokeCanvasRef.current
     if (sc.width !== w || sc.height !== h) { sc.width = w; sc.height = h }
@@ -1730,33 +2412,43 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
 
   // Upload only the region of the stroke canvas touched since the last call, so a
   // brush dab costs an O(brush-size) readback/upload instead of the full document.
-  function uploadStrokeDirty(gl: WebGL2RenderingContext) {
+  // Returns the uploaded rectangle (doc-space) so the caller can scissor the
+  // recomposite to the same region, or null when nothing changed.
+  function uploadStrokeDirty(gl: WebGL2RenderingContext): { x0: number; y0: number; x1: number; y1: number } | null {
     const sc = strokeCanvasRef.current
     const tex = strokeTexRef.current
-    if (!sc || !tex) return
+    if (!sc || !tex) return null
     const { w, h } = docSize.current
     const d = strokeDirty.current
     strokeDirty.current = null
-    if (!d) return
+    if (!d) return null
     const x0 = Math.max(0, Math.floor(d.x0)), y0 = Math.max(0, Math.floor(d.y0))
     const x1 = Math.min(w, Math.ceil(d.x1)),  y1 = Math.min(h, Math.ceil(d.y1))
     const ww = x1 - x0, hh = y1 - y0
-    if (ww <= 0 || hh <= 0) return
+    if (ww <= 0 || hh <= 0) return null
     const ctx = sc.getContext('2d')!
     const imgd = ctx.getImageData(x0, y0, ww, hh) // RGBA → 4-byte aligned rows
     gl.bindTexture(gl.TEXTURE_2D, tex)
     gl.texSubImage2D(gl.TEXTURE_2D, 0, x0, y0, ww, hh, gl.RGBA, gl.UNSIGNED_BYTE, imgd.data)
+    return { x0, y0, x1, y1 }
   }
 
   // Coalesce all stamping done this frame into a single GPU upload + recomposite.
+  // The first frame of a stroke recomposites the whole document (the pass chain
+  // gains the stroke-preview pass, so the ping-pong baseline must be rebuilt in
+  // full); every subsequent frame scissors the recomposite to just the region
+  // stamped that frame — the rest of the document is untouched and retained.
   function scheduleStrokeFlush() {
     if (strokeRaf.current != null) return
     strokeRaf.current = requestAnimationFrame(() => {
       strokeRaf.current = null
       const gl = glRef.current
       if (!gl) return
-      uploadStrokeDirty(gl)
+      const rect = uploadStrokeDirty(gl)
+      compositeScissor.current = strokeFlushes.current > 0 ? rect : null
       renderComposite()
+      compositeScissor.current = null
+      strokeFlushes.current++
     })
   }
 
@@ -1866,7 +2558,10 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   // points added since the last call are stamped, so each pointermove costs
   // O(new points) rather than O(stroke length) — this is what keeps long, fast
   // stylus strokes smooth instead of getting heavier as the stroke grows.
-  function stampStroke(erase: boolean, clear: boolean) {
+  // `final` includes the very last path segment: live stamping stays one segment
+  // behind the newest point so the Catmull-Rom curve through it is stamped only
+  // once its following control point is known (no re-stamp, no visible kink).
+  function stampStroke(erase: boolean, clear: boolean, final = false) {
     const sc = strokeCanvasRef.current
     if (!sc) return
     const pts = strokeDocPts.current
@@ -1884,7 +2579,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const color     = erase ? '#ffffff' : fgRef.current
     const baseRad   = Math.max(0.5, bsRef.current / 2)
     const strokeOpac= Math.min(1, boRef.current / 100)
-    const flow      = bp.flow
+    const flow      = Math.max(0.01, brushFlowRef.current / 100)
     // PRNG state persists across stamps so jitter stays continuous along the stroke.
     const rnd = () => { const s = (dabSeed.current * 1103515245 + 12345) & 0x7fffffff; dabSeed.current = s; return s / 0x7fffffff }
 
@@ -1917,26 +2612,41 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     // First dab at the very start of the stroke.
     if (lastDabIdx.current < 0) { place(pts[0].x, pts[0].y, pts[0].p); lastDabIdx.current = 0 }
 
-    // Walk only the segments added since the previous stamp, carrying the leftover
-    // arc-length so dab spacing stays uniform across the join.
-    for (let i = lastDabIdx.current + 1; i < pts.length; i++) {
-      const a = pts[i-1], b = pts[i]
-      const dx = b.x - a.x, dy = b.y - a.y
-      const segLen = Math.hypot(dx, dy)
-      if (segLen < 1e-4) continue
-      const avgP    = (a.p + b.p) / 2
+    // Walk only the segments added since the previous stamp. Each segment is a
+    // Catmull-Rom arc through its neighbours (falls back to a chord at the ends),
+    // subdivided into a short polyline that the dab spacer walks with its
+    // arc-length carry — so the painted line is a smooth curve, not chords.
+    const last = final ? pts.length - 1 : pts.length - 2
+    for (let i = lastDabIdx.current + 1; i <= last; i++) {
+      const p0 = pts[i - 2] ?? pts[i - 1], p1 = pts[i - 1], p2 = pts[i], p3 = pts[i + 1] ?? pts[i]
+      const chord = Math.hypot(p2.x - p1.x, p2.y - p1.y)
+      if (chord < 1e-4) continue
+      const steps = Math.min(24, Math.max(1, Math.ceil(chord / 3)))
+      let px = p1.x, py = p1.y
+      const avgP    = (p1.p + p2.p) / 2
       const spacing = Math.max(0.5, bp.spacing * radAt(avgP) * 2) // step in px (radius→diameter scale)
-      let dist = dabCarry.current
-      while (dist < segLen) {
-        if (dist >= 0) {
-          const t = dist / segLen
-          place(a.x + dx*t, a.y + dy*t, a.p + (b.p - a.p)*t)
+      for (let s = 1; s <= steps; s++) {
+        const t = s / steps, t2 = t * t, t3 = t2 * t
+        const cx = 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2*p0.x - 5*p1.x + 4*p2.x - p3.x) * t2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x) * t3)
+        const cy = 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2*p0.y - 5*p1.y + 4*p2.y - p3.y) * t2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y) * t3)
+        const cp = p1.p + (p2.p - p1.p) * t
+        const dx = cx - px, dy = cy - py
+        const segLen = Math.hypot(dx, dy)
+        if (segLen >= 1e-4) {
+          let dist = dabCarry.current
+          while (dist < segLen) {
+            if (dist >= 0) {
+              const f = dist / segLen
+              place(px + dx * f, py + dy * f, cp)
+            }
+            dist += spacing
+          }
+          dabCarry.current = dist - segLen
         }
-        dist += spacing
+        px = cx; py = cy
       }
-      dabCarry.current = dist - segLen
     }
-    lastDabIdx.current = pts.length - 1
+    lastDabIdx.current = Math.max(lastDabIdx.current, last)
   }
 
   // ── Input devices (mouse · finger · pen/Apple Pencil) ───────────────────────
@@ -1985,22 +2695,29 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   }
   const inputPressureRef = useRef(0.65)
 
-  // Update the on-screen device indicator — once per pointer event, not per
-  // coalesced sample, to avoid a burst of React state updates.
-  function reportInput(e: React.PointerEvent) {
+  // Update the on-screen device indicator. The kind change is rare (commit
+  // immediately) but the pressure % is a cosmetic readout, so it is throttled to
+  // ~8 Hz: a React setState on every pointermove re-renders the whole editor and
+  // was a measurable drag while painting. `force` (pointer up/down) flushes it.
+  const lastPressurePush = useRef(0)
+  function reportInput(e: React.PointerEvent, force = false) {
     const kind = e.pointerType === 'pen' ? 'pen' : e.pointerType === 'touch' ? 'touch' : 'mouse'
     if (inputKindRef.current !== kind) { inputKindRef.current = kind; setInputKind(kind) }
     const p = kind === 'pen'
       ? Math.max(0.05, Math.min(1, e.pressure || 0.5))
       : inputPressureRef.current
     inputPressureRef.current = p
-    setInputPressure(p)
+    const now = e.timeStamp || performance.now()
+    if (force || now - lastPressurePush.current > 120) {
+      lastPressurePush.current = now
+      setInputPressure(p)
+    }
   }
   const inputKindRef = useRef<'pen'|'touch'|'mouse'|null>(null)
 
   // Pressure for the initial pointerdown sample (also primes the indicator).
   function getEffectivePressure(e: React.PointerEvent): number {
-    reportInput(e)
+    reportInput(e, true)   // pointerdown → flush the indicator immediately
     velPrev.current = null
     penTiltRef.current = e.pointerType === 'pen' ? tiltFactor(e.nativeEvent as PointerEvent) : 0
     const now = (e.nativeEvent as PointerEvent).timeStamp || 0
@@ -2021,9 +2738,12 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     rawPt.current    = { x: dx, y: dy }
     strokeDocPts.current = [{ x: dx, y: dy, p: pressure }]
     strokePreviewRef.current = { layerId: id, isErase: erase }
+    strokeFlushes.current = 0       // first composite is full (establishes baseline)
+    compositeScissor.current = null
     stampStroke(erase, true)      // clear + first dab
     uploadStrokeDirty(gl)          // immediate upload for tap responsiveness
     renderComposite()
+    strokeFlushes.current = 1
   }
 
   // ── Stroke stabilizer ──────────────────────────────────────────────────────
@@ -2096,58 +2816,68 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     // Stabilizer catch-up: extend the lagging line to the final cursor position.
     const lastP = pts[pts.length - 1]?.p ?? 1
     stabilizerCatchUp((x, y) => strokeDocPts.current.push({ x, y, p: lastP }))
-    // Cancel any pending frame and stamp whatever tail hasn't been stamped yet, so
-    // the offscreen canvas holds the complete stroke before we read it back.
+    // Cancel any pending frame and stamp whatever tail hasn't been stamped yet
+    // (including the final spline segment), so the offscreen canvas holds the
+    // complete stroke before we read it back.
     if (strokeRaf.current != null) { cancelAnimationFrame(strokeRaf.current); strokeRaf.current = null }
-    stampStroke(erase, false)
+    stampStroke(erase, false, true)
 
     const { w: docW, h: docH } = docSize.current
     const ctx = sc.getContext('2d')!
+
+    // Restrict everything (readback, blend, undo snapshot) to the rectangle the
+    // stroke actually touched: a small dab on a large canvas costs O(brush-area).
+    const b = strokeBBox.current
+    const bx0 = b ? Math.max(0, Math.floor(b.x0)) : 0
+    const by0 = b ? Math.max(0, Math.floor(b.y0)) : 0
+    const bx1 = b ? Math.min(docW, Math.ceil(b.x1)) : docW
+    const by1 = b ? Math.min(docH, Math.ceil(b.y1)) : docH
+    const bw = bx1 - bx0, bh = by1 - by0
+    if (bw <= 0 || bh <= 0) { clearBrushStroke(); return }
+
     // Canvas2D data is top-to-bottom; with VERT_COMP, textures store doc-top at t=0 → no Y-flip needed
-    const rawStroke = ctx.getImageData(0, 0, docW, docH).data
-    const strokeImg = new Uint8Array(rawStroke.buffer)
+    const strokeImg = new Uint8Array(ctx.getImageData(bx0, by0, bw, bh).data.buffer)
 
     const currentPx = readTex(id)
     const sel = selMask.current
     const lockA = !!activeLayer.lockAlpha   // lock transparent pixels → preserve alpha
     if (currentPx) {
-      // Restrict the blend to the rectangle the stroke actually touched, so a small
-      // dab on a large canvas costs O(brush-area) instead of O(document-area).
-      const b = strokeBBox.current
-      const bx0 = b ? Math.max(0, Math.floor(b.x0)) : 0
-      const by0 = b ? Math.max(0, Math.floor(b.y0)) : 0
-      const bx1 = b ? Math.min(docW, Math.ceil(b.x1)) : docW
-      const by1 = b ? Math.min(docH, Math.ceil(b.y1)) : docH
+      // History: the pre-stroke pixels of the touched rect only (dirty-rect undo).
+      const undoPx = cropPixels(currentPx, docW, bx0, by0, bw, bh)
       if (erase && !lockA) {   // transparency locked → erasing can't change alpha
-        for (let y = by0; y < by1; y++) {
-          for (let x = bx0; x < bx1; x++) {
-            const i = (y * docW + x) << 2
-            if (sel && !sel[i>>2]) continue
-            const ea = strokeImg[i+3] / 255
-            if (ea > 0) currentPx[i+3] = Math.max(0, currentPx[i+3] - Math.round(ea * 255))
+        for (let y = 0; y < bh; y++) {
+          for (let x = 0; x < bw; x++) {
+            const di = ((by0 + y) * docW + (bx0 + x)) << 2
+            const cov = sel ? sel[di >> 2] / 255 : 1   // graded (feathered) selection
+            if (cov <= 0) continue
+            const ea = (strokeImg[(y * bw + x) * 4 + 3] / 255) * cov
+            if (ea > 0) currentPx[di+3] = Math.max(0, currentPx[di+3] - Math.round(ea * 255))
           }
         }
       } else if (!erase) {
-        for (let y = by0; y < by1; y++) {
-          for (let x = bx0; x < bx1; x++) {
-            const i = (y * docW + x) << 2
-            if (sel && !sel[i>>2]) continue
-            const sA = strokeImg[i+3] / 255
+        for (let y = 0; y < bh; y++) {
+          for (let x = 0; x < bw; x++) {
+            const si = (y * bw + x) << 2
+            const di = ((by0 + y) * docW + (bx0 + x)) << 2
+            const cov = sel ? sel[di >> 2] / 255 : 1
+            if (cov <= 0) continue
+            const sA = (strokeImg[si+3] / 255) * cov
             if (sA < 0.001) continue
-            const origA = currentPx[i+3]
+            const origA = currentPx[di+3]
             if (lockA && origA === 0) continue   // no painting onto transparent areas
-            const sR = strokeImg[i], sG = strokeImg[i+1], sB = strokeImg[i+2]
+            const sR = strokeImg[si], sG = strokeImg[si+1], sB = strokeImg[si+2]
             const dA = origA / 255
             const outA = sA + dA * (1 - sA)
-            if (outA < 0.0001) { currentPx[i+3] = 0; continue }
-            currentPx[i]   = Math.round((sR*sA + currentPx[i]  *dA*(1-sA))/outA)
-            currentPx[i+1] = Math.round((sG*sA + currentPx[i+1]*dA*(1-sA))/outA)
-            currentPx[i+2] = Math.round((sB*sA + currentPx[i+2]*dA*(1-sA))/outA)
-            currentPx[i+3] = lockA ? origA : Math.round(outA * 255)   // keep alpha when locked
+            if (outA < 0.0001) { currentPx[di+3] = 0; continue }
+            currentPx[di]   = Math.round((sR*sA + currentPx[di]  *dA*(1-sA))/outA)
+            currentPx[di+1] = Math.round((sG*sA + currentPx[di+1]*dA*(1-sA))/outA)
+            currentPx[di+2] = Math.round((sB*sA + currentPx[di+2]*dA*(1-sA))/outA)
+            currentPx[di+3] = lockA ? origA : Math.round(outA * 255)   // keep alpha when locked
           }
         }
       }
       writeTex(id, currentPx)
+      pushUndoEntry({ id, x: bx0, y: by0, w: bw, h: bh, px: undoPx })
     }
     clearBrushStroke()
   }
@@ -2160,6 +2890,8 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     dabCarry.current   = 0
     strokeDirty.current = null
     strokeBBox.current  = null
+    compositeScissor.current = null
+    strokeFlushes.current = 0
     // Clear strokeTex to transparent so it doesn't appear in next renderComposite
     const gl  = glRef.current
     const tex = strokeTexRef.current
@@ -2168,6 +2900,9 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       const ctx = sc.getContext('2d')!
       ctx.clearRect(0, 0, sc.width, sc.height)
       uploadStrokeTex(gl, sc.width, sc.height)
+      // Preview pass is gone now (strokePreviewRef nulled above) → recomposite once
+      // so the on-screen result is the baked pixels only, not baked + preview.
+      renderComposite()
     }
   }
 
@@ -2179,15 +2914,28 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const sc = strokeCanvasRef.current, ms = maskStroke.current, mb = maskBase.current
     if (!sc || !ms || !mb) return
     const { w, h } = docSize.current
-    const stroke = sc.getContext('2d')!.getImageData(0, 0, w, h).data
-    const out = new Uint8Array(mb.length)
-    for (let i = 0; i < mb.length; i += 4) {
-      const a = stroke[i+3] / 255
-      let v = mb[i]
-      if (a > 0) v = ms.hide ? mb[i]*(1-a) : mb[i] + a*(255-mb[i])
-      out[i] = out[i+1] = out[i+2] = v; out[i+3] = 255
+    // Only the stroke's bounding box needs re-blending — each frame restarts from
+    // the base snapshot, so the region is the whole stroke so far, not the doc.
+    const b = strokeBBox.current
+    const bx0 = b ? Math.max(0, Math.floor(b.x0)) : 0
+    const by0 = b ? Math.max(0, Math.floor(b.y0)) : 0
+    const bx1 = b ? Math.min(w, Math.ceil(b.x1)) : w
+    const by1 = b ? Math.min(h, Math.ceil(b.y1)) : h
+    const bw = bx1 - bx0, bh = by1 - by0
+    if (bw <= 0 || bh <= 0) return
+    const stroke = sc.getContext('2d')!.getImageData(bx0, by0, bw, bh).data
+    const out = new Uint8Array(bw * bh * 4)
+    for (let y = 0; y < bh; y++) {
+      for (let x = 0; x < bw; x++) {
+        const si = (y * bw + x) * 4
+        const di = ((by0 + y) * w + (bx0 + x)) * 4
+        const a = stroke[si+3] / 255
+        let v = mb[di]
+        if (a > 0) v = ms.hide ? v*(1-a) : v + a*(255-v)
+        out[si] = out[si+1] = out[si+2] = v; out[si+3] = 255
+      }
     }
-    writeTex(ms.maskId, out)
+    writeTexRect(ms.maskId, bx0, by0, bw, bh, out)
   }
   function initMaskStroke(cx: number, cy: number, erase: boolean, pressure: number) {
     const gl = glRef.current; if (!gl) return
@@ -2219,11 +2967,11 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       // Stabilizer catch-up: complete the line to the final cursor before committing.
       const lastP = strokeDocPts.current[strokeDocPts.current.length - 1]?.p ?? 1
       stabilizerCatchUp((x, y) => strokeDocPts.current.push({ x, y, p: lastP }))
-      stampStroke(false, false)
-      const orig = new Uint8Array(mb.length); orig.set(mb)
-      writeTex(ms.maskId, orig)   // restore base so undo captures the original mask
-      pushUndo(ms.maskId)
+      stampStroke(false, false, true)
       blendMaskPreview()          // commit final blended mask
+      // History = pre-stroke mask pixels of the touched rect (dirty-rect undo).
+      const b = strokeBBox.current
+      if (b) pushUndoRect(ms.maskId, mb, b)
     }
     clearMaskStroke()
   }
@@ -2235,14 +2983,11 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   }
 
   // Discard an in-progress stroke (e.g. a 2nd finger turned it into a gesture).
-  // The layer texture is untouched until merge, so we also drop the undo snapshot
-  // that initBrushStroke pushed so it doesn't leave a no-op undo step.
+  // The layer texture is untouched until merge and history is only pushed at
+  // merge time, so dropping the preview is all there is to do.
   function abortBrushStroke() {
     clearBrushStroke()
-    if (isDrawing.current && undoStack.current.length) {
-      undoStack.current.pop()
-      setUndoCount(undoStack.current.length)
-    }
+    clearMaskStroke()
     isDrawing.current = false
   }
 
@@ -2373,8 +3118,33 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const cx = e.clientX - rect.left, cy = e.clientY - rect.top
 
     const t = toolRef.current
-    if (t === 'hand') {
+    // Space held → temporary hand: pan regardless of the active tool.
+    if (t === 'hand' || spaceHeld.current) {
       dragPan.current = { sx: e.clientX, sy: e.clientY, px: vsRef.current.panX, py: vsRef.current.panY }
+      return
+    }
+    if (t === 'crop') {
+      const [dx, dy] = screenToDoc(cx, cy)
+      const r = cropRectRef.current
+      if (r) {
+        // Grab a corner handle (≤ 12 screen px) → resize; inside → move; else new.
+        const corners: [number, number, 'nw'|'ne'|'se'|'sw'][] = [
+          [r.x, r.y, 'nw'], [r.x + r.w, r.y, 'ne'], [r.x + r.w, r.y + r.h, 'se'], [r.x, r.y + r.h, 'sw'],
+        ]
+        for (const [hx, hy, mode] of corners) {
+          const [sx2, sy2] = docToScreen(hx, hy)
+          if (Math.hypot(sx2 - cx, sy2 - cy) <= 12) {
+            cropDrag.current = { mode, sx: dx, sy: dy, start: { ...r } }
+            return
+          }
+        }
+        if (dx >= r.x && dx <= r.x + r.w && dy >= r.y && dy <= r.y + r.h) {
+          cropDrag.current = { mode: 'move', sx: dx, sy: dy, start: { ...r } }
+          return
+        }
+      }
+      cropDrag.current = { mode: 'new', sx: dx, sy: dy, start: { x: dx, y: dy, w: 0, h: 0 } }
+      setCropRect({ x: dx, y: dy, w: 0, h: 0 })
       return
     }
     if (t === 'rotate') {
@@ -2394,7 +3164,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     }
     if (t === 'eyedrop') { pickColor(cx, cy); return }
     if (t === 'fill')    { pushUndo(); floodFill(cx, cy); return }
-    if (t === 'magic')   { magicSelect(cx, cy); return }
+    if (t === 'magic')   { selModeRef.current = selModeFromEvent(e); magicSelect(cx, cy); return }
     if (t === 'transform') {
       if (!xfActive.current) enterTransform()
       const [dxp,dyp] = screenToDoc(cx, cy)
@@ -2408,23 +3178,27 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       return
     }
     if (t === 'lasso') {
+      selModeRef.current = selModeFromEvent(e)
       const [dx, dy] = screenToDoc(cx, cy)
       lassoPts.current = [{ x: dx, y: dy }]
       return
     }
     if (t === 'rect-sel' || t === 'ellipse-sel') {
+      selModeRef.current = selModeFromEvent(e)
       const [dx, dy] = screenToDoc(cx, cy)
       selStart.current = { x: dx, y: dy }
       setSelection({ x: dx, y: dy, w: 0, h: 0 })
       return
     }
     if (t === 'brush' || t === 'eraser') {
+      // Alt+click = temporary eyedropper (sample without leaving the brush).
+      if (e.altKey) { pickColor(cx, cy, true); return }
       const al = findInTree(layersRef.current, activeRef.current!)
       if (editingMask && al?.mask?.enabled) {
         isDrawing.current = true
-        initMaskStroke(cx, cy, t === 'eraser', getEffectivePressure(e)) // undo handled on merge
+        initMaskStroke(cx, cy, t === 'eraser', getEffectivePressure(e)) // undo pushed on merge
       } else {
-        pushUndo()
+        // Undo history is pushed at merge time (dirty-rect snapshot of the stroke).
         isDrawing.current = true
         initBrushStroke(cx, cy, t === 'eraser', getEffectivePressure(e))
       }
@@ -2468,6 +3242,32 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
 
     // Pan is handled by global window listener
     if (dragPan.current) return
+
+    // Crop tool drag: create / move / resize the pending crop rectangle.
+    if (cropDrag.current && toolRef.current === 'crop') {
+      const [dx, dy] = screenToDoc(cx, cy)
+      const d = cropDrag.current
+      const { w: dw, h: dh } = docSize.current
+      const clampX = (v: number) => Math.max(0, Math.min(dw, v))
+      const clampY = (v: number) => Math.max(0, Math.min(dh, v))
+      if (d.mode === 'new') {
+        const x0 = clampX(Math.min(d.sx, dx)), y0 = clampY(Math.min(d.sy, dy))
+        const x1 = clampX(Math.max(d.sx, dx)), y1 = clampY(Math.max(d.sy, dy))
+        setCropRect({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 })
+      } else if (d.mode === 'move') {
+        const nx = Math.max(0, Math.min(dw - d.start.w, d.start.x + (dx - d.sx)))
+        const ny = Math.max(0, Math.min(dh - d.start.h, d.start.y + (dy - d.sy)))
+        setCropRect({ ...d.start, x: nx, y: ny })
+      } else {
+        // Corner resize: the opposite corner stays anchored.
+        const ax = d.mode === 'nw' || d.mode === 'sw' ? d.start.x + d.start.w : d.start.x
+        const ay = d.mode === 'nw' || d.mode === 'ne' ? d.start.y + d.start.h : d.start.y
+        const x0 = clampX(Math.min(ax, dx)), y0 = clampY(Math.min(ay, dy))
+        const x1 = clampX(Math.max(ax, dx)), y1 = clampY(Math.max(ay, dy))
+        setCropRect({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 })
+      }
+      return
+    }
 
     if (xfDrag.current && toolRef.current === 'transform') {
       const [dxp,dyp] = screenToDoc(cx, cy)
@@ -2537,58 +3337,120 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     dragPan.current   = null
     dragRot.current   = null
     xfDrag.current    = null
+    cropDrag.current  = null
     selStart.current  = null
     activePtrId.current = null
     velPrev.current   = null
     penTiltRef.current = 0
   }
 
-  function onWheel(e: React.WheelEvent) {
-    e.preventDefault()
-    const rect = canvasRef.current!.getBoundingClientRect()
-    const mx = e.clientX - rect.left, my = e.clientY - rect.top
-
-    if (e.ctrlKey || e.metaKey) {
-      zoomAtPoint(mx, my, e.deltaY < 0 ? 1.12 : 0.9)
-    } else {
-      setViewState(prev => ({ ...prev, panX: prev.panX-e.deltaX, panY: prev.panY-e.deltaY }))
+  // Wheel: Ctrl/⌘+scroll zooms about the cursor (also what trackpad pinch sends),
+  // plain scroll pans. Attached natively with { passive: false } — React's
+  // delegated wheel listener can be passive, in which case preventDefault() is
+  // ignored and Ctrl+wheel would zoom the whole browser page instead.
+  useEffect(() => {
+    const cv = canvasRef.current
+    if (!cv) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const rect = cv.getBoundingClientRect()
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top
+      if (e.ctrlKey || e.metaKey) {
+        zoomAtPoint(mx, my, e.deltaY < 0 ? 1.12 : 0.9)
+      } else {
+        setViewState(prev => ({ ...prev, panX: prev.panX - e.deltaX, panY: prev.panY - e.deltaY }))
+      }
     }
-  }
+    cv.addEventListener('wheel', onWheel, { passive: false })
+    return () => cv.removeEventListener('wheel', onWheel)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
           || (e.target instanceof HTMLElement && e.target.isContentEditable)) return
-      // Layer-management combos take priority over single-key tool switches.
       const mod = e.ctrlKey || e.metaKey
       const k = e.key.toLowerCase()
+
+      // Space → temporary hand tool (hold to pan with any tool active).
+      if (e.key === ' ' && !mod) {
+        if (!spaceHeld.current) { spaceHeld.current = true; setSpacePan(true) }
+        e.preventDefault()
+        return
+      }
+
+      // Layer-management combos take priority over single-key tool switches.
       if (mod && !e.shiftKey && k === 'e') { e.preventDefault(); if (activeRef.current) mergeDown(activeRef.current); return }
       if (mod &&  e.shiftKey && k === 'e') { e.preventDefault(); flattenImage(); return }
       if (mod && !e.shiftKey && k === 'g') { e.preventDefault(); if (activeRef.current) groupLayer(activeRef.current); return }
       if (mod &&  e.shiftKey && k === 'g') { e.preventDefault(); if (activeRef.current) ungroupLayer(activeRef.current); return }
+
+      // Clipboard & layer-via-copy.
+      if (mod && !e.shiftKey && k === 'c') { e.preventDefault(); copySelection(false); return }
+      if (mod && !e.shiftKey && k === 'x') { e.preventDefault(); copySelection(true); return }
+      if (mod && !e.shiftKey && k === 'v') { e.preventDefault(); pasteAsLayer(); return }
+      if (mod && !e.shiftKey && k === 'j') { e.preventDefault(); layerViaCopy(); return }
+
+      // Selection management.
+      if (mod && !e.shiftKey && k === 'a') { e.preventDefault(); selectAll(); return }
+      if (mod &&  e.shiftKey && k === 'i') { e.preventDefault(); invertSelection(); return }
+      if (mod &&  e.shiftKey && k === 'd') { e.preventDefault(); reselect(); return }
+      if (mod && !e.shiftKey && k === 'd') { e.preventDefault(); deselect(); return }
+
+      // Fill foreground (Alt+Backspace) — Photoshop muscle memory.
+      if (e.altKey && e.key === 'Backspace') { e.preventDefault(); fillSelection(false); return }
+
+      // Delete: clear the selection content when one is active, else delete the layer.
       if (e.key === 'Delete' && !mod && !xfActive.current && activeRef.current) {
-        e.preventDefault(); deleteLayer(activeRef.current); return
+        e.preventDefault()
+        if (selMask.current) fillSelection(true)
+        else deleteLayer(activeRef.current)
+        return
       }
-      if (e.key === 'b' || e.key === 'B') setTool('brush')
-      if (e.key === 'e' || e.key === 'E') setTool('eraser')
-      if (e.key === 'h' || e.key === 'H') setTool('hand')
-      if (e.key === 'i' || e.key === 'I') setTool('eyedrop')
-      if (e.key === 'g' || e.key === 'G') setTool('fill')
-      if (e.key === 'v' || e.key === 'V') setTool('select')
-      if (e.key === 'm' || e.key === 'M') setTool('rect-sel')
-      if (e.key === 'l' || e.key === 'L') setTool('lasso')
-      if (e.key === 'w' || e.key === 'W') setTool('magic')
-      if ((e.ctrlKey||e.metaKey) && e.key==='d') { e.preventDefault(); deselect() }
+
+      // Arrow keys nudge the active layer (Shift = 10 px).
+      if (!mod && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        const step = e.shiftKey ? 10 : 1
+        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
+        const dy = e.key === 'ArrowUp'   ? -step : e.key === 'ArrowDown'  ? step : 0
+        e.preventDefault(); nudgeLayer(dx, dy)
+        return
+      }
+
+      // Brush size [ ] and hardness { } (Photoshop-style).
+      if (!mod && e.key === '[') { sizeTouched.current = true; setBrushSize(v => Math.max(1,   v - (v > 50 ? 10 : v > 10 ? 5 : 1))); return }
+      if (!mod && e.key === ']') { sizeTouched.current = true; setBrushSize(v => Math.min(500, v + (v >= 50 ? 10 : v >= 10 ? 5 : 1))); return }
+      if (!mod && e.key === '{') { setBrushHard(v => Math.max(0,   v - 10)); return }
+      if (!mod && e.key === '}') { setBrushHard(v => Math.min(100, v + 10)); return }
+
+      // Crop tool: Enter applies, Escape cancels.
+      if (e.key === 'Enter'  && toolRef.current === 'crop' && cropRectRef.current) { e.preventDefault(); applyCrop(); return }
+      if (e.key === 'Escape' && toolRef.current === 'crop' && cropRectRef.current) { e.preventDefault(); setCropRect(null); return }
+
+      // Single-key tool switches (never with a modifier held).
+      if (!mod && !e.altKey) {
+        if (k === 'b') setTool('brush')
+        if (k === 'e') setTool('eraser')
+        if (k === 'h') setTool('hand')
+        if (k === 'i') setTool('eyedrop')
+        if (k === 'g') setTool('fill')
+        if (k === 'v') setTool('select')
+        if (k === 'm') setTool('rect-sel')
+        if (k === 'l') setTool('lasso')
+        if (k === 'w') setTool('magic')
+        if (k === 'c') setTool('crop')
+        if (k === 't') setTool('transform')
+        if (k === 'z') setTool('zoom')
+        if (e.key === 'r') setTool('rotate')
+        if (e.key === 'R') { rotRef.current = 0; setViewRot(0) } // Shift+R resets rotation
+      }
+
       if (e.key === 'Enter' && xfActive.current)  { e.preventDefault(); commitTransform() }
       if (e.key === 'Escape' && xfActive.current) { e.preventDefault(); cancelTransform() }
-      if (e.key === 't' || e.key === 'T') setTool('transform')
-      if (e.key === 'z' || e.key === 'Z') setTool('zoom')
-      if (e.key === 'r')                  setTool('rotate')
-      if (e.key === 'R')                  { rotRef.current = 0; setViewRot(0) } // Shift+R resets
-      if ((e.ctrlKey||e.metaKey) && !e.shiftKey && e.key==='z') { e.preventDefault(); undo() }
-      if ((e.ctrlKey||e.metaKey) && (e.shiftKey && e.key==='z' || e.key==='y')) { e.preventDefault(); redo() }
-      if ((e.ctrlKey||e.metaKey) && e.key==='0') {
+      if (mod && !e.shiftKey && e.key==='z') { e.preventDefault(); undo() }
+      if (mod && (e.shiftKey && e.key==='z' || e.key==='y')) { e.preventDefault(); redo() }
+      if (mod && e.key==='0') {
         e.preventDefault()
         const vp = viewportRef.current
         if (!vp) return
@@ -2598,7 +3460,12 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
         setViewState({ zoom, panX:(width-w*zoom)/2, panY:(height-h*zoom)/2 })
         rotRef.current = 0; setViewRot(0) // fit also straightens the canvas
       }
-      if ((e.ctrlKey||e.metaKey) && (e.key==='=' || e.key==='+')) {
+      if (mod && e.key==='1') {
+        // 100% zoom centred on the viewport (actual pixels).
+        e.preventDefault()
+        setZoomAt(viewSizeRef.current.w / 2, viewSizeRef.current.h / 2, 1)
+      }
+      if (mod && (e.key==='=' || e.key==='+')) {
         e.preventDefault()
         setViewState(prev => {
           const nz = Math.min(20, prev.zoom * 1.2)
@@ -2608,7 +3475,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
           return { zoom: nz, panX: width/2-(width/2-prev.panX)*(nz/prev.zoom), panY: height/2-(height/2-prev.panY)*(nz/prev.zoom) }
         })
       }
-      if ((e.ctrlKey||e.metaKey) && e.key==='-') {
+      if (mod && e.key==='-') {
         e.preventDefault()
         setViewState(prev => {
           const nz = Math.max(0.02, prev.zoom * 0.8)
@@ -2619,8 +3486,12 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
         })
       }
     }
+    const hUp = (e: KeyboardEvent) => {
+      if (e.key === ' ') { spaceHeld.current = false; setSpacePan(false) }
+    }
     window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
+    window.addEventListener('keyup', hUp)
+    return () => { window.removeEventListener('keydown', h); window.removeEventListener('keyup', hUp) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Layer management ──────────────────────────────────────────────────────
@@ -2656,6 +3527,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       if (gl) [removed, ...allNodes([removed])].forEach(n => {
         const tx = textures.current.get(n.id); if (tx) { gl.deleteTexture(tx); textures.current.delete(n.id) }
         const mx = textures.current.get(maskKey(n.id)); if (mx) { gl.deleteTexture(mx); textures.current.delete(maskKey(n.id)) }
+        pngCache.current.delete(n.id); pngCache.current.delete(maskKey(n.id))
       })
       if (activeRef.current === id || !findInTree(tree, activeRef.current ?? '')) setActiveId(leaves(tree)[0]?.id ?? tree[0]?.id ?? null)
       return tree
@@ -2810,7 +3682,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const upper = loc.list[loc.index], lower = loc.list[loc.index + 1]
     const px = bakePair(lower, upper); if (!px) return
     // Drop the upper layer's textures and the lower layer's (now-baked) mask.
-    const freeTex = (k: string) => { const x = textures.current.get(k); if (x) { gl.deleteTexture(x); textures.current.delete(k) } }
+    const freeTex = (k: string) => { const x = textures.current.get(k); if (x) { gl.deleteTexture(x); textures.current.delete(k) }; pngCache.current.delete(k) }
     freeTex(upper.id); freeTex(maskKey(upper.id)); freeTex(maskKey(lower.id))
     setLayers(prev => {
       let tree = mapTree(prev, lower.id, { blendMode: 'normal', opacity: 100, fill: 100, mask: null, clipping: false })
@@ -2839,6 +3711,257 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     setLayers([flat]); setActiveId(id)
     writeTex(id, px)
   }
+
+  // ── Document-wide transforms (crop · rotate · flip) ─────────────────────────
+  type DocOp =
+    | { kind: 'crop'; rect: { x: number; y: number; w: number; h: number } }
+    | { kind: 'rot90cw' | 'rot90ccw' | 'rot180' | 'flipH' | 'flipV' }
+
+  function transformDocument(op: DocOp) {
+    const gl = glRef.current; if (!gl) return
+    const { w: oldW, h: oldH } = docSize.current
+    let newW = oldW, newH = oldH
+    if (op.kind === 'crop') { newW = Math.max(1, Math.round(op.rect.w)); newH = Math.max(1, Math.round(op.rect.h)) }
+    else if (op.kind === 'rot90cw' || op.kind === 'rot90ccw') { newW = oldH; newH = oldW }
+    // Dimension changes are meaningless in embedded mode (the host expects the
+    // cel size it asked for).
+    if (embedded && (newW !== oldW || newH !== oldH)) return
+
+    // 1. Read every texture (layer colours AND masks) and transform it on CPU.
+    const src = document.createElement('canvas'); src.width = oldW; src.height = oldH
+    const sctx = src.getContext('2d', { willReadFrequently: true })!
+    const dst = document.createElement('canvas'); dst.width = newW; dst.height = newH
+    const dctx = dst.getContext('2d', { willReadFrequently: true })!
+    const entries: { id: string; px: Uint8Array }[] = []
+    for (const id of [...textures.current.keys()]) {
+      const px = readTex(id); if (!px) continue
+      sctx.clearRect(0, 0, oldW, oldH)
+      sctx.putImageData(new ImageData(new Uint8ClampedArray(px), oldW, oldH), 0, 0)
+      dctx.save()
+      dctx.clearRect(0, 0, newW, newH)
+      switch (op.kind) {
+        case 'crop':     dctx.translate(-Math.round(op.rect.x), -Math.round(op.rect.y)); break
+        case 'rot90cw':  dctx.translate(newW, 0); dctx.rotate(Math.PI / 2); break
+        case 'rot90ccw': dctx.translate(0, newH); dctx.rotate(-Math.PI / 2); break
+        case 'rot180':   dctx.translate(newW, newH); dctx.rotate(Math.PI); break
+        case 'flipH':    dctx.translate(newW, 0); dctx.scale(-1, 1); break
+        case 'flipV':    dctx.translate(0, newH); dctx.scale(1, -1); break
+      }
+      dctx.drawImage(src, 0, 0)
+      dctx.restore()
+      entries.push({ id, px: new Uint8Array(dctx.getImageData(0, 0, newW, newH).data.buffer) })
+    }
+
+    // 2. Abort anything that references the old geometry.
+    if (xfActive.current) { xfActive.current = false; xfSnap.current = null; xfDrag.current = null }
+    setTextEdit(null); setTextValue('')
+    adjBaseRef.current = null; filtBaseRef.current = null
+    setAdjust(ADJUST_ZERO); setAdjInvert(false); setAdjGray(false); setFilter(FILTER_ZERO)
+    clearBrushStroke(); clearMaskStroke()
+    selMask.current = null; lastSelMask.current = null; selCanvas.current = null; selPathRef.current = null
+    setHasSel(false); setSelection(null); setCropRect(null)
+    clipboardRef.current = null
+    undoStack.current = []; redoStack.current = []
+    setUndoCount(0); setRedoCount(0)
+    pngCache.current.clear()
+
+    // 3. Swap in the new geometry and rebuild every GPU resource at the new size.
+    docSize.current = { w: newW, h: newH }
+    setDocDims({ w: newW, h: newH })
+    for (const { id, px } of entries) {
+      const old = textures.current.get(id)
+      if (old) gl.deleteTexture(old)
+      textures.current.delete(id)
+      createTex(gl, id, newW, newH)
+      gl.bindTexture(gl.TEXTURE_2D, textures.current.get(id)!)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, newW, newH, gl.RGBA, gl.UNSIGNED_BYTE, px)
+      texVersion.current.set(id, (texVersion.current.get(id) ?? 0) + 1)
+    }
+    fbPair.current = [glFB(gl, newW, newH), glFB(gl, newW, newH)]
+    fbPoolAll.current.forEach(f => { gl.deleteFramebuffer(f.fb); gl.deleteTexture(f.tex) })
+    fbPoolAll.current = []; fbPoolFree.current = []
+    if (strokeTexRef.current) { gl.deleteTexture(strokeTexRef.current); strokeTexRef.current = null }
+    if (strokeCanvasRef.current) { strokeCanvasRef.current.width = newW; strokeCanvasRef.current.height = newH }
+
+    renderComposite()
+    setThumbNonce(v => v + 1)
+    fitToScreen()
+
+    // 4. Persist: new dims on the document row + the transformed pixels.
+    if (!embedded && docId) {
+      if (newW !== oldW || newH !== oldH) layerApi.updateDoc(docId, { width: newW, height: newH }).catch(() => {})
+      saveMut.mutate(buildSaveStructure())
+    }
+  }
+
+  // Apply the pending crop-tool rectangle.
+  function applyCrop() {
+    const r = cropRectRef.current
+    if (!r || r.w < 1 || r.h < 1) { setCropRect(null); return }
+    const { w, h } = docSize.current
+    setCropRect(null)
+    // Full-document rect → nothing to do.
+    if (Math.round(r.x) === 0 && Math.round(r.y) === 0 && Math.round(r.w) === w && Math.round(r.h) === h) return
+    transformDocument({ kind: 'crop', rect: r })
+  }
+
+  // Crop the document to the active selection's bounding box.
+  function cropToSelection() {
+    const m = selMask.current; if (!m) return
+    const { w, h } = docSize.current
+    let x0 = w, y0 = h, x1 = -1, y1 = -1
+    for (let p = 0; p < m.length; p++) {
+      if (m[p] < 128) continue
+      const x = p % w, y = (p / w) | 0
+      if (x < x0) x0 = x; if (x > x1) x1 = x
+      if (y < y0) y0 = y; if (y > y1) y1 = y
+    }
+    if (x1 < x0 || y1 < y0) return
+    transformDocument({ kind: 'crop', rect: { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } })
+  }
+
+  // ── Active-layer transforms (flip / rotate in place, undoable) ──────────────
+  function transformLayer(kind: 'flipH' | 'flipV' | 'rot180') {
+    const id = activeRef.current; if (!id) return
+    const layer = findInTree(layersRef.current, id)
+    if (!layer || layer.locked || layer.children) return
+    const px = readTex(id); if (!px) return
+    const { w, h } = docSize.current
+    pushUndo(id)
+    const src = document.createElement('canvas'); src.width = w; src.height = h
+    src.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(px), w, h), 0, 0)
+    const dst = document.createElement('canvas'); dst.width = w; dst.height = h
+    const ctx = dst.getContext('2d', { willReadFrequently: true })!
+    if (kind === 'flipH')      { ctx.translate(w, 0); ctx.scale(-1, 1) }
+    else if (kind === 'flipV') { ctx.translate(0, h); ctx.scale(1, -1) }
+    else                       { ctx.translate(w, h); ctx.rotate(Math.PI) }
+    ctx.drawImage(src, 0, 0)
+    writeTex(id, new Uint8Array(ctx.getImageData(0, 0, w, h).data.buffer))
+  }
+
+  // Arrow-key nudge: shift the active layer's pixels. A burst of presses within
+  // 800 ms shares a single undo entry.
+  function nudgeLayer(dx: number, dy: number) {
+    const id = activeRef.current; if (!id) return
+    const layer = findInTree(layersRef.current, id)
+    if (!layer || layer.locked || layer.lockPosition || layer.children) return
+    const px = readTex(id); if (!px) return
+    if (!nudgeTimer.current) pushUndo(id)
+    else clearTimeout(nudgeTimer.current)
+    nudgeTimer.current = setTimeout(() => { nudgeTimer.current = null }, 800)
+    const { w, h } = docSize.current
+    const src = document.createElement('canvas'); src.width = w; src.height = h
+    src.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(px), w, h), 0, 0)
+    const dst = document.createElement('canvas'); dst.width = w; dst.height = h
+    const ctx = dst.getContext('2d', { willReadFrequently: true })!
+    ctx.drawImage(src, dx, dy)
+    writeTex(id, new Uint8Array(ctx.getImageData(0, 0, w, h).data.buffer))
+  }
+
+  // ── Clipboard (internal): copy / cut / paste-as-new-layer ───────────────────
+  function copySelection(cut: boolean) {
+    const id = activeRef.current; if (!id) return
+    const layer = findInTree(layersRef.current, id)
+    if (!layer || layer.children) return
+    const px = readTex(id); if (!px) return
+    const { w, h } = docSize.current
+    const sel = selMask.current
+    const out = new Uint8Array(px.length)
+    if (sel) {
+      for (let p = 0; p < w * h; p++) {
+        const cov = sel[p] / 255
+        if (cov <= 0) continue
+        const i = p * 4
+        out[i] = px[i]; out[i+1] = px[i+1]; out[i+2] = px[i+2]
+        out[i+3] = Math.round(px[i+3] * cov)
+      }
+    } else out.set(px)
+    clipboardRef.current = { w, h, px: out }
+    if (cut && !layer.locked) {
+      pushUndo(id)
+      if (sel) {
+        for (let p = 0; p < w * h; p++) {
+          const cov = sel[p] / 255
+          if (cov > 0) px[p*4+3] = Math.round(px[p*4+3] * (1 - cov))
+        }
+        writeTex(id, px)
+      } else {
+        writeTex(id, new Uint8Array(px.length))
+      }
+    }
+  }
+
+  function pasteAsLayer(name?: string) {
+    const clip = clipboardRef.current
+    const gl = glRef.current
+    if (!clip || !gl) return
+    const { w, h } = docSize.current
+    let px: Uint8Array
+    if (clip.w !== w || clip.h !== h) {
+      // Geometry changed since copy → centre the clip content on a doc-size canvas.
+      const tmp = document.createElement('canvas'); tmp.width = clip.w; tmp.height = clip.h
+      tmp.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(clip.px), clip.w, clip.h), 0, 0)
+      const c = document.createElement('canvas'); c.width = w; c.height = h
+      const ctx = c.getContext('2d')!
+      ctx.drawImage(tmp, Math.round((w - clip.w) / 2), Math.round((h - clip.h) / 2))
+      px = new Uint8Array(ctx.getImageData(0, 0, w, h).data.buffer)
+    } else {
+      px = new Uint8Array(clip.px)   // pastes stay independent
+    }
+    const nid = newId()
+    createTex(gl, nid, w, h)
+    const newL: LayerStructureItem = {
+      id: nid, type: 'raster', name: name ?? t('layer_paste_layer_name'),
+      visible: true, locked: false, opacity: 100, fill: 100, blendMode: 'normal',
+      x: 0, y: 0, mask: null, effects: [],
+    }
+    setLayers(prev => pinBackground(insertNode(prev, newL, activeRef.current, false)))
+    setActiveId(nid)
+    writeTex(nid, px)
+  }
+
+  // Ctrl+J — duplicate the layer, or "layer via copy" when a selection is active.
+  function layerViaCopy() {
+    if (selMask.current) {
+      const keep = clipboardRef.current          // don't clobber the user's clipboard
+      copySelection(false)
+      pasteAsLayer(t('layer_via_copy_name'))
+      clipboardRef.current = keep
+    } else if (activeRef.current) {
+      duplicateLayer(activeRef.current)
+    }
+  }
+
+  // ── Import an image file as a new layer (File menu · drag-and-drop) ─────────
+  function importImageAsLayer(file: File) {
+    if (!file.type.startsWith('image/')) return
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const gl = glRef.current; if (!gl) return
+      const { w, h } = docSize.current
+      const c = document.createElement('canvas'); c.width = w; c.height = h
+      const ctx = c.getContext('2d')!
+      // 100% scale, centred; fitted down only when larger than the document.
+      const s = Math.min(1, w / img.width, h / img.height)
+      const dw = img.width * s, dh = img.height * s
+      ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh)
+      const nid = newId()
+      createTex(gl, nid, w, h)
+      const newL: LayerStructureItem = {
+        id: nid, type: 'raster', name: file.name.replace(/\.[^.]+$/, '') || 'Image',
+        visible: true, locked: false, opacity: 100, fill: 100, blendMode: 'normal',
+        x: 0, y: 0, mask: null, effects: [],
+      }
+      setLayers(prev => pinBackground(insertNode(prev, newL, activeRef.current, false)))
+      setActiveId(nid)
+      writeTex(nid, new Uint8Array(ctx.getImageData(0, 0, w, h).data.buffer))
+    }
+    img.onerror = () => URL.revokeObjectURL(url)
+    img.src = url
+  }
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   // Isolate a layer: hide everything except it and its ancestors. Clicking the same
   // layer's solo again restores the previous visibility of every node.
@@ -2931,9 +4054,12 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     if (!preset) return
     setBrushPreset(id)
     setTool('brush')
-    // Preset supplies the "character"; we also seed hardness from the preset,
-    // and the suggested size *only* if the user hasn't manually tuned it.
+    // Preset supplies the "character"; we also seed hardness, flow and the full
+    // dynamics from the preset, and the suggested size *only* if the user hasn't
+    // manually tuned it. The Studio can then tweak any of these live.
     setBrushHard(preset.hardness)
+    setBrushFlow(Math.round(preset.flow * 100))
+    setBrushDyn(extractDyn(preset))
     if (!sizeTouched.current) setBrushSize(preset.defaultSize)
   }
 
@@ -2944,9 +4070,11 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   }
 
   const cursor =
-    tool === 'hand'   ? 'grab'     :
-    tool === 'zoom'   ? 'zoom-in'  :
-    tool === 'rotate' ? 'grab'     : 'none'
+    spacePan          ? 'grab'      :
+    tool === 'hand'   ? 'grab'      :
+    tool === 'zoom'   ? 'zoom-in'   :
+    tool === 'crop'   ? 'crosshair' :
+    tool === 'rotate' ? 'grab'      : 'none'
 
   if (!docId && !embedded) return null
   if (webglError) {
@@ -3004,7 +4132,8 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     brush: { label: t('layer_tab_brush'), render: () => (
       <ToolProps t={t} bare tool={tool}
         brushSize={brushSize} setBrushSize={handleSetBrushSize} brushHard={brushHard} setBrushHard={setBrushHard}
-        brushOpac={brushOpac} setBrushOpac={setBrushOpac} pressureSens={pressureSens} setPressureSens={setPressureSens}
+        brushOpac={brushOpac} setBrushOpac={setBrushOpac} brushFlow={brushFlow} setBrushFlow={setBrushFlow}
+        pressureSens={pressureSens} setPressureSens={setPressureSens}
         stabilizer={stabilizer} setStabilizer={setStabilizer} inputKind={inputKind} inputPressure={inputPressure}
         brushPreset={brushPreset} onSelectBrush={selectBrush} brushSelOpen={brushSelOpen} setBrushSelOpen={setBrushSelOpen} />
     ) },
@@ -3032,7 +4161,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       onTitleCommit={embedded ? undefined : commitTitle}
       titlePlaceholder={t('common_untitled', { defaultValue: 'Sans titre' })}
       saveStatus={saveMut.isPending ? t('layer_saving') : t('doc_saved', { defaultValue: 'Enregistré' })}
-      subtitle="Layer" docInfo={doc ? `${doc.width}×${doc.height}` : undefined}
+      subtitle="Layer" docInfo={docDims ? `${docDims.w}×${docDims.h}` : doc ? `${doc.width}×${doc.height}` : undefined}
       titleActions={embedded ? undefined : (
         <button
           onClick={() => starMut.mutate(!doc?.is_starred)}
@@ -3066,27 +4195,86 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       menus={paintsharpMenus(t, {
         onSave:   () => { if(docId&&layers.length>0) saveMut.mutate(buildSaveStructure()) },
         onExport: exportPng, exportLabel: t('menu_export_png'),
+        fileExtra: [
+          { label: t('menu_export_jpeg'),   onClick: () => exportImage('jpeg') },
+          'sep',
+          { label: t('layer_import_image'), onClick: () => importInputRef.current?.click() },
+        ],
         onClose:  () => { if(docId&&layers.length>0) saveMut.mutate(buildSaveStructure()); navigate('/paintsharp/layer') },
         onUndo: undo, onRedo: redo, canUndo: undoCount>0, canRedo: redoCount>0,
-        editExtra: [{ label: t('layer_deselect'), onClick: deselect, disabled: !hasSel, shortcut:'Ctrl+D' }],
+        editExtra: [
+          { label: t('layer_cut'),   onClick: () => copySelection(true),  shortcut: 'Ctrl+X' },
+          { label: t('layer_copy'),  onClick: () => copySelection(false), shortcut: 'Ctrl+C' },
+          { label: t('layer_paste'), onClick: () => pasteAsLayer(),       shortcut: 'Ctrl+V', disabled: !clipboardRef.current },
+          'sep',
+          { label: t('layer_fill_fg'),   onClick: () => fillSelection(false), shortcut: 'Alt+⌫' },
+          { label: t('layer_clear_sel'), onClick: () => fillSelection(true),  shortcut: 'Suppr', disabled: !hasSel },
+        ],
         extraMenus: [
-          { label: t('menu_image'), items: [{ label: t('layer_fit_screen'), onClick: fitToScreen }] },
+          { label: t('menu_image'), items: [
+            { label: t('layer_image_crop_sel'), onClick: cropToSelection, disabled: !hasSel || embedded },
+            'sep',
+            { label: t('layer_image_rot90cw'),  onClick: () => transformDocument({ kind: 'rot90cw' }),  disabled: embedded },
+            { label: t('layer_image_rot90ccw'), onClick: () => transformDocument({ kind: 'rot90ccw' }), disabled: embedded },
+            { label: t('layer_image_rot180'),   onClick: () => transformDocument({ kind: 'rot180' }) },
+            'sep',
+            { label: t('layer_image_flip_h'),   onClick: () => transformDocument({ kind: 'flipH' }) },
+            { label: t('layer_image_flip_v'),   onClick: () => transformDocument({ kind: 'flipV' }) },
+            'sep',
+            { label: t('layer_flatten'),    onClick: flattenImage, shortcut: 'Ctrl+Shift+E' },
+            { label: t('layer_fit_screen'), onClick: fitToScreen },
+          ]},
           { label: t('menu_layer'), items: [
             { label: t('layer_new_layer'), onClick: addLayer },
+            { label: t('layer_duplicate'), onClick: () => activeId && duplicateLayer(activeId), shortcut: 'Ctrl+J' },
             { label: t('layer_delete'),    onClick: () => activeId && deleteLayer(activeId), disabled: layers.length<=1 },
+            'sep',
+            { label: t('layer_group'),      onClick: () => activeId && groupLayer(activeId), shortcut: 'Ctrl+G' },
+            { label: t('layer_ungroup'),    onClick: () => activeId && ungroupLayer(activeId), shortcut: 'Ctrl+Shift+G', disabled: !activeLayer?.children },
+            { label: t('layer_merge_down'), onClick: () => activeId && mergeDown(activeId), shortcut: 'Ctrl+E', disabled: !activeId || !canMergeDown(activeId) },
+            'sep',
+            { label: t('layer_layer_flip_h'), onClick: () => transformLayer('flipH'),  disabled: !activeLayer || !!activeLayer.children || activeLayer.locked },
+            { label: t('layer_layer_flip_v'), onClick: () => transformLayer('flipV'),  disabled: !activeLayer || !!activeLayer.children || activeLayer.locked },
+            { label: t('layer_layer_rot180'), onClick: () => transformLayer('rot180'), disabled: !activeLayer || !!activeLayer.children || activeLayer.locked },
             'sep',
             { label: t('layer_mask_add'),  onClick: () => activeId && (activeLayer?.mask?.enabled ? removeMask(activeId) : addMask(activeId)) },
           ]},
+          { label: t('menu_select'), items: [
+            { label: t('layer_select_all'),      onClick: selectAll,       shortcut: 'Ctrl+A' },
+            { label: t('layer_deselect'),        onClick: deselect,        shortcut: 'Ctrl+D', disabled: !hasSel },
+            { label: t('layer_select_reselect'), onClick: reselect,        shortcut: 'Ctrl+Shift+D' },
+            { label: t('layer_select_invert'),   onClick: invertSelection, shortcut: 'Ctrl+Shift+I' },
+            'sep',
+            { label: t('layer_select_from_alpha'), onClick: selectFromAlpha },
+            'sep',
+            { label: t('layer_select_grow'),    onClick: () => growSelection(2),    disabled: !hasSel },
+            { label: t('layer_select_shrink'),  onClick: () => shrinkSelection(2),  disabled: !hasSel },
+            { label: t('layer_select_feather'), onClick: () => featherSelection(4), disabled: !hasSel },
+          ]},
           { label: t('menu_filter'), items: [
-            { label: t('layer_filter_blur'),    onClick: () => { setPanelsHidden(false); dockApi.current?.activate('filters') } },
-            { label: t('layer_filter_sharpen'), onClick: () => { setPanelsHidden(false); dockApi.current?.activate('filters') } },
-            { label: t('layer_filter_noise'),   onClick: () => { setPanelsHidden(false); dockApi.current?.activate('filters') } },
+            // Interactive panel (blur/sharpen/noise with live sliders).
+            { label: t('layer_filter_gallery'), onClick: () => { setPanelsHidden(false); dockApi.current?.activate('filters') } },
+            'sep',
+            // Full Photoshop-style gallery, grouped (headers disabled). Filters with
+            // tunable parameters open a floating dialog (…); the rest apply in one click.
+            ...FILTER_GROUPS.flatMap(g => [
+              { label: `— ${t(g.nameKey)} —`, disabled: true } as const,
+              ...g.filters.map(f => ({
+                label: f.params.length ? `${t(f.nameKey)}…` : t(f.nameKey),
+                onClick: () => openFilter(f),
+              })),
+              'sep' as const,
+            ]),
           ]},
         ],
         onZoomIn:  () => zoomAtPoint((viewportRef.current?.clientWidth??600)/2, (viewportRef.current?.clientHeight??400)/2, 1.2),
         onZoomOut: () => zoomAtPoint((viewportRef.current?.clientWidth??600)/2, (viewportRef.current?.clientHeight??400)/2, 0.8),
         onFit:     fitToScreen,
-        viewExtra: [{ label: t('layer_toggle_tabs'), onClick: () => setPanelsHidden(v => !v) }],
+        viewExtra: [
+          { label: t('layer_zoom_100'), onClick: () => setZoomAt(viewSizeRef.current.w/2, viewSizeRef.current.h/2, 1), shortcut: 'Ctrl+1' },
+          { label: `${pixelGrid ? '✓ ' : ''}${t('layer_pixel_grid')}`, onClick: () => setPixelGrid(v => !v) },
+          { label: t('layer_toggle_tabs'), onClick: () => setPanelsHidden(v => !v) },
+        ],
       })}
       optionsBar={<>
         <span style={{ color:C.text, minWidth:64 }}>{toolLabel(t, tool)}</span>
@@ -3096,6 +4284,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
             <OptNum label={t('layer_brush_size')}       value={brushSize}  min={1} max={500} suffix="px" onChange={handleSetBrushSize} C={C} />
             <OptNum label={t('layer_brush_hardness')}   value={brushHard}  min={0} max={100} suffix="%"  onChange={setBrushHard}        C={C} />
             <OptNum label={t('layer_brush_opacity')}    value={brushOpac}  min={0} max={100} suffix="%"  onChange={setBrushOpac}        C={C} />
+            <OptNum label={t('layer_brush_flow')}       value={brushFlow}  min={1} max={100} suffix="%"  onChange={setBrushFlow}        C={C} />
             <OptNum label={t('layer_brush_stabilizer')} value={stabilizer} min={0} max={100} suffix="%"  onChange={setStabilizer}       C={C} />
             {(inputKind==='pen'||inputKind==='touch') && (
               <span className="flex items-center gap-1" style={{ color:C.accent }}>
@@ -3103,12 +4292,46 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
               </span>
             )}
           </>
+        ) : (tool==='crop') ? (
+          <>
+            <span style={{ color:C.textDim }}>
+              {cropRect && cropRect.w >= 1 && cropRect.h >= 1
+                ? `${Math.round(cropRect.w)} × ${Math.round(cropRect.h)} px`
+                : t('layer_crop_hint')}
+            </span>
+            <button onClick={applyCrop} disabled={!cropRect || cropRect.w < 1 || cropRect.h < 1}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] disabled:opacity-40"
+                    style={{ background:C.accent, color:'#fff' }}>
+              <Check size={11}/>{t('layer_crop_apply')}
+            </button>
+            <button onClick={() => setCropRect(null)} disabled={!cropRect}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] disabled:opacity-40"
+                    style={{ background:'#2c2c2c', color:C.textDim, border:'1px solid #3a3a3a' }}>
+              <X size={11}/>{t('layer_crop_cancel')}
+            </button>
+          </>
+        ) : (tool==='magic' || tool==='fill') ? (
+          <>
+            <OptNum label={t('layer_wand_tolerance')} value={wandTol} min={0} max={255} onChange={setWandTol} C={C} />
+            {tool==='magic' && (
+              <button onClick={() => setWandContig(v => !v)}
+                      title={wandContig ? t('layer_wand_contiguous') : t('layer_wand_global')}
+                      className="px-2 py-0.5 rounded text-[10px]"
+                      style={{ background: wandContig ? C.accent : '#2c2c2c', color: wandContig ? '#fff' : C.textDim,
+                               border: `1px solid ${wandContig ? C.accent : '#3a3a3a'}` }}>
+                {t('layer_wand_contiguous')}
+              </button>
+            )}
+            {tool==='magic' && <span style={{ color:C.textDim }}>{t('layer_sel_mode_hint')}</span>}
+          </>
+        ) : (tool==='rect-sel' || tool==='ellipse-sel' || tool==='lasso') ? (
+          <span style={{ color:C.textDim }}>{t('layer_sel_mode_hint')}</span>
         ) : (tool==='text') ? (
           <>
-            <Dropdown variant="dark" fontSize={11} value={fontFamily} onChange={setFontFamily}
-                      options={FONT_FAMILIES.map(f => ({ value: f, label: f }))} />
-            <OptNum label={t('layer_text_size')} value={fontSize} min={4} max={2000} suffix="px"
-                    onChange={v => setFontSize(Math.max(4, v))} C={C} />
+            <FontSizeField theme="dark" height={26} fontSize={11} fontWidth={140} sizeWidth={66}
+              font={fontFamily} onFontChange={setFontFamily} fonts={FONT_FAMILIES}
+              size={String(fontSize)} onSizeChange={v => setFontSize(Math.max(4, parseInt(v, 10) || fontSize))}
+              sizes={[8, 10, 12, 14, 18, 24, 36, 48, 72, 96, 144, 288]} minSize={4} maxSize={2000} />
             <span style={{ color:C.textDim }}>{t('layer_text_hint')}</span>
           </>
         ) : (tool==='zoom' || tool==='rotate' || tool==='hand') ? (
@@ -3156,6 +4379,16 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
             </div>
           )}
 
+          {/* Déclencheur du sélecteur de pinceaux (visible quand le pinceau/la gomme est actif) */}
+          {(tool === 'brush' || tool === 'eraser') && (
+            <button onClick={() => setBrushStudioOpen(v => !v)} title={t('layer_brush_studio')}
+                    className="relative w-8 h-8 mb-1 flex items-center justify-center rounded hover:bg-white/10"
+                    style={{ outline: brushStudioOpen ? `1px solid ${C.accent}` : 'none' }}>
+              <BrushTriggerThumb brush={BRUSH_PRESETS.find(b => b.id === brushPreset) ?? DEFAULT_BRUSH}
+                                 dyn={brushDyn} size={brushSize} opac={brushOpac} flow={brushFlow} />
+            </button>
+          )}
+
           {/* Couleur avant-plan */}
           <button onClick={() => setColorPickerOpen(v => !v)} title={t('layer_color_title')}
                   className="relative w-8 h-8 mb-1 flex items-center justify-center rounded hover:bg-white/10"
@@ -3168,7 +4401,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
           </span></>}
       statusBar={<>
         <span>{t('layer_count', { count: layers.length })}</span>
-        <span>{doc?.width}×{doc?.height}</span>
+        <span>{docDims ? `${docDims.w}×${docDims.h}` : `${doc?.width}×${doc?.height}`}</span>
         <span>{doc?.color_mode?.toUpperCase()} · {doc?.dpi} DPI</span>
         <div className="flex-1" />
         {selection && <span>{t('layer_selection_size', { w: selection.w, h: selection.h })}</span>}
@@ -3206,7 +4439,18 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
                   className="flex items-center justify-center rounded hover:bg-white/10" style={{ width:14, height:14 }}>
             <ZoomOut size={10} />
           </button>
-          <span className="w-9 text-center">{Math.round(viewState.zoom*100)}%</span>
+          <button className="w-11 text-center rounded hover:bg-white/10" title={t('layer_zoom_presets')}
+                  onClick={e => zoomMenu.open(e, [
+                    ...ZOOM_PRESETS.map(z => ({
+                      label: `${Math.round(z * 1000) / 10} %`,
+                      onClick: () => setZoomAt(viewSizeRef.current.w / 2, viewSizeRef.current.h / 2, z),
+                    } as CtxItem)),
+                    'sep' as CtxItem,
+                    { label: t('layer_fit_screen'), onClick: fitToScreen } as CtxItem,
+                  ])}>
+            {Math.round(viewState.zoom*100)}%
+          </button>
+          {zoomMenu.menu}
           <button title={t('layer_zoom_in')}
                   onClick={() => setViewState(prev => {
                     const nz = Math.min(20, prev.zoom * 1.2)
@@ -3233,6 +4477,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
           </button>
         </div></>}>
         <DockArea
+          theme={C}
           className="flex flex-1 min-w-0" style={{ order:2 }}
           viewportRef={viewportRef} viewportBg="#141414"
           storageKey="kubuno:paintsharp:dockLayout" hidden={panelsHidden}
@@ -3250,9 +4495,20 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
                   onPointerCancel={onPointerUp}
                   onPointerLeave={clearCursor}
                   onContextMenu={e => { if (tool === 'zoom') e.preventDefault() }}
-                  onWheel={onWheel} />
+                  onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
+                  onDrop={e => {
+                    const f = e.dataTransfer.files?.[0]
+                    if (f && f.type.startsWith('image/')) { e.preventDefault(); importImageAsLayer(f) }
+                  }} />
           <canvas ref={overlayRef}
                   className="absolute inset-0 w-full h-full pointer-events-none" />
+          {/* Hidden file input backing "Import image as layer". */}
+          <input ref={importInputRef} type="file" accept="image/*" className="hidden"
+                 onChange={e => {
+                   const f = e.target.files?.[0]
+                   if (f) importImageAsLayer(f)
+                   e.target.value = ''
+                 }} />
           {textEdit && (() => {
             const [sx, sy] = docToScreen(textEdit.dx, textEdit.dy)
             const z = viewState.zoom
@@ -3283,6 +4539,30 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
             </div>
           )}
         </DockArea>
+        {filterDialog && (
+          <FilterDialog
+            def={filterDialog.def}
+            values={filterDialog.values}
+            preview={filterDialog.preview}
+            accent={C.accent}
+            t={t}
+            onChange={v => { setFilterDialog(d => d ? { ...d, values: v } : d); previewFilter(v, filterDialog.preview) }}
+            onTogglePreview={on => { setFilterDialog(d => d ? { ...d, preview: on } : d); previewFilter(filterDialog.values, on) }}
+            onApply={commitFilter}
+            onCancel={() => closeFilterDialog(false)}
+          />
+        )}
+        {brushStudioOpen && (
+          <BrushStudio
+            t={t} accent={C.accent} color={fgColor}
+            activeId={brushPreset} dyn={brushDyn}
+            size={brushSize} hard={brushHard} opac={brushOpac} flow={brushFlow} stabilizer={stabilizer}
+            onSelect={selectBrush} onSetDyn={setBrushDyn}
+            onSetSize={handleSetBrushSize} onSetHard={setBrushHard} onSetOpac={setBrushOpac}
+            onSetFlow={setBrushFlow} onSetStabilizer={setStabilizer}
+            onClose={() => setBrushStudioOpen(false)}
+          />
+        )}
     </Shell>
   )
 }
@@ -3294,7 +4574,13 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
 // other kinds use a glyph supplied by the parent.
 function LayerThumb({ paint, id, version }: { paint: (c: HTMLCanvasElement, id: string) => void; id: string; version: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
-  useEffect(() => { const c = ref.current; if (c) paint(c, id) }, [version, id, paint])
+  // Debounced repaint: preview sliders (adjustments/filters) bump `version` many
+  // times per second; the GPU readback only runs once the burst settles.
+  useEffect(() => {
+    const c = ref.current; if (!c) return
+    const handle = setTimeout(() => paint(c, id), 150)
+    return () => clearTimeout(handle)
+  }, [version, id, paint])
   return <canvas ref={ref} width={44} height={32}
                  style={{ width:34, height:25, imageRendering:'auto', display:'block' }} />
 }
@@ -3303,7 +4589,7 @@ function LayerThumb({ paint, id, version }: { paint: (c: HTMLCanvasElement, id: 
 function KindThumb({ kind }: { kind: string }) {
   const Icon = kind === 'text' ? Type : kind === 'adjustment' ? SlidersHorizontal : kind === 'group' ? FolderClosed : Layers
   return (
-    <div className="rounded flex items-center justify-center"
+    <div className="flex items-center justify-center"
          style={{ width:34, height:25, background:'#2a2a2a', border:'1px solid #3a3a3a' }}>
       <Icon size={13} style={{ color:'#9a9a9a' }} />
     </div>
@@ -3440,7 +4726,6 @@ function LayersPanel({
            style={{ borderBottom:`1px solid ${C2.border}`,
                     borderTop: dropHere === 'before' ? `2px solid ${C2.accent}` : '2px solid transparent',
                     boxShadow: dropHere === 'after' ? `inset 0 -2px 0 ${C2.accent}` : undefined,
-                    borderLeft:`2px solid ${isActive?C2.accent:'transparent'}`,
                     background: dropHere === 'into' ? C2.accent+'33' : isActive ? C2.accent+'18' : isGroup ? '#ffffff08' : 'transparent' }}>
         {/* Colour tag strip (right edge) */}
         {layer.colorLabel && <div className="absolute right-0 top-0 bottom-0 pointer-events-none" style={{ width: 3, background: layer.colorLabel }} />}
@@ -3462,7 +4747,7 @@ function LayersPanel({
           ) : (
             <>
               {layer.clipping && <CornerDownRight size={11} className="flex-shrink-0" style={{ color:C2.accent }} />}
-              <div className="flex-shrink-0 rounded overflow-hidden border" style={{ borderColor: isActive ? C2.accent : '#3a3a3a' }}>
+              <div className="flex-shrink-0 overflow-hidden border" style={{ borderColor: isActive ? C2.accent : '#3a3a3a' }}>
                 {layer.type === 'raster' || !layer.type
                   ? <LayerThumb paint={paintThumb} id={layer.id} version={thumbVersion} />
                   : <KindThumb kind={layer.type} />}
@@ -3615,11 +4900,12 @@ const toolLabel = (t: TFunction, tool: Tool): string => ({
   zoom: t('layer_tool_zoom'), rotate: t('layer_tool_rotate'),
 }[tool] ?? '')
 
-function ToolProps({ t, tool, brushSize,setBrushSize, brushHard,setBrushHard, brushOpac,setBrushOpac, pressureSens,setPressureSens, stabilizer,setStabilizer, inputKind, inputPressure, brushPreset, onSelectBrush, brushSelOpen, setBrushSelOpen, bare }: {
+function ToolProps({ t, tool, brushSize,setBrushSize, brushHard,setBrushHard, brushOpac,setBrushOpac, brushFlow,setBrushFlow, pressureSens,setPressureSens, stabilizer,setStabilizer, inputKind, inputPressure, brushPreset, onSelectBrush, brushSelOpen, setBrushSelOpen, bare }: {
   t: TFunction
   tool: Tool; brushSize:number; setBrushSize:(v:number)=>void
   brushHard:number; setBrushHard:(v:number)=>void
   brushOpac:number; setBrushOpac:(v:number)=>void
+  brushFlow:number; setBrushFlow:(v:number)=>void
   pressureSens:boolean; setPressureSens:(v:boolean)=>void
   stabilizer:number; setStabilizer:(v:number)=>void
   inputKind:'pen'|'touch'|'mouse'|null; inputPressure:number
@@ -3658,6 +4944,7 @@ function ToolProps({ t, tool, brushSize,setBrushSize, brushHard,setBrushHard, br
               <BrushSlider label={t('layer_brush_size')}     value={brushSize}  min={1}   max={500} unit="px" onChange={setBrushSize} accent={C2.accent} />
               <BrushSlider label={t('layer_brush_hardness')} value={brushHard}  min={0}   max={100} unit="%" onChange={setBrushHard} accent={C2.accent} />
               <BrushSlider label={t('layer_brush_opacity')}  value={brushOpac}  min={0}   max={100} unit="%" onChange={setBrushOpac} accent={C2.accent} />
+              <BrushSlider label={t('layer_brush_flow')}     value={brushFlow}  min={1}   max={100} unit="%" onChange={setBrushFlow} accent={C2.accent} />
               <BrushSlider label={t('layer_brush_stabilizer')} value={stabilizer} min={0} max={100} unit="%" onChange={setStabilizer} accent={C2.accent} />
               {/* Pressure sensitivity toggle */}
               <div className="flex items-center justify-between pt-0.5">
@@ -3704,7 +4991,10 @@ function ToolProps({ t, tool, brushSize,setBrushSize, brushHard,setBrushHard, br
             <p className="text-[11px]" style={{ color:C2.textDim }}>{t('layer_text_hint')}</p>
           )}
           {(tool==='crop') && (
-            <p className="text-[11px]" style={{ color:C2.textDim }}>{t('layer_hint_wip')}</p>
+            <p className="text-[11px]" style={{ color:C2.textDim }}>{t('layer_crop_hint')}</p>
+          )}
+          {(tool==='lasso'||tool==='magic') && (
+            <p className="text-[11px]" style={{ color:C2.textDim }}>{t('layer_sel_mode_hint')}</p>
           )}
         </div>
       )}
@@ -3765,6 +5055,181 @@ function BrushPicker({ t, activeId, active, open, setOpen, onSelect, C2 }: {
         </div>
       )}
     </div>
+  )
+}
+
+// ── Brush studio (Procreate-style selector + live stroke preview) ─────────────
+// Tiny stroke thumbnail rendered inside the toolbar trigger button.
+function BrushTriggerThumb({ brush, dyn, size, opac, flow }: {
+  brush: BrushPreset; dyn: BrushDyn; size: number; opac: number; flow: number
+}) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return
+    const dpr = Math.min(2, window.devicePixelRatio || 1)
+    cv.width = 24 * dpr; cv.height = 24 * dpr
+    const merged = { ...brush, ...dyn }
+    paintPreviewStroke(cv, merged, Math.min(10, size) * dpr, opac, flow, '#d6d6d6')
+  }, [brush, dyn, size, opac, flow])
+  return <canvas ref={ref} style={{ width: 24, height: 24 }} />
+}
+
+// A brush-library card's stroke preview (uses the preset's own default character).
+function BrushThumb({ brush, color, w = 132, h = 34 }: { brush: BrushPreset; color: string; w?: number; h?: number }) {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return
+    const dpr = Math.min(2, window.devicePixelRatio || 1)
+    cv.width = w * dpr; cv.height = h * dpr
+    paintPreviewStroke(cv, brush, brush.defaultSize * dpr, 100, Math.round(brush.flow * 100), color)
+  }, [brush, color, w, h])
+  return <canvas ref={ref} style={{ width: w, height: h }} />
+}
+
+function BrushStudio({
+  t, accent, color, activeId, dyn, size, hard, opac, flow, stabilizer,
+  onSelect, onSetDyn, onSetSize, onSetHard, onSetOpac, onSetFlow, onSetStabilizer, onClose,
+}: {
+  t: TFunction; accent: string; color: string; activeId: string; dyn: BrushDyn
+  size: number; hard: number; opac: number; flow: number; stabilizer: number
+  onSelect: (id: string) => void; onSetDyn: (d: BrushDyn) => void
+  onSetSize: (v: number) => void; onSetHard: (v: number) => void; onSetOpac: (v: number) => void
+  onSetFlow: (v: number) => void; onSetStabilizer: (v: number) => void; onClose: () => void
+}) {
+  const preview = useRef<HTMLCanvasElement>(null)
+  const preset = BRUSH_PRESETS.find(b => b.id === activeId) ?? DEFAULT_BRUSH
+  const merged: BrushPreset = { ...preset, hardness: hard, ...dyn }
+  // Repaint the big preview whenever the live brush or its size/opacity/flow change.
+  useEffect(() => {
+    const cv = preview.current; if (!cv) return
+    const dpr = Math.min(2, window.devicePixelRatio || 1)
+    cv.width = 300 * dpr; cv.height = 96 * dpr
+    paintPreviewStroke(cv, merged, size * dpr, opac, flow, color)
+  }, [merged, size, opac, flow, color])
+  const set = (patch: Partial<BrushDyn>) => onSetDyn({ ...dyn, ...patch })
+  const Toggle = ({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) => (
+    <button onClick={onClick}
+            className="flex items-center justify-between px-2 py-1.5 rounded text-[11px]"
+            style={{ background: '#262626', border: `1px solid ${on ? accent : '#333'}`, color: on ? accent : '#9e9e9e' }}>
+      <span>{label}</span>
+      <span style={{ fontSize: 9, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
+                     background: on ? accent : '#333', color: on ? '#fff' : '#9e9e9e' }}>
+        {on ? t('layer_toggle_on') : t('layer_toggle_off')}
+      </span>
+    </button>
+  )
+  return (
+    <FloatingWindow
+      title={t('layer_brush_studio')}
+      icon={<Brush size={13} style={{ color: accent }} />}
+      onClose={onClose}
+      defaultWidth={620} defaultHeight={470} minWidth={520} minHeight={380}
+    >
+      <div className="flex h-full min-h-0" style={{ color: '#e0e0e0' }}>
+        {/* Library (left) */}
+        <div className="w-[188px] flex-shrink-0 overflow-y-auto py-2" style={{ borderRight: '1px solid #333' }}>
+          {BRUSH_CATEGORIES.map(cat => {
+            const catKey = `layer_brushcat_${cat}`
+            const brushes = BRUSH_PRESETS.filter(b => b.category === catKey)
+            if (!brushes.length) return null
+            return (
+              <div key={cat} className="mb-2">
+                <div className="px-3 py-1 text-[9px] uppercase tracking-wide" style={{ color: '#6e6e6e' }}>{t(catKey)}</div>
+                {brushes.map(b => {
+                  const isActive = b.id === activeId
+                  return (
+                    <button key={b.id} onClick={() => onSelect(b.id)} title={t(b.nameKey)}
+                            className="w-full flex flex-col gap-0.5 px-3 py-1.5 text-left transition-colors"
+                            style={{ background: isActive ? accent + '22' : 'transparent' }}>
+                      <span className="text-[10px]" style={{ color: isActive ? accent : '#c0c0c0' }}>{t(b.nameKey)}</span>
+                      <span className="rounded overflow-hidden" style={{ background: '#1b1b1b' }}>
+                        <BrushThumb brush={b} color={isActive ? color : '#c0c0c0'} />
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+        {/* Settings (right) */}
+        <div className="flex-1 min-w-0 overflow-y-auto p-3 space-y-2.5">
+          {/* Live preview */}
+          <div className="rounded flex items-center justify-center" style={{ background: '#f4f4f4', border: '1px solid #333' }}>
+            <canvas ref={preview} style={{ width: 300, height: 96 }} />
+          </div>
+          <div className="text-[11px] font-medium" style={{ color: accent }}>{t(preset.nameKey)}</div>
+          <BrushSlider label={t('layer_brush_size')}      value={size} min={1} max={500} unit="px" onChange={onSetSize} accent={accent} />
+          <BrushSlider label={t('layer_brush_hardness')}  value={hard} min={0} max={100} unit="%"  onChange={onSetHard} accent={accent} />
+          <BrushSlider label={t('layer_brush_opacity')}   value={opac} min={0} max={100} unit="%"  onChange={onSetOpac} accent={accent} />
+          <BrushSlider label={t('layer_brush_flow')}      value={flow} min={1} max={100} unit="%"  onChange={onSetFlow} accent={accent} />
+          <div className="text-[9px] uppercase tracking-wide pt-1" style={{ color: '#6e6e6e' }}>{t('layer_brush_dynamics')}</div>
+          <BrushSlider label={t('layer_brush_spacing')}       value={Math.round(dyn.spacing * 100)} min={1} max={120} unit="%" onChange={v => set({ spacing: v / 100 })} accent={accent} />
+          <BrushSlider label={t('layer_brush_sizejitter')}    value={Math.round(dyn.sizeJitter * 100)} min={0} max={100} unit="%" onChange={v => set({ sizeJitter: v / 100 })} accent={accent} />
+          <BrushSlider label={t('layer_brush_opacityjitter')} value={Math.round(dyn.opacityJitter * 100)} min={0} max={100} unit="%" onChange={v => set({ opacityJitter: v / 100 })} accent={accent} />
+          <BrushSlider label={t('layer_brush_scatter')}       value={Math.round(dyn.scatter * 100)} min={0} max={200} unit="%" onChange={v => set({ scatter: v / 100 })} accent={accent} />
+          <BrushSlider label={t('layer_brush_angle')}         value={Math.round(dyn.angle)} min={0} max={180} unit="°" onChange={v => set({ angle: v })} accent={accent} />
+          <BrushSlider label={t('layer_brush_roundness')}     value={Math.round(dyn.roundness * 100)} min={10} max={100} unit="%" onChange={v => set({ roundness: v / 100 })} accent={accent} />
+          <BrushSlider label={t('layer_brush_stabilizer')}    value={stabilizer} min={0} max={100} unit="%" onChange={onSetStabilizer} accent={accent} />
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <Toggle on={dyn.pressureSize} onClick={() => set({ pressureSize: !dyn.pressureSize })} label={t('layer_pressure_size')} />
+            <Toggle on={dyn.pressureOpacity} onClick={() => set({ pressureOpacity: !dyn.pressureOpacity })} label={t('layer_pressure_opacity')} />
+          </div>
+        </div>
+      </div>
+    </FloatingWindow>
+  )
+}
+
+// ── Parametric filter dialog (floating, live preview) ─────────────────────────
+function FilterDialog({ def, values, preview, accent, t, onChange, onTogglePreview, onApply, onCancel }: {
+  def: FilterDef
+  values: Record<string, number>
+  preview: boolean
+  accent: string
+  t: (k: string) => string
+  onChange: (v: Record<string, number>) => void
+  onTogglePreview: (on: boolean) => void
+  onApply: () => void
+  onCancel: () => void
+}) {
+  const set = (key: string, step: number) => (v: number) => {
+    // Snap fractional-step params to their step so the number field stays clean.
+    const snapped = step < 1 ? Math.round(v / step) * step : Math.round(v)
+    onChange({ ...values, [key]: snapped })
+  }
+  return (
+    <FloatingWindow
+      title={t(def.nameKey)}
+      icon={<SlidersHorizontal size={13} style={{ color: accent }} />}
+      onClose={onCancel}
+      defaultWidth={320}
+      resizable={false}
+    >
+      <div className="flex flex-col gap-3 p-3" style={{ color: '#e0e0e0' }}>
+        {def.params.map(p => (
+          <div key={p.key} className="flex items-center gap-2">
+            <span className="text-[11px] w-24 flex-shrink-0 capitalize" style={{ color: '#b0b0b0' }}>{t(p.labelKey)}</span>
+            <RangeSlider min={p.min} max={p.max} step={p.step} value={values[p.key]} onChange={set(p.key, p.step)}
+                   className="flex-1" accent={accent} trackColor="rgba(255,255,255,0.15)" aria-label={t(p.labelKey)} />
+            <input type="number" min={p.min} max={p.max} step={p.step} value={values[p.key]}
+                   onChange={e => set(p.key, p.step)(+e.target.value)}
+                   className="w-14 h-6 text-[11px] text-center rounded outline-none"
+                   style={{ background: '#2c2c2c', border: '1px solid #3a3a3a', color: '#e0e0e0' }} />
+          </div>
+        ))}
+        <label className="flex items-center gap-2 text-[11px] cursor-pointer select-none mt-1" style={{ color: '#b0b0b0' }}>
+          <input type="checkbox" checked={preview} onChange={e => onTogglePreview(e.target.checked)} style={{ accentColor: accent }} />
+          {t('filt_preview')}
+        </label>
+        <div className="flex justify-end gap-2 mt-1">
+          <button onClick={onCancel} className="px-3 h-7 text-[11px] rounded"
+                  style={{ background: '#333', color: '#ddd', border: '1px solid #444' }}>{t('common_cancel')}</button>
+          <button onClick={onApply} className="px-3 h-7 text-[11px] rounded font-medium"
+                  style={{ background: accent, color: '#fff' }}>{t('filt_apply')}</button>
+        </div>
+      </div>
+    </FloatingWindow>
   )
 }
 

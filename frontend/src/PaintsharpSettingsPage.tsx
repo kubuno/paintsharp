@@ -229,10 +229,20 @@ function AboutTab() {
         <div className="px-5 py-4">
           <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-3">{t('settings_technologies_label')}</p>
           <div className="flex flex-wrap gap-2">
-            {['Rust', 'Axum 0.7', 'SQLx 0.8', 'PostgreSQL 16', 'tokio', 'WebSocket', 'Three.js', 'Canvas 2D', 'Fabric.js (Apex)'].map(tech => (
+            {['Rust', 'Axum 0.7', 'SQLx 0.8', 'PostgreSQL 16', 'tokio', 'WebSocket', 'Three.js', 'Canvas 2D', 'VTracer (visioncortex)'].map(tech => (
               <span key={tech} className="text-xs px-2 py-1 rounded-lg bg-surface-2 text-text-secondary font-mono">{tech}</span>
             ))}
           </div>
+        </div>
+
+        <div className="px-5 py-4">
+          <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">{t('settings_credits_label')}</p>
+          <p className="text-sm text-text-secondary leading-relaxed mb-2">{t('settings_credits_vtracer')}</p>
+          <a href="https://github.com/visioncortex/vtracer" target="_blank" rel="noopener noreferrer"
+             className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
+            <ExternalLink size={13} />
+            github.com/visioncortex/vtracer
+          </a>
         </div>
 
         <div className="px-5 py-4">

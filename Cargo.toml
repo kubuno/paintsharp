@@ -42,6 +42,11 @@ clap               = { workspace = true }
 hex                = { workspace = true }
 tokio-util         = { workspace = true }
 lopdf              = "0.34"
+# Raster → vector tracing (visioncortex engine — the VTracer pipeline is
+# vendored in services/vtrace.rs to avoid the vtracer crate's clap2/image0.23)
+visioncortex       = "0.8"
+fastrand           = "2"
+image              = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
 
 # ─── Workspace mono-crate (deps tierces recopiées du monorepo kubuno/core ;
 #     crates partagées consommées via dépendances git taguées) ───

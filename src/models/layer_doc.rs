@@ -65,4 +65,7 @@ pub struct UpdateLayerDocDto {
     pub thumbnail_path:   Option<String>,
     pub thumbnail_dirty:  Option<bool>,
     pub is_starred:       Option<bool>,
+    // Document dimensions may change after a crop / 90-degree rotation / canvas resize.
+    pub width:            Option<i32>,
+    pub height:           Option<i32>,
 }

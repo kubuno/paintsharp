@@ -1,20 +1,34 @@
 import * as pdfjsLib from 'pdfjs-dist'
 import type { PDFPageProxy } from 'pdfjs-dist'
 import type { Annotation } from './api'
+import { resolveFont } from './pdfFontMatch'
 
 // Extrait le CONTENU d'une page PDF en éléments éditables (texte + images), pour
 // transformer un PDF importé en objets manipulables (« vrai éditeur »).
 //
-// Compromis assumé : les graphiques vectoriels (filets, traits) et les polices/mises
-// en page exactes ne sont PAS reconstitués — on récupère le texte (par fragment) et
-// les images bitmap, positionnés en points PDF, ce qui suffit pour déplacer le logo,
-// réécrire le texte livré, etc.
+// Compromis assumé : les graphiques vectoriels (filets, traits) et les mises en
+// page exactes ne sont PAS reconstitués — on récupère le texte (par fragment) et
+// les images bitmap, positionnés en points PDF. En revanche la POLICE de chaque
+// fragment est appariée au plus proche parmi les familles disponibles (cf.
+// `resolveFont`) : une police embarquée reconnue (Arial, Calibri, Times…) reste
+// donc rendue dans une police proche au lieu de tout écraser en Helvetica.
 
 const RASTER = 1.5 // sur-échantillonnage (compromis netteté / poids des données)
 
+// Devine la nature CSS (serif/sans/mono) d'une famille résolue, pour bâtir une
+// chaîne `font` de mesure avec un repli cohérent (l'appariement de largeur reste
+// bon même si la police exacte n'est pas installée sur la machine).
+function cssStack(family: string): string {
+  const f = family.toLowerCase()
+  const q = /\s/.test(family) ? `'${family}'` : family
+  if (/courier|mono|consol/.test(f)) return `${q}, 'Courier New', monospace`
+  if (/times|serif|georgia|garamond|book|roman/.test(f)) return `${q}, 'Times New Roman', serif`
+  return `${q}, Helvetica, Arial, sans-serif`
+}
+
 function uid() { return (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)) }
 
-export async function extractPageElements(page: PDFPageProxy, pageNum: number): Promise<Annotation[]> {
+export async function extractPageElements(page: PDFPageProxy, pageNum: number, availableFonts: readonly string[] = []): Promise<Annotation[]> {
   const { OPS, Util } = pdfjsLib as unknown as {
     OPS: Record<string, number>
     Util: { transform: (a: number[], b: number[]) => number[]; applyTransform: (p: number[], m: number[]) => number[] }
@@ -29,6 +43,28 @@ export async function extractPageElements(page: PDFPageProxy, pageNum: number): 
   // ── Texte (un élément éditable par fragment) ────────────────────────────────
   try {
     const tc = await page.getTextContent()
+    // Chaque fragment référence une police interne (g_d0_f1…). pdf.js expose :
+    //  - `styles[fontName].fontFamily` : le repli générique serif/sans/mono ;
+    //  - `commonObjs.get(fontName).name` : le VRAI nom embarqué (ABCDEF+Arial-BoldMT).
+    // On combine les deux dans `resolveFont` pour choisir la famille disponible la
+    // plus proche (et lire gras/italique depuis le vrai nom, pas depuis « g_d0_f1 »).
+    const styles = (tc as unknown as { styles?: Record<string, { fontFamily?: string }> }).styles ?? {}
+    const commonObjs = (page as unknown as { commonObjs?: { has: (n: string) => boolean; get: (n: string) => unknown } }).commonObjs
+    const realNameCache = new Map<string, string>()
+    const realNameOf = (fontName: string | undefined): string => {
+      if (!fontName) return ''
+      if (realNameCache.has(fontName)) return realNameCache.get(fontName)!
+      let name = ''
+      try {
+        if (commonObjs?.has(fontName)) {
+          const fo = commonObjs.get(fontName) as { name?: string; fallbackName?: string } | null
+          name = fo?.name || ''
+        }
+      } catch { /* police pas encore prête → repli générique */ }
+      realNameCache.set(fontName, name)
+      return name
+    }
+    const resolveCache = new Map<string, ReturnType<typeof resolveFont>>()
     for (const item of tc.items as Array<{ str: string; transform: number[]; width: number; fontName?: string }>) {
       const str = item.str
       if (!str || !str.trim()) continue
@@ -37,11 +73,16 @@ export async function extractPageElements(page: PDFPageProxy, pageNum: number): 
       const fs = Math.max(6, Math.round(fontSize))
       const [vx, vy] = vp1.convertToViewportPoint(tr[4], tr[5]) // baseline en points (y vers le bas)
       const origW = item.width || fontSize * 0.6 // largeur d'origine (points)
-      const bold   = /bold|black|heavy/i.test(item.fontName ?? '')
-      const italic = /italic|oblique/i.test(item.fontName ?? '')
+      const fn = item.fontName
+      let resolved = fn ? resolveCache.get(fn) : undefined
+      if (!resolved) {
+        resolved = resolveFont(realNameOf(fn), fn ? styles[fn]?.fontFamily : undefined, availableFonts)
+        if (fn) resolveCache.set(fn, resolved)
+      }
+      const { family, bold, italic } = resolved
       // Étirement horizontal : on cale la largeur rendue (police web) sur la largeur
       // d'origine du PDF → le bord droit (lignes alignées à droite) coïncide.
-      meas.font = `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${fs}px serif`
+      meas.font = `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${fs}px ${cssStack(family)}`
       const measured = meas.measureText(str).width
       const scaleX = measured > 1 ? Math.min(3, Math.max(0.3, origW / measured)) : 1
       // La ligne de base d'origine est en (vx, vy) ; on remonte de la taille de police.
@@ -50,7 +91,7 @@ export async function extractPageElements(page: PDFPageProxy, pageNum: number): 
         id: uid(), type: 'text', page: pageNum,
         x: box.x, y: box.y, width: box.width, height: box.height,
         content: str, fontSize: fs,
-        fontFamily: 'serif', color: '#000000', bold, italic, align: 'left',
+        fontFamily: family, color: '#000000', bold, italic, align: 'left',
         scaleX,
         createdAt: now,
       } as Annotation)
@@ -70,7 +111,9 @@ export async function extractPageElements(page: PDFPageProxy, pageNum: number): 
     const octx = off.getContext('2d')!
     octx.fillStyle = '#ffffff'                      // fond blanc (JPEG sans transparence)
     octx.fillRect(0, 0, off.width, off.height)
-    await page.render({ canvas: off, canvasContext: octx, viewport: vpR }).promise
+    // Hors-écran : `canvas: null` + intent 'print' → ne partage pas le canal de
+    // rendu 'display' de la page (sinon pdf.js v6 peint dans le canvas principal).
+    await page.render({ canvas: null, canvasContext: octx, viewport: vpR, intent: 'print' }).promise
     octx.fillStyle = '#ffffff'
     for (const b of boxes) {
       octx.fillRect(b.x * RASTER - 1, b.y * RASTER - 1, b.w * RASTER + 2, b.h * RASTER + 2)

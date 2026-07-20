@@ -164,12 +164,22 @@ pub async fn update_doc(
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateLayerDocDto>,
 ) -> Result<Json<Value>> {
+    // Validate new dimensions (crop / rotation / canvas resize) before touching the DB.
+    for dim in [body.width, body.height].into_iter().flatten() {
+        if !(1..=16384).contains(&dim) {
+            return Err(PaintsharpError::Validation(format!(
+                "invalid document dimension: {dim}"
+            )));
+        }
+    }
     let rows = sqlx::query(
         "UPDATE layer_documents SET
             title            = COALESCE($3, title),
             thumbnail_path   = COALESCE($4, thumbnail_path),
             thumbnail_dirty  = COALESCE($5, thumbnail_dirty),
             is_starred       = COALESCE($6, is_starred),
+            width            = COALESCE($7, width),
+            height           = COALESCE($8, height),
             last_edited_by   = $2
          WHERE id = $1 AND owner_id = $2",
     )
@@ -178,6 +188,8 @@ pub async fn update_doc(
     .bind(&body.thumbnail_path)
     .bind(body.thumbnail_dirty)
     .bind(body.is_starred)
+    .bind(body.width)
+    .bind(body.height)
     .execute(&state.db).await?.rows_affected();
 
     if rows == 0 {

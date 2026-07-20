@@ -35,6 +35,8 @@ export interface OcrWord {
 
 export interface OcrResult {
   words: OcrWord[]
+  /** Mots regroupés par LIGNE (moins d'éléments, édition plus naturelle). */
+  lines: OcrWord[]
   /** Dimensions (px) de l'image fournie à l'OCR (pour reconvertir en points PDF). */
   width: number
   height: number
@@ -79,7 +81,42 @@ export async function recognizeImage(
       x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1,
       confidence: w.confidence,
     }))
-  return { words, width, height }
+  // Lignes : celles de tesseract si disponibles, sinon regroupement des mots par
+  // chevauchement vertical (fallback robuste selon la version/le mode de sortie).
+  let lines: OcrWord[] = (data.lines ?? [])
+    .filter(l => (l.text ?? '').trim().length > 0)
+    .map(l => ({
+      text: l.text.replace(/\s+$/g, ''),
+      x0: l.bbox.x0, y0: l.bbox.y0, x1: l.bbox.x1, y1: l.bbox.y1,
+      confidence: l.confidence,
+    }))
+  if (!lines.length && words.length) lines = groupWordsIntoLines(words)
+  return { words, lines, width, height }
+}
+
+// Regroupe des mots en lignes : deux mots appartiennent à la même ligne si leurs
+// boîtes se chevauchent verticalement d'au moins la moitié de la plus petite.
+function groupWordsIntoLines(words: OcrWord[]): OcrWord[] {
+  const sorted = [...words].sort((a, b) => (a.y0 - b.y0) || (a.x0 - b.x0))
+  const lines: OcrWord[][] = []
+  for (const w of sorted) {
+    const line = lines.find(l => {
+      const ref = l[l.length - 1]
+      const overlap = Math.min(ref.y1, w.y1) - Math.max(ref.y0, w.y0)
+      return overlap > 0.5 * Math.min(ref.y1 - ref.y0, w.y1 - w.y0)
+    })
+    if (line) line.push(w)
+    else lines.push([w])
+  }
+  return lines.map(l => {
+    const ws = [...l].sort((a, b) => a.x0 - b.x0)
+    return {
+      text: ws.map(w => w.text).join(' '),
+      x0: Math.min(...ws.map(w => w.x0)), y0: Math.min(...ws.map(w => w.y0)),
+      x1: Math.max(...ws.map(w => w.x1)), y1: Math.max(...ws.map(w => w.y1)),
+      confidence: ws.reduce((s, w) => s + w.confidence, 0) / ws.length,
+    }
+  })
 }
 
 /** Libère le worker (et le cœur WASM) — à appeler au démontage de l'éditeur. */

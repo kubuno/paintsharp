@@ -1,5 +1,6 @@
 pub mod animation;
 pub mod asset;
+pub mod font;
 pub mod layer_doc;
 pub mod pdf;
 pub mod scene;

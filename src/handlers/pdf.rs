@@ -138,7 +138,7 @@ pub async fn get_document(
     .ok_or_else(|| PaintsharpError::NotFound(id.to_string()))?;
 
     let pages = sqlx::query_as::<_, PdfPageSummary>(
-        "SELECT id, page_number, width, height, rotation FROM paintsharp.pdf_pages
+        "SELECT id, page_number, width, height, rotation, source_index FROM paintsharp.pdf_pages
          WHERE document_id = $1 ORDER BY page_number",
     )
     .bind(id)
@@ -266,7 +266,7 @@ pub async fn duplicate_document(
     .ok_or_else(|| PaintsharpError::NotFound(id.to_string()))?;
 
     let pages: Vec<PdfPage> = sqlx::query_as::<_, PdfPage>(
-        "SELECT id, document_id, page_number, width, height, rotation, created_at, updated_at
+        "SELECT id, document_id, page_number, width, height, rotation, source_index, created_at, updated_at
          FROM paintsharp.pdf_pages WHERE document_id = $1 ORDER BY page_number",
     )
     .bind(id)
@@ -294,14 +294,15 @@ pub async fn duplicate_document(
     let mut new_content = json!({ "version": 1, "pages": {} });
     for page in &pages {
         let new_page_id: Uuid = sqlx::query_scalar(
-            "INSERT INTO paintsharp.pdf_pages (document_id, page_number, width, height, rotation)
-             VALUES ($1, $2, $3, $4, $5) RETURNING id",
+            "INSERT INTO paintsharp.pdf_pages (document_id, page_number, width, height, rotation, source_index)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
         )
         .bind(new_id)
         .bind(page.page_number)
         .bind(page.width)
         .bind(page.height)
         .bind(page.rotation)
+        .bind(page.source_index)
         .fetch_one(&state.db).await?;
         cf::set_pdf_page(&mut new_content, new_page_id, cf::get_pdf_page(&src_content, page.id));
     }
@@ -403,10 +404,10 @@ async fn import_pdf_bytes(
     let mut content = json!({ "version": 1, "pages": {} });
     for (n, (w, h)) in pages_meta.into_iter().enumerate() {
         let page_id: Uuid = sqlx::query_scalar(
-            "INSERT INTO paintsharp.pdf_pages (document_id, page_number, width, height)
-             VALUES ($1, $2, $3, $4) RETURNING id",
+            "INSERT INTO paintsharp.pdf_pages (document_id, page_number, width, height, source_index)
+             VALUES ($1, $2, $3, $4, $5) RETURNING id",
         )
-        .bind(doc_id).bind((n + 1) as i32).bind(w).bind(h)
+        .bind(doc_id).bind((n + 1) as i32).bind(w).bind(h).bind(n as i32)
         .fetch_one(&mut *tx).await?;
         cf::set_pdf_page(&mut content, page_id, cf::empty_pdf_page());
     }
@@ -515,14 +516,25 @@ pub async fn save_page(
 ) -> Result<Json<Value>> {
     check_owner(&state.db, doc_id, user.id).await?;
 
-    let rotation = body.rotation.unwrap_or(0);
-    let page_id: Uuid = sqlx::query_scalar(
-        "UPDATE paintsharp.pdf_pages SET rotation = $3
-         WHERE document_id = $1 AND page_number = $2 RETURNING id",
-    )
-    .bind(doc_id).bind(page_num).bind(rotation)
-    .fetch_optional(&state.db).await?
-    .ok_or_else(|| PaintsharpError::NotFound(format!("Page {page_num}")))?;
+    // Only touch the stored rotation when the client actually sends one:
+    // autosaves only carry annotations and must not reset a rotated page.
+    let page_id: Uuid = if let Some(rotation) = body.rotation {
+        sqlx::query_scalar(
+            "UPDATE paintsharp.pdf_pages SET rotation = $3
+             WHERE document_id = $1 AND page_number = $2 RETURNING id",
+        )
+        .bind(doc_id).bind(page_num).bind(rotation)
+        .fetch_optional(&state.db).await?
+        .ok_or_else(|| PaintsharpError::NotFound(format!("Page {page_num}")))?
+    } else {
+        sqlx::query_scalar(
+            "SELECT id FROM paintsharp.pdf_pages
+             WHERE document_id = $1 AND page_number = $2",
+        )
+        .bind(doc_id).bind(page_num)
+        .fetch_optional(&state.db).await?
+        .ok_or_else(|| PaintsharpError::NotFound(format!("Page {page_num}")))?
+    };
 
     // annotations + form_data → fichier (clé = page_id).
     let file_id = doc_file_id(&state, doc_id, user.id).await?;

@@ -6,6 +6,7 @@ pub mod collab_pdf;
 pub mod collab_scene;
 pub mod collab_video;
 pub mod collab_vector;
+pub mod fonts;
 pub mod health;
 pub mod layer_docs;
 pub mod pdf;

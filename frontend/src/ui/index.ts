@@ -2,7 +2,7 @@
 // sub-editor (Layer, Apex, Vertex, Keyframe, Motion, PdfWriter).
 export * from './theme'
 export { ColorPicker, harmonyColors } from './ColorPicker'
-export type { Scheme } from './ColorPicker'
+export type { Scheme, PickerTool } from './ColorPicker'
 export { ColorField } from './ColorField'
 export { useContextMenu, type CtxItem } from './ContextMenu'
 // Use the CORE dock (via @kubuno/sdk) so every Dock improvement (column/row

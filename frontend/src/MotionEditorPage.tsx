@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, useNavigate } from 'react-router-dom'
+import { uid } from './uid'
 import { useDebouncedAutosave } from './useAutosave'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -961,7 +962,7 @@ export default function MotionEditorPage() {
   const addTrack = (type: VideoTrack['type']) => {
     if (!timeline) return
     const newTrack: VideoTrack = {
-      id:     crypto.randomUUID(),
+      id:     uid(),
       type,
       name:   type === 'video' ? t('motion_track_video') : type === 'audio' ? t('motion_track_audio') : type === 'fx' ? t('motion_track_fx') : t('motion_track_subtitle'),
       muted:  false,
@@ -979,7 +980,7 @@ export default function MotionEditorPage() {
     const fps = proj.composition.fps
     const start = Math.floor(frameRef.current)
     const dur = fps * 3
-    const clipId = crypto.randomUUID()
+    const clipId = uid()
     setTimeline(tl => {
       if (!tl) return tl
       const newClip: VideoClip = {
@@ -998,7 +999,7 @@ export default function MotionEditorPage() {
         const tracks = tl.tracks.map((tr, i) => i === subIdx ? { ...tr, clips: [...tr.clips, newClip] } : tr)
         return { ...tl, tracks }
       }
-      const track: VideoTrack = { id: crypto.randomUUID(), type: 'subtitle', name: t('motion_track_subtitle'), muted: false, locked: false, height: 48, clips: [] }
+      const track: VideoTrack = { id: uid(), type: 'subtitle', name: t('motion_track_subtitle'), muted: false, locked: false, height: 48, clips: [] }
       newClip.trackId = track.id
       return { ...tl, tracks: [...tl.tracks, { ...track, clips: [newClip] }] }
     })
@@ -1125,7 +1126,7 @@ export default function MotionEditorPage() {
         if (F <= c.startFrame || F >= c.endFrame) return tr
         const off = c.inPoint + (F - c.startFrame)
         const left:  VideoClip = { ...c, endFrame: F, outPoint: off }
-        const right: VideoClip = { ...c, id: crypto.randomUUID(), startFrame: F, inPoint: off }
+        const right: VideoClip = { ...c, id: uid(), startFrame: F, inPoint: off }
         return { ...tr, clips: [...tr.clips.slice(0, idx), left, right, ...tr.clips.slice(idx + 1)] }
       }) }
       saveTimelineMut.mutate(next)
@@ -1140,7 +1141,7 @@ export default function MotionEditorPage() {
         const c = tr.clips.find(cl => cl.id === clipId)
         if (!c) return tr
         const len = c.endFrame - c.startFrame
-        const copy: VideoClip = { ...structuredClone(c), id: crypto.randomUUID(), startFrame: c.endFrame, endFrame: c.endFrame + len }
+        const copy: VideoClip = { ...structuredClone(c), id: uid(), startFrame: c.endFrame, endFrame: c.endFrame + len }
         return { ...tr, clips: [...tr.clips, copy] }
       }) }
       saveTimelineMut.mutate(next)
@@ -1591,7 +1592,7 @@ export default function MotionEditorPage() {
             const dur = Math.floor((Number((mediaItem?.probe_data as Record<string, unknown>)?.duration ?? 5)) * fps)
 
             const newClip: VideoClip = {
-              id:         crypto.randomUUID(),
+              id:         uid(),
               mediaId,
               trackId:    existingTrack?.id ?? '',
               startFrame: 0,
@@ -1614,7 +1615,7 @@ export default function MotionEditorPage() {
               } : t)
             } else {
               const newTrack: VideoTrack = {
-                id:     crypto.randomUUID(),
+                id:     uid(),
                 type:   trackType,
                 name:   trackType === 'video' ? t('motion_track_video') : t('motion_track_audio'),
                 muted:  false,

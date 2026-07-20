@@ -12,6 +12,7 @@ import {
   Undo2, Redo2,
 } from 'lucide-react'
 import clsx from 'clsx'
+import { uid } from './uid'
 import { keyframeApi, type AnimData, type AnimLayer, type AnimProperty, type AnimKeyframe, type EasingDef, type VectorPageData } from './api'
 import { pageDataToSvg } from './apexSvg'
 import { exportFramesToMp4, webCodecsAvailable } from './frameExport'
@@ -1058,7 +1059,7 @@ export default function KeyframeEditorPage() {
         const newKfs = existing >= 0
           ? prop.keyframes.filter((_, i) => i !== existing)
           : [...prop.keyframes, {
-              id:            crypto.randomUUID(),
+              id:            uid(),
               frame:         atFrame,
               value:         currentVal,
               interpolation: 'bezier' as const,
@@ -1126,7 +1127,7 @@ export default function KeyframeEditorPage() {
   }, [updateAnimData, frame])
 
   const handleAddLayer = useCallback(() => {
-    const id = crypto.randomUUID()
+    const id = uid()
     const make = (v: number): AnimProperty<number> => ({ staticValue: v, keyframes: [] })
     const newLayer: AnimLayer = {
       id, type: 'shape', name: t('keyframe_new_layer'),
@@ -1155,7 +1156,7 @@ export default function KeyframeEditorPage() {
   // ── Frame-by-frame (cel) drawing ────────────────────────────────────────────
   const make0 = (v: number): AnimProperty<number> => ({ staticValue: v, keyframes: [] })
   const newPaintLayer = useCallback((): string => {
-    const id = crypto.randomUUID()
+    const id = uid()
     const layer: AnimLayer = {
       id, type: 'paint', name: t('keyframe_paint_layer', { defaultValue: 'Dessin' }),
       parentId: null, inPoint: 0, outPoint: comp.duration_frames,
@@ -1215,7 +1216,7 @@ export default function KeyframeEditorPage() {
       acceptMimes: ['image/*'],
     })
     if (!file) return
-    const layerId = crypto.randomUUID()
+    const layerId = uid()
     const make    = (v: number): AnimProperty<number> => ({ staticValue: v, keyframes: [] })
     const imgUrl  = `/api/v1/drive/${file.id}/download`
     const newLayer: AnimLayer = {
@@ -1295,7 +1296,7 @@ export default function KeyframeEditorPage() {
     updateAnimData(d => {
       const idx = d.layers.findIndex(l => l.id === layerId)
       if (idx < 0) return d
-      const copy = { ...structuredClone(d.layers[idx]), id: crypto.randomUUID(), name: `${d.layers[idx].name} copy` }
+      const copy = { ...structuredClone(d.layers[idx]), id: uid(), name: `${d.layers[idx].name} copy` }
       const arr = [...d.layers]; arr.splice(idx, 0, copy)
       return { ...d, layers: arr }
     })
@@ -1342,7 +1343,7 @@ export default function KeyframeEditorPage() {
           const i = prop.keyframes.findIndex(k => k.frame === frame)
           const kfs = i >= 0
             ? prop.keyframes.map((k, j) => j === i ? { ...k, value: val } : k)
-            : [...prop.keyframes, { id: crypto.randomUUID(), frame, value: val, interpolation: 'bezier' as const, easing: { type: 'cubic-bezier' as const, cx1: .42, cy1: 0, cx2: .58, cy2: 1 }, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } }].sort((a, b) => a.frame - b.frame)
+            : [...prop.keyframes, { id: uid(), frame, value: val, interpolation: 'bezier' as const, easing: { type: 'cubic-bezier' as const, cx1: .42, cy1: 0, cx2: .58, cy2: 1 }, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } }].sort((a, b) => a.frame - b.frame)
           return { ...prop, keyframes: kfs }
         }
         return { ...prop, staticValue: val }
@@ -1363,7 +1364,7 @@ export default function KeyframeEditorPage() {
           const i = prop.keyframes.findIndex(k => k.frame === frame)
           const kfs = i >= 0
             ? prop.keyframes.map((k, j) => j === i ? { ...k, value: val } : k)
-            : [...prop.keyframes, { id: crypto.randomUUID(), frame, value: val, interpolation: 'bezier' as const, easing: { type: 'cubic-bezier' as const, cx1: .42, cy1: 0, cx2: .58, cy2: 1 }, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } }].sort((a, b) => a.frame - b.frame)
+            : [...prop.keyframes, { id: uid(), frame, value: val, interpolation: 'bezier' as const, easing: { type: 'cubic-bezier' as const, cx1: .42, cy1: 0, cx2: .58, cy2: 1 }, handleIn: { x: 0, y: 0 }, handleOut: { x: 0, y: 0 } }].sort((a, b) => a.frame - b.frame)
           return { ...prop, keyframes: kfs }
         }
         return { ...prop, staticValue: val }
@@ -1383,7 +1384,7 @@ export default function KeyframeEditorPage() {
   }, [autoKey, frame])
 
   const createLayerAt = useCallback((kind: 'rectangle' | 'text', wx: number, wy: number) => {
-    const lid = crypto.randomUUID()
+    const lid = uid()
     const make = (v: number): AnimProperty<number> => ({ staticValue: v, keyframes: [] })
     const base = { id: lid, parentId: null, inPoint: 0, outPoint: comp.duration_frames, solo: false, locked: false, visible: true, blendMode: 'normal' as const, effects: [] }
     const layer: AnimLayer = kind === 'rectangle'

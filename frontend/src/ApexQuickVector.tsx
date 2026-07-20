@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { PenTool, MousePointer2, RotateCcw, Trash2, X } from 'lucide-react'
 import { RangeSlider } from '@ui'
+import { uid } from './uid'
 
 export interface VPath {
   id: string
@@ -28,7 +29,6 @@ export interface ApexQuickVectorProps {
 }
 
 const SWATCHES = ['#000000', '#ffffff', '#e84a4a', '#f9ab00', '#22c55e', '#3b82f6', '#a855f7', '#ec4899']
-const uid = () => crypto.randomUUID()
 
 // Draw one stroke with midpoint-quadratic smoothing.
 function tracePath(ctx: CanvasRenderingContext2D, p: VPath) {

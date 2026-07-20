@@ -30,6 +30,7 @@ pub struct CollabHub {
 }
 
 impl CollabHub {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         CollabHub { channels: RwLock::new(HashMap::new()) }
     }
@@ -80,6 +81,7 @@ pub struct VectorHub {
 }
 
 impl VectorHub {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         VectorHub { channels: RwLock::new(HashMap::new()) }
     }
@@ -132,6 +134,7 @@ pub struct AnimHub {
 }
 
 impl AnimHub {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         AnimHub { channels: RwLock::new(HashMap::new()) }
     }
@@ -208,6 +211,7 @@ pub struct PdfHub {
 }
 
 impl PdfHub {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         PdfHub { channels: tokio::sync::RwLock::new(std::collections::HashMap::new()) }
     }
@@ -238,6 +242,7 @@ pub struct VideoHub {
 }
 
 impl VideoHub {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         VideoHub { channels: RwLock::new(HashMap::new()) }
     }

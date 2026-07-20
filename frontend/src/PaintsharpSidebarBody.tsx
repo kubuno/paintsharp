@@ -1,4 +1,4 @@
-import { Box, Image, PenTool, Film, Clapperboard, Trash2, FileEdit } from 'lucide-react'
+import { Box, Image, PenTool, Film, Clapperboard, Trash2, FileEdit, Type } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { SidebarNavItem } from '@kubuno/sdk'
 import { PaintsharpLogo } from './PaintsharpLogo'
@@ -11,6 +11,7 @@ const NAV = [
   { to: '/paintsharp/motion',    label: 'Motion',    icon: Film,         end: false },
   { to: '/paintsharp/keyframe',  label: 'Keyframe',  icon: Clapperboard, end: false },
   { to: '/paintsharp/pdfwriter', label: 'PdfWriter', icon: FileEdit,     end: false },
+  { to: '/paintsharp/fonteditor', label: 'FontEditor', icon: Type,       end: false },
 ]
 
 export default function PaintsharpSidebarBody({ collapsed = false }: { collapsed?: boolean }) {

@@ -130,6 +130,9 @@ export interface StrokeStyle {
   dashArray: number[]
   cap?:     'butt' | 'round' | 'square'
   join?:    'miter' | 'round' | 'bevel'
+  // Miter length ÷ stroke width ratio beyond which a 'miter' join is cut to a
+  // bevel (SVG/canvas default 10). Only meaningful when join === 'miter'.
+  miterLimit?: number
 }
 
 export interface PathPoint {
@@ -139,9 +142,12 @@ export interface PathPoint {
   hOut?: [number, number]
   // Début d'un nouveau sous-chemin (chemin composé issu d'une fusion d'objets).
   move?: boolean
+  // Auto-smooth node (Inkscape/Affinity): its handles are continuously recomputed
+  // from the neighbouring anchors, so they re-adjust whenever a neighbour moves.
+  auto?: boolean
 }
 
-export type VectorElement = RectElement | EllipseElement | PathElement | TextElement | GroupElement
+export type VectorElement = RectElement | EllipseElement | PathElement | TextElement | GroupElement | ImageElement | SymmetryElement
 
 export interface BaseElement {
   id:       string
@@ -156,8 +162,15 @@ export interface BaseElement {
   locked:   boolean
   opacity:  number
   zIndex:   number
+  // Canvas blend mode ('source-over' when omitted). Stored per element.
+  blend?:   string
   fill:     FillStyle
   stroke:   StrokeStyle | null
+  // This element IS a derived symmetry clone of source `symOf` (slot `symIdx`),
+  // living inside a `symmetry` container: it is locked against direct edits and
+  // rebuilt automatically from its source on every change.
+  symOf?:  string
+  symIdx?: number
   // Legacy flat grouping — migrated to `parentId` + a `group` element on load.
   groupId?: string
   // Hierarchical layers: id of the containing `group` element (omitted = root).
@@ -170,27 +183,60 @@ export interface GroupElement extends BaseElement {
   type:      'group'
   // Layers-panel UI state: whether the folder is collapsed.
   collapsed?: boolean
+  // Clipping mask (Illustrator semantics): the group's TOPMOST child is the
+  // mask — it is not painted, and everything else in the group is clipped to
+  // its shape(s).
+  clipped?:  boolean
+}
+
+// A LIVE-symmetry container: a group-like object (shown in the layers dock) that
+// reflects/rotates every source object it contains around its centre (cx,cy). The
+// derived copies are regenerated automatically whenever a child changes; editing
+// or moving the container's centre updates them live.
+export interface SymmetryElement extends BaseElement {
+  type:      'symmetry'
+  symMode:   'v' | 'h' | 'vh' | 'radial'
+  symCount:  number     // radial instance count (2..72)
+  cx:        number     // symmetry centre, world coords
+  cy:        number
+  collapsed?: boolean
 }
 
 export interface RectElement extends BaseElement {
   type:         'rect'
   cornerRadius: number
+  // Independent per-corner radii [TL, TR, BR, BL] — overrides cornerRadius.
+  corners?:     [number, number, number, number]
 }
 
 export interface EllipseElement extends BaseElement {
   type: 'ellipse'
 }
 
+// Raster image placed on the canvas (imported via file picker or drag-and-drop).
+// The bitmap travels with the document as a data URL; it can be vectorised into
+// paths through the "Image trace" dialog.
+export interface ImageElement extends BaseElement {
+  type: 'image'
+  src:  string   // data URL (image/png, image/jpeg, …)
+  // Natural bitmap size at import time (for aspect-ratio restore / trace sampling).
+  natW?: number
+  natH?: number
+}
+
 export interface PathElement extends BaseElement {
   type:   'path'
   points: PathPoint[]
   closed: boolean
-  // Parametric shape metadata: when present, the polygon side count / star spike
-  // count stays editable (the points are regenerated from these on change).
-  shape?:      'polygon' | 'star'
+  // Parametric shape metadata: when present, the shape parameters stay editable
+  // (the points are regenerated from these + the bbox on change).
+  shape?:      'polygon' | 'star' | 'arrow' | 'dblarrow' | 'heart' | 'cross' | 'gear' | 'pie' | 'bubble'
+             | 'trapezoid' | 'flower' | 'crescent' | 'cloud' | 'drop' | 'spiral'
   sides?:      number   // polygon: number of sides (≥3)
   spikes?:     number   // star: number of points (≥3)
   innerRatio?: number   // star: inner/outer radius ratio (0..1)
+  // Generic parameters for the newer parametric shapes (arrow/gear/pie/…).
+  params?:     Record<string, number>
 }
 
 export interface TextElement extends BaseElement {
@@ -274,7 +320,7 @@ export const layerApi = {
   getDoc:     (id: string) =>
     api.get<LayerDocument>(`/paintsharp/layer-docs/${id}`),
 
-  updateDoc:  (id: string, data: { title?: string; is_starred?: boolean; thumbnail_path?: string; layers_structure?: LayerStructureItem[]; view_settings?: Record<string, unknown> }) =>
+  updateDoc:  (id: string, data: { title?: string; is_starred?: boolean; thumbnail_path?: string; layers_structure?: LayerStructureItem[]; view_settings?: Record<string, unknown>; width?: number; height?: number }) =>
     api.patch(`/paintsharp/layer-docs/${id}`, data),
 
   saveStructure: (id: string, layers_structure: LayerStructureItem[], layer_count?: number) =>
@@ -634,6 +680,100 @@ export const apexApi = {
 
   deletePage:    (projectId: string, pageId: string) =>
     api.delete(`/paintsharp/vectors/${projectId}/pages/${pageId}`),
+
+  // Raster → vector tracing on the server (visioncortex/VTracer engine).
+  traceImage:    (payload: TracePayload) =>
+    api.post<{ svg: string }>('/paintsharp/vectors/trace', payload).then(r => r.data.svg),
+}
+
+export interface TracePayload {
+  /** Data URL (`data:image/png;base64,…`) of the bitmap to trace. */
+  image: string
+  color_mode?:       'color' | 'binary'
+  hierarchical?:     'stacked' | 'cutout'
+  mode?:             'spline' | 'polygon' | 'pixel'
+  filter_speckle?:   number   // 0..=64 px side
+  color_precision?:  number   // 1..=8 significant RGB bits
+  layer_difference?: number   // 0..=128 gradient step between layers
+  corner_threshold?: number   // 0..=180 deg
+  length_threshold?: number   // 3.5..=10
+  splice_threshold?: number   // 0..=180 deg
+}
+
+// ── FontEditor (création de polices) ──────────────────────────────────────────
+
+export interface FontProjectSummary {
+  id:             string
+  owner_id:       string
+  title:          string
+  thumbnail_path: string | null
+  glyph_count:    number
+  is_starred:     boolean
+  updated_at:     string
+  created_at:     string
+}
+
+export interface FontProject extends FontProjectSummary {
+  file_id:    string | null
+  is_trashed: boolean
+  data:       FontData
+}
+
+// One on-curve point of a glyph contour, in FONT UNITS with y pointing UP
+// (baseline = 0). Optional cubic Bézier handles, relative to the world (absolute
+// coordinates), matching the Apex path model.
+export interface FontGlyphPoint {
+  x:     number
+  y:     number
+  hIn?:  [number, number]
+  hOut?: [number, number]
+}
+
+// A closed contour (implicit segment from last point back to the first).
+export type FontContour = FontGlyphPoint[]
+
+export interface FontGlyph {
+  unicode:  number
+  advance:  number          // advance width, font units
+  contours: FontContour[]
+}
+
+export interface FontKernPair { left: number; right: number; value: number }
+
+export interface FontData {
+  familyName: string
+  styleName:  string
+  unitsPerEm: number
+  ascender:   number
+  descender:  number        // negative (below the baseline)
+  capHeight:  number
+  xHeight:    number
+  glyphs:     Record<string, FontGlyph>   // key = decimal unicode codepoint
+  kerning:    FontKernPair[]
+}
+
+export const fontApi = {
+  openByFile: (fileId: string) =>
+    api.post<{ id: string }>('/paintsharp/fonts/open-by-file', { file_id: fileId }).then(r => r.data),
+  listProjects:  (params?: { starred?: boolean; trashed?: boolean; limit?: number; offset?: number }) =>
+    api.get<{ projects: FontProjectSummary[] }>('/paintsharp/fonts', { params }),
+
+  createProject: (data: { title?: string }) =>
+    api.post<{ id: string; title: string }>('/paintsharp/fonts', data),
+
+  getProject:    (id: string) =>
+    api.get<FontProject>(`/paintsharp/fonts/${id}`),
+
+  updateProject: (id: string, data: { title?: string; is_starred?: boolean; thumbnail_path?: string }) =>
+    api.patch(`/paintsharp/fonts/${id}`, data),
+
+  saveData:      (id: string, data: FontData, glyphCount?: number) =>
+    api.put(`/paintsharp/fonts/${id}/data`, { data, glyph_count: glyphCount }),
+
+  trashProject:     (id: string) => api.post(`/paintsharp/fonts/${id}/trash`, {}),
+  restoreProject:   (id: string) => api.post(`/paintsharp/fonts/${id}/restore`, {}),
+  deleteProject:    (id: string) => api.delete(`/paintsharp/fonts/${id}/delete`),
+  duplicateProject: (id: string) => api.post<{ id: string }>(`/paintsharp/fonts/${id}/duplicate`).then(r => r.data.id),
 }
 
 // ── PdfWriter ─────────────────────────────────────────────────────────────────
@@ -662,6 +802,8 @@ export interface PdfPageSummary {
   width:       number
   height:      number
   rotation:    number
+  /** Index de la page dans le binaire source importé (null = page sans source). */
+  source_index?: number | null
 }
 
 export interface PdfPage extends PdfPageSummary {
@@ -688,6 +830,8 @@ export interface BaseAnnotation {
   x:          number
   y:          number
   createdAt:  string
+  /** Clockwise rotation in degrees around the element's bounding-box center. */
+  rotation?:  number
 }
 
 export interface TextAnnotation extends BaseAnnotation {
@@ -700,11 +844,14 @@ export interface TextAnnotation extends BaseAnnotation {
   color:           string
   bold:            boolean
   italic:          boolean
+  underline?:      boolean
   align:           'left' | 'center' | 'right'
   backgroundColor?: string
   borderColor?:    string
   /** Étirement horizontal pour coller à la largeur d'origine du PDF (texte extrait). */
   scaleX?:         number
+  /** Invisible searchable layer (OCR « image + texte caché » mode). */
+  invisible?:      boolean
 }
 
 export interface MarkupAnnotation extends BaseAnnotation {
@@ -739,11 +886,18 @@ export interface ShapeAnnotation extends BaseAnnotation {
   fillColor?:   string
   fillOpacity?: number
   opacity:      number
+  lineStyle?:   'solid' | 'dashed' | 'dotted'
+  /** Corner radius (rect only), in PDF points. */
+  cornerRadius?: number
 }
 
 export interface StampAnnotation extends BaseAnnotation {
   type:      'stamp'
-  stampType: 'approved' | 'rejected' | 'confidential' | 'draft' | 'revised' | 'final' | 'not-approved' | 'for-review'
+  stampType: 'approved' | 'rejected' | 'confidential' | 'draft' | 'revised' | 'final' | 'not-approved' | 'for-review' | 'custom'
+  /** Free text for the 'custom' stamp type. */
+  customLabel?: string
+  /** Border/text color override (custom stamps). */
+  color?:    string
   width:     number
   height:    number
   opacity:   number
@@ -754,6 +908,8 @@ export interface SignatureAnnotation extends BaseAnnotation {
   signatureData: string
   width:         number
   height:        number
+  /** Stroke color for SVG-path signatures (default near-black). */
+  color?:        string
 }
 
 export interface ImageAnnotation extends BaseAnnotation {

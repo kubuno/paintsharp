@@ -9,17 +9,22 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
+    "@types/opentype.js": "^1.3.10",
     "clsx": "^2.0.0",
     "date-fns": "^4.4.0",
+    "fonteditor-core": "^2.6.3",
     "lucide-react": "^1.17.0",
     "mp4-muxer": "^5.2.2",
+    "opentype.js": "^1.3.4",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.0.227",
     "polygon-clipping": "^0.15.7",
     "tesseract.js": "^5.1.1",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "three-bvh-csg": "^0.0.17"
   },
   "peerDependencies": {
     "@kubuno/drive": "^0.1.1",

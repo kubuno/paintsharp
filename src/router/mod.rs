@@ -1,4 +1,5 @@
 use axum::{
+    extract::DefaultBodyLimit,
     middleware,
     routing::{delete, get, post, put},
     Router,
@@ -8,7 +9,7 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use crate::{
     handlers::{
         animations, assets, collab_anim, collab_layer, collab_pdf, collab_scene, collab_vector,
-        collab_video, health, layer_docs, pdf, scenes, vectors, video,
+        collab_video, fonts, health, layer_docs, pdf, scenes, vectors, video,
     },
     middleware::require_auth,
     state::AppState,
@@ -38,7 +39,17 @@ pub fn build(state: AppState) -> Router {
         .route("/vectors/:id/pages",       get(vectors::list_pages).post(vectors::create_page))
         .route("/vectors/:id/pages/:pid",  get(vectors::get_page).patch(vectors::rename_page).delete(vectors::delete_page))
         .route("/vectors/:id/pages/:pid/data", put(vectors::save_page_data))
+        .route("/vectors/trace",           post(vectors::trace_image))
         .route("/collab/vector/:page_id",  get(collab_vector::ws_handler))
+        // ── FontEditor : projets de polices ───────────────────────────────────
+        .route("/fonts",                   get(fonts::list_projects).post(fonts::create_project))
+        .route("/fonts/open-by-file",      post(fonts::open_by_file))
+        .route("/fonts/:id",               get(fonts::get_project).patch(fonts::update_project))
+        .route("/fonts/:id/data",          put(fonts::save_font_data))
+        .route("/fonts/:id/trash",         post(fonts::trash_project))
+        .route("/fonts/:id/restore",       post(fonts::restore_project))
+        .route("/fonts/:id/delete",        delete(fonts::delete_project))
+        .route("/fonts/:id/duplicate",     post(fonts::duplicate_project))
         // ── Layer : documents raster ──────────────────────────────────────────
         .route("/layer-docs",                   get(layer_docs::list_docs).post(layer_docs::create_doc))
         .route("/layer-docs/open-by-file",     post(layer_docs::open_by_file))
@@ -100,6 +111,9 @@ pub fn build(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::health))
         .nest("/", authed)
+        // Imported fonts (FontEditor) and other rich documents can weigh several
+        // MB of JSON — raise axum's 2 MB default body cap.
+        .layer(DefaultBodyLimit::max(64 * 1024 * 1024))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
@@ -109,6 +123,6 @@ async fn settings_handler() -> axum::Json<serde_json::Value> {
     axum::Json(serde_json::json!({
         "module":     "paintsharp",
         "version":    env!("CARGO_PKG_VERSION"),
-        "submodules": ["vertex", "apex", "layer", "keyframe", "motion", "pdfwriter"]
+        "submodules": ["vertex", "apex", "layer", "keyframe", "motion", "pdfwriter", "fonteditor"]
     }))
 }

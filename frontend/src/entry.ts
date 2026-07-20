@@ -20,17 +20,28 @@ import {
   useToolbarStore,
   SDK_VERSION,
 } from '@kubuno/sdk'
-import { Box, Image, PenTool, Clapperboard, Film, FileEdit } from 'lucide-react'
+import { Box, Image, PenTool, Clapperboard, Film, FileEdit, Type } from 'lucide-react'
 import './index.css'
 import './i18n'
 import { PaintsharpLogo } from './PaintsharpLogo'
 import PaintsharpNewActions from './PaintsharpNewActions'
 import PaintsharpSidebarBody from './PaintsharpSidebarBody'
 import PaintsharpPdfOpenWithAction, { isPdfFile } from './PaintsharpPdfOpenWithAction'
+import { registerDataCardRenderer } from './kubunoData'
+import { ApexVectorsCard, renderVectorsStatic } from './ApexVectorsCard'
 
 export const sdkVersion = SDK_VERSION
 
 export function register() {
+  // `paintsharp.vectors` JSON envelopes (Apex "Copier pour Kubuno"): consumer
+  // modules (chat, office…) resolve this renderer through `core.data-card` —
+  // live React card + on-demand static SVG/PNG render of the original JSON.
+  registerDataCardRenderer('paintsharp', {
+    types: ['paintsharp.vectors'],
+    Component: ApexVectorsCard,
+    renderStatic: renderVectorsStatic,
+  })
+
   // Types de fichiers Kubuno propres à chaque sous-module Paintsharp (déclarés auprès de
   // `files` — base du filtrage StartPage, des icônes et de « ouvrir avec »).
   // `open` : résout l'entité via openByFile (renvoie { id }) puis navigue vers l'éditeur.
@@ -60,6 +71,20 @@ export function register() {
   FileTypeRegistry.register({ moduleId: 'paintsharp-pdfwriter', label: 'PdfWriter', icon: 'FileText',
     mimeTypes: ['application/vnd.kubuno.pdfdoc+json'], extensions: ['kbpdf'],
     open: (f, nav) => { import('./api').then(({ pdfWriterApi }) => pdfWriterApi.openByFile(f.id).then(({ id }) => nav(`/paintsharp/pdfwriter/${id}`)).catch(() => {})) } })
+  FileTypeRegistry.register({ moduleId: 'paintsharp-fonteditor', label: 'FontEditor', icon: 'Type',
+    mimeTypes: ['application/vnd.kubuno.font+json', 'font/ttf', 'font/otf', 'font/woff', 'font/woff2',
+                'application/x-font-ttf', 'application/vnd.ms-opentype', 'application/font-woff',
+                'application/vnd.ms-fontobject'],
+    extensions: ['kbfnt', 'ttf', 'otf', 'woff', 'woff2', 'eot'],
+    open: (f, nav) => {
+      if (/\.kbfnt$/i.test(f.name)) {
+        import('./api').then(({ fontApi }) => fontApi.openByFile(f.id).then(({ id }) => nav(`/paintsharp/fonteditor/${id}`)).catch(() => {}))
+      } else {
+        // Standard font file: import it into a new FontEditor project.
+        import('./fontFormats').then(({ openFontFileAsProject }) =>
+          openFontFileAsProject(f).then(id => nav(`/paintsharp/fonteditor/${id}`)).catch(() => {}))
+      }
+    } })
 
   // PdfWriter sait aussi ouvrir les PDF bruts (application/pdf) : contribué au menu
   // « Ouvrir avec » du module Files (et non comme type de fichier, pour ne pas
@@ -86,6 +111,7 @@ export function register() {
     { id: 'paintsharp-keyframe',    label: 'Keyframe',   Icon: Clapperboard, path: '/paintsharp/keyframe' },
     { id: 'paintsharp-motion',      label: 'Motion',     Icon: Film,      path: '/paintsharp/motion' },
     { id: 'paintsharp-pdfwriter',   label: 'PdfWriter',  Icon: FileEdit,  path: '/paintsharp/pdfwriter' },
+    { id: 'paintsharp-fonteditor',  label: 'FontEditor', Icon: Type,      path: '/paintsharp/fonteditor' },
   ])
 
   useSidebarStore.getState().register({
@@ -111,12 +137,14 @@ export function register() {
   const MotionApp             = lazy(() => import('./PaintsharpApp').then(m => ({ default: m.MotionApp })))
   const KeyframeApp           = lazy(() => import('./PaintsharpApp').then(m => ({ default: m.KeyframeApp })))
   const PdfWriterListApp      = lazy(() => import('./PaintsharpApp').then(m => ({ default: m.PdfWriterListApp })))
+  const FontApp               = lazy(() => import('./PaintsharpApp').then(m => ({ default: m.FontApp })))
   const VertexEditorPage      = lazy(() => import('./VertexEditorPage'))
   const ApexEditorPage        = lazy(() => import('./ApexEditorPage'))
   const LayerEditorPage       = lazy(() => import('./LayerEditorPage'))
   const KeyframeEditorPage    = lazy(() => import('./KeyframeEditorPage'))
   const MotionEditorPage      = lazy(() => import('./MotionEditorPage'))
   const PdfWriterEditorPage   = lazy(() => import('./PdfWriterEditorPage'))
+  const FontEditorPage        = lazy(() => import('./FontEditorPage'))
   const PaintsharpSettingsPage = lazy(() => import('./PaintsharpSettingsPage'))
 
   RouteRegistry.register('paintsharp',                   PaintsharpApp)
@@ -143,4 +171,8 @@ export function register() {
   RouteRegistry.register('paintsharp/pdfwriter/starred', PdfWriterListApp, { starred: true })
   RouteRegistry.register('paintsharp/pdfwriter/trash',   PdfWriterListApp, { trashed: true })
   RouteRegistry.register('paintsharp/pdfwriter/:id',     PdfWriterEditorPage)
+  RouteRegistry.register('paintsharp/fonteditor',         FontApp)
+  RouteRegistry.register('paintsharp/fonteditor/starred', FontApp, { starred: true })
+  RouteRegistry.register('paintsharp/fonteditor/trash',   FontApp, { trashed: true })
+  RouteRegistry.register('paintsharp/fonteditor/:id',     FontEditorPage)
 }

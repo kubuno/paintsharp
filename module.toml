@@ -2,7 +2,7 @@
 id            = "paintsharp"
 display_name  = "PaintSharp"
 version       = "0.1.3"
-description   = "Suite créative — Layer (raster), Apex (vectoriel), Motion (vidéo), Vertex (3D), Keyframe (animation 2D), PdfWriter (édition PDF)."
+description   = "Suite créative — Layer (raster), Apex (vectoriel), Motion (vidéo), Vertex (3D), Keyframe (animation 2D), PdfWriter (édition PDF), FontEditor (création de polices)."
 author        = "Kubuno Contributors"
 license       = "AGPL-3.0"
 homepage_url  = "https://github.com/kubuno/kubuno"
@@ -80,6 +80,14 @@ label    = "PdfWriter"
 icon     = "FileEdit"
 path     = "/paintsharp/pdfwriter"
 position = 41
+section  = "main"
+
+[[sidebar_items]]
+id       = "paintsharp-fonteditor"
+label    = "FontEditor"
+icon     = "Type"
+path     = "/paintsharp/fonteditor"
+position = 42
 section  = "main"
 
 [[sidebar_items]]

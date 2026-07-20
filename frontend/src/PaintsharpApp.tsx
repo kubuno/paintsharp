@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Box, Clock, Star, Trash2, MoreVertical, Pencil, RotateCcw,
-  Image, PenTool, Film, Clapperboard, ArrowRight, FileEdit, ExternalLink,
+  Image, PenTool, Film, Clapperboard, ArrowRight, FileEdit, ExternalLink, Type,
 } from 'lucide-react'
 import { PaintsharpLogo } from './PaintsharpLogo'
 import { paintsharpApi, type SceneSummary } from './api'
@@ -16,6 +16,7 @@ import type { FileItem } from '@kubuno/drive'
 import { AnimationsListApp } from './AnimationsListApp'
 import { VideoProjectsListApp } from './VideoProjectsListApp'
 import { PdfWriterApp } from './PdfWriterApp'
+import { FontProjectsApp } from './FontProjectsApp'
 import { format, formatDistanceToNow } from 'date-fns'
 import { useTranslation } from 'react-i18next'
 import { getDateLocale } from '@kubuno/sdk'
@@ -78,6 +79,15 @@ function PaintsharpSuiteHome() {
       icon:  FileEdit,
       color: '#e84a4a',
       path:  '/paintsharp/pdfwriter',
+      ready: true,
+    },
+    {
+      id:    'fonteditor',
+      label: 'FontEditor',
+      desc:  t('paintsharp_fonteditor_desc'),
+      icon:  Type,
+      color: '#a04ae8',
+      path:  '/paintsharp/fonteditor',
       ready: true,
     },
   ]
@@ -148,6 +158,9 @@ export function MotionApp({ trashed }: { trashed?: boolean } = {}) {
 }
 export function PdfWriterListApp({ starred, trashed }: { starred?: boolean; trashed?: boolean } = {}) {
   return <PdfWriterApp starred={starred} trashed={trashed} />
+}
+export function FontApp({ starred, trashed }: { starred?: boolean; trashed?: boolean } = {}) {
+  return <FontProjectsApp starred={starred} trashed={trashed} />
 }
 
 // ── Liste des scènes Vertex ───────────────────────────────────────────────────
