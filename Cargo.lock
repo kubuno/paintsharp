@@ -1444,8 +1444,8 @@ dependencies = [
 
 [[package]]
 name = "kubuno-drive"
-version = "0.1.0"
-source = "git+https://github.com/kubuno/drive?tag=drive-v0.1.0#a480544f61a7977aa051746dca4af87914dbb3be"
+version = "0.1.4"
+source = "git+https://github.com/kubuno/drive?tag=drive-v0.1.4#2433e18a410b94e88696be96044c786de9c06f6c"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1499,8 +1499,8 @@ dependencies = [
 
 [[package]]
 name = "kubuno-seccomp"
-version = "0.1.0"
-source = "git+https://github.com/kubuno/core?tag=seccomp-v0.1.0#802672107461a863de2e85d683408e573521d0d0"
+version = "0.1.1"
+source = "git+https://github.com/kubuno/core?tag=seccomp-v0.1.1#5a74e6d117d1c2c386af88902017341b88a0d7c7"
 dependencies = [
  "libc",
  "tracing",
