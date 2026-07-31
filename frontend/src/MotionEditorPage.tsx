@@ -1290,7 +1290,7 @@ export default function MotionEditorPage() {
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] text-gray-300 truncate">{m.original_name}</p>
-                  <p className="text-[9px] text-gray-600">{(m.size_bytes / 1024 / 1024).toFixed(1)} MB</p>
+                  <p className="text-[10px] text-gray-600">{(m.size_bytes / 1024 / 1024).toFixed(1)} MB</p>
                 </div>
               </div>
             ))}

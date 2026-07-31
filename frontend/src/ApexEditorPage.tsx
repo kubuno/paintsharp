@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { pickImageFile, pickImageFiles } from '@kubuno/sdk'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -4454,8 +4455,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
     setSelectedIds([result.id])
   }, [pushHistory])
 
-  // ── Raster images: import (file picker / drag-and-drop) + vectorisation ──────
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  // ── Raster images: import (core image picker / drag-and-drop) + vectorisation ──
   const importImageFiles = useCallback((files: FileList | File[], at?: { x: number; y: number }) => {
     const list = [...files].filter(f => f.type.startsWith('image/'))
     if (!list.length) return
@@ -4529,6 +4529,19 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
       reader.readAsText(file)
     })
   }, [pushHistory, t])
+
+  // "File → Import an image…": the image comes from the core picker, which also
+  // yields SVGs, so keep dispatching on the MIME type to preserve vectorisation.
+  const importImageFromPicker = useCallback(async () => {
+    // Several at once, like the file input this replaced: SVGs become editable
+    // shapes, bitmaps are placed as images, each batch cascading as before.
+    const files = await pickImageFiles({ title: t('apex_import_image') })
+    if (!files.length) return
+    const svgs = files.filter(f => f.type === 'image/svg+xml' || /\.svg$/i.test(f.name))
+    const bitmaps = files.filter(f => !svgs.includes(f))
+    if (svgs.length)    importSvgFiles(svgs)
+    if (bitmaps.length) importImageFiles(bitmaps)
+  }, [importImageFiles, importSvgFiles, t])
 
   // ── Pasting images from the system clipboard ─────────────────────────────────
   // Whatever the user copied elsewhere — a screenshot, a browser image, SVG markup
@@ -6682,8 +6695,8 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
       {soloEl.stroke && soloEl.stroke.width > 0 && (
         <BarButton title={t('apex_path_outline')} label={t('apex_path_outline')} icon={<PenTool size={12} />} onClick={outlineStrokeSel} />
       )}
-      <BarButton title={t('apex_path_offset_out')} icon={<span className="text-[13px] leading-none">＋</span>} onClick={() => offsetSel(5)} />
-      <BarButton title={t('apex_path_offset_in')} icon={<span className="text-[13px] leading-none">－</span>} onClick={() => offsetSel(-5)} />
+      <BarButton title={t('apex_path_offset_out')} icon={<span className="text-xs leading-none">＋</span>} onClick={() => offsetSel(5)} />
+      <BarButton title={t('apex_path_offset_in')} icon={<span className="text-xs leading-none">－</span>} onClick={() => offsetSel(-5)} />
     </div>
   ) : null
 
@@ -6822,7 +6835,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                 <div className="grid grid-cols-2 gap-1 px-2 pb-2">
                   {(['x','y','w','h'] as (keyof VectorElement)[]).map(k => (
                     <label key={k} className="flex flex-col gap-0.5">
-                      <span className="text-[9px] uppercase" style={{ color: C.textDim }}>{k.toUpperCase()}</span>
+                      <span className="text-[10px] uppercase" style={{ color: C.textDim }}>{k.toUpperCase()}</span>
                       <input
                         type="number"
                         value={Math.round(selectedEl[k] as number)}
@@ -6835,7 +6848,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                 </div>
                 <div className="grid grid-cols-2 gap-1 px-2 pb-2">
                   <label className="flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase" style={{ color: C.textDim }}>{t('apex_rotation')}</span>
+                    <span className="text-[10px] uppercase" style={{ color: C.textDim }}>{t('apex_rotation')}</span>
                     <input
                       type="number"
                       value={Math.round(selectedEl.rotation)}
@@ -6845,7 +6858,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                     />
                   </label>
                   <label className="flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase" style={{ color: C.textDim }}>{t('apex_opacity')}</span>
+                    <span className="text-[10px] uppercase" style={{ color: C.textDim }}>{t('apex_opacity')}</span>
                     <input
                       type="number" min={0} max={100}
                       value={selectedEl.opacity}
@@ -6856,7 +6869,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                   </label>
                 </div>
                 <div className="px-2 pb-2 flex flex-col gap-0.5">
-                  <span className="text-[9px] uppercase" style={{ color: C.textDim }}>{t('apex_blend')}</span>
+                  <span className="text-[10px] uppercase" style={{ color: C.textDim }}>{t('apex_blend')}</span>
                   <Dropdown variant="dark" fontSize={11}
                     value={selectedEl.blend ?? 'source-over'}
                     onChange={v => updateSelected({ blend: v === 'source-over' ? undefined : v })}
@@ -6909,7 +6922,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                       </div>
                       {/* Fill opacity — independent from the border opacity. */}
                       <label className="flex items-center gap-2">
-                        <span className="text-[9px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_opacity')}</span>
+                        <span className="text-[10px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_opacity')}</span>
                         <RangeSlider
                           min={0} max={100} className="flex-1"
                           accent={C.accent} trackColor="rgba(255,255,255,0.15)"
@@ -6965,7 +6978,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                       </div>
                       {/* Border opacity — independent from the fill opacity. */}
                       <label className="flex items-center gap-2">
-                        <span className="text-[9px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_opacity')}</span>
+                        <span className="text-[10px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_opacity')}</span>
                         <RangeSlider
                           min={0} max={100} className="flex-1"
                           accent={C.accent} trackColor="rgba(255,255,255,0.15)"
@@ -6993,7 +7006,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                       {/* Extrémités (cap) — segmented control, each icon rendered with
                           its own stroke-linecap so it previews the actual result. */}
                       <label className="flex items-center gap-2">
-                        <span className="text-[9px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_stroke_cap')}</span>
+                        <span className="text-[10px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_stroke_cap')}</span>
                         <div className="flex-1 flex gap-0.5 p-0.5 rounded" style={{ background: '#2c2c2c' }}>
                           {(['butt', 'round', 'square'] as const).map(cp => {
                             const on = (selectedEl.stroke!.cap ?? 'butt') === cp
@@ -7011,7 +7024,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                       {/* Jointures (join) — segmented control; each chevron icon uses
                           its own stroke-linejoin (miter/round/bevel = its real shape). */}
                       <label className="flex items-center gap-2">
-                        <span className="text-[9px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_stroke_join')}</span>
+                        <span className="text-[10px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_stroke_join')}</span>
                         <div className="flex-1 flex gap-0.5 p-0.5 rounded" style={{ background: '#2c2c2c' }}>
                           {(['miter', 'round', 'bevel'] as const).map(jn => {
                             const on = (selectedEl.stroke!.join ?? 'miter') === jn
@@ -7030,7 +7043,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                           ratio the point is cut to a bevel). */}
                       {(selectedEl.stroke!.join ?? 'miter') === 'miter' && (
                         <label className="flex items-center gap-2">
-                          <span className="text-[9px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_miter_limit')}</span>
+                          <span className="text-[10px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_miter_limit')}</span>
                           <RangeSlider
                             min={1} max={50} step={0.5} className="flex-1"
                             accent={C.accent} trackColor="rgba(255,255,255,0.15)"
@@ -7060,7 +7073,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                     <div className="px-2 pb-2 flex flex-col gap-2">
                       {!corners && (
                         <label className="flex flex-col gap-0.5">
-                          <span className="text-[9px] uppercase" style={{ color: C.textDim }}>{t('apex_corner_radius')}</span>
+                          <span className="text-[10px] uppercase" style={{ color: C.textDim }}>{t('apex_corner_radius')}</span>
                           <input
                             type="number" min={0}
                             value={re.cornerRadius}
@@ -7082,7 +7095,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                         <div className="grid grid-cols-2 gap-1">
                           {([['apex_corner_tl', 0], ['apex_corner_tr', 1], ['apex_corner_bl', 3], ['apex_corner_br', 2]] as [string, number][]).map(([key, idx]) => (
                             <label key={key} className="flex flex-col gap-0.5">
-                              <span className="text-[9px] uppercase" style={{ color: C.textDim }}>{t(key)}</span>
+                              <span className="text-[10px] uppercase" style={{ color: C.textDim }}>{t(key)}</span>
                               <input
                                 type="number" min={0}
                                 value={Math.round(corners[idx])}
@@ -7122,7 +7135,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                       size={String((selectedEl as TextElement).fontSize)} onSizeChange={v => updateText({ fontSize: Number(v) })}
                       sizes={[8, 10, 12, 14, 18, 24, 36, 48, 72, 144]} minSize={4} maxSize={400} />
                     <label className="flex flex-col gap-0.5">
-                      <span className="text-[9px] uppercase" style={{ color: C.textDim }}>{t('apex_text_weight')}</span>
+                      <span className="text-[10px] uppercase" style={{ color: C.textDim }}>{t('apex_text_weight')}</span>
                       <Dropdown variant="dark" fontSize={11}
                         value={String((selectedEl as TextElement).fontWeight)}
                         onChange={v => updateText({ fontWeight: Number(v) })}
@@ -7142,7 +7155,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                         </button>
                       ))}
                       <button onClick={() => updateText({ italic: !(selectedEl as TextElement).italic })}
-                        className="flex-1 flex items-center justify-center h-6 rounded italic text-[12px]"
+                        className="flex-1 flex items-center justify-center h-6 rounded italic text-xs"
                         style={{ background: (selectedEl as TextElement).italic ? C.accent + '30' : '#2a2a2a',
                                  color: (selectedEl as TextElement).italic ? C.accent : C.textDim }}>I</button>
                     </div>
@@ -7228,7 +7241,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
         onExport: () => setExportDlg(true),
         exportLabel: t('apex_export_dialog'),
         fileExtra: [
-          { label: t('apex_import_image'), onClick: () => fileInputRef.current?.click() },
+          { label: t('apex_import_image'), onClick: () => { void importImageFromPicker() } },
           {
             // Writes the SVG back into the Drive (overwriting the source .svg
             // when the project was opened from one) — distinct from Export.
@@ -7531,7 +7544,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
           >
             <ZoomIn size={13} />
           </button>
-          <span className="text-[9px] text-center" style={{ color: C.textDim }}>
+          <span className="text-[10px] text-center" style={{ color: C.textDim }}>
             {Math.round(cs.zoom * 100)}%
           </span>
           <button
@@ -7551,7 +7564,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
           <button
             title={t('apex_fit_to_screen')}
             onClick={() => centerArtboard(pageData)}
-            className="w-8 h-7 rounded flex items-center justify-center hover:bg-white/10 text-[8px]"
+            className="w-8 h-7 rounded flex items-center justify-center hover:bg-white/10 text-[10px]"
             style={{ color: C.textDim }}
           >
             {t('apex_fit')}
@@ -7614,18 +7627,6 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                   if (rasters.length) importImageFiles(rasters, pt)
                 }} />
       </DockArea>
-      {/* Hidden picker for Fichier → Importer une image… (SVG → editable vectors) */}
-      <input ref={fileInputRef} type="file" accept="image/*,.svg" multiple style={{ display: 'none' }}
-        onChange={e => {
-          const fs = e.target.files
-          if (fs?.length) {
-            const isSvg = (f: File) => f.type === 'image/svg+xml' || /\.svg$/i.test(f.name)
-            const svgs = [...fs].filter(isSvg), rasters = [...fs].filter(f => !isSvg(f))
-            if (svgs.length) importSvgFiles(svgs)
-            if (rasters.length) importImageFiles(rasters)
-          }
-          e.target.value = ''
-        }} />
       {/* "Image trace" dialog (edge threshold + curve tolerance), Affinity-style. */}
       {exportDlg && (
         <ApexExportDialog
@@ -7661,7 +7662,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                 accent={C.accent} trackColor="rgba(255,255,255,0.15)" aria-label={label} />
               <input type="number" min={mn} max={mx} step={step} value={traceOpts[key] as number}
                 onChange={e => patchTrace({ [key]: Math.max(mn, Math.min(mx, Number(e.target.value))) })}
-                className="w-12 px-1.5 py-0.5 rounded bg-transparent outline-none text-right text-[12px]"
+                className="w-12 px-1.5 py-0.5 rounded bg-transparent outline-none text-right text-xs"
                 style={{ color: C.text, background: '#2c2c2c', border: `1px solid ${C.border}` }} />
             </div>
           </div>
@@ -7692,7 +7693,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
           <div className="rounded-xl shadow-2xl" style={{ background: C.panel, border: `1px solid ${C.border}`, width: 980, maxWidth: 'calc(100vw - 40px)' }}
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center px-4 py-2.5" style={{ borderBottom: `1px solid ${C.border}` }}>
-              <span className="flex-1 text-center text-[13px] font-semibold" style={{ color: C.text }}>{t('apex_trace_image')}</span>
+              <span className="flex-1 text-center text-xs font-semibold" style={{ color: C.text }}>{t('apex_trace_image')}</span>
               <button onClick={() => setTraceDlg(null)} className="w-6 h-6 rounded flex items-center justify-center hover:bg-white/10" style={{ color: C.textDim }}>✕</button>
             </div>
             <div className="flex items-stretch">
@@ -7743,9 +7744,9 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input type="checkbox" checked={traceOcr} onChange={e => setTraceOcr(e.target.checked)}
                   style={{ accentColor: C.accent }} />
-                <span className="text-[12px]" style={{ color: C.text }}>{t('apex_trace_ocr')}</span>
+                <span className="text-xs" style={{ color: C.text }}>{t('apex_trace_ocr')}</span>
               </label>
-              {traceErr && <div className="text-[12px]" style={{ color: '#f87171' }}>{traceErr}</div>}
+              {traceErr && <div className="text-xs" style={{ color: '#f87171' }}>{traceErr}</div>}
             </div>
             {/* Live result preview: re-traced on every option change, wheel-zoomable. */}
             <div className="flex flex-col gap-2 px-4 py-3" style={{ borderLeft: `1px solid ${C.border}`, flex: 1, minWidth: 0 }}>
@@ -7761,10 +7762,10 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                   )}
                 </span>
                 <button onClick={() => setPrevView(v => ({ ...v, z: Math.max(0.05, v.z / 1.2) }))} title="−"
-                  className="w-6 h-6 rounded hover:bg-white/10 text-[13px]" style={{ color: C.textDim }}>−</button>
+                  className="w-6 h-6 rounded hover:bg-white/10 text-xs" style={{ color: C.textDim }}>−</button>
                 <span className="text-[11px] tabular-nums w-10 text-center" style={{ color: C.textDim }}>{Math.round(prevView.z * 100)}%</span>
                 <button onClick={() => setPrevView(v => ({ ...v, z: Math.min(16, v.z * 1.2) }))} title="+"
-                  className="w-6 h-6 rounded hover:bg-white/10 text-[13px]" style={{ color: C.textDim }}>+</button>
+                  className="w-6 h-6 rounded hover:bg-white/10 text-xs" style={{ color: C.textDim }}>+</button>
                 <button onClick={fitPreview}
                   className="px-2 h-6 rounded text-[11px] hover:bg-white/10" style={{ color: C.textDim, border: `1px solid ${C.border}` }}>
                   {t('apex_fit')}
@@ -7799,11 +7800,11 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
             <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderTop: `1px solid ${C.border}` }}>
               <div style={{ flex: 1 }} />
               <button onClick={() => { void applyTrace() }} disabled={traceBusy}
-                className="h-8 px-4 rounded text-[12px] font-medium hover:brightness-110 disabled:opacity-60"
+                className="h-8 px-4 rounded text-xs font-medium hover:brightness-110 disabled:opacity-60"
                 style={{ background: C.accent, color: '#fff' }}>
                 {traceBusy ? '…' : t('filt_apply')}
               </button>
-              <button onClick={() => setTraceDlg(null)} className="h-8 px-4 rounded text-[12px] hover:brightness-110"
+              <button onClick={() => setTraceDlg(null)} className="h-8 px-4 rounded text-xs hover:brightness-110"
                 style={{ background: C.toolbar, color: C.text, border: `1px solid ${C.border}` }}>{t('common_cancel')}</button>
             </div>
           </div>
@@ -7819,7 +7820,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={cancel}>
           <div className="rounded-xl shadow-2xl" style={{ background: C.panel, border: `1px solid ${C.border}`, width: 320 }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center px-4 py-2.5" style={{ borderBottom: `1px solid ${C.border}` }}>
-              <span className="text-[13px] font-medium" style={{ color: C.text }}>{t('apex_edit_angle')}</span>
+              <span className="text-xs font-medium" style={{ color: C.text }}>{t('apex_edit_angle')}</span>
             </div>
             <div className="px-4 py-4 flex flex-col gap-3.5">
               <RangeSlider variant="boxed" min={1} max={179} step={0.5}
@@ -7843,9 +7844,9 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-4 py-2.5" style={{ borderTop: `1px solid ${C.border}` }}>
-              <button onClick={cancel} className="h-8 px-4 rounded text-[12px] hover:brightness-110"
+              <button onClick={cancel} className="h-8 px-4 rounded text-xs hover:brightness-110"
                 style={{ background: C.toolbar, color: C.text, border: `1px solid ${C.border}` }}>{t('common_cancel')}</button>
-              <button onClick={() => setAngleDlg(null)} className="h-8 px-4 rounded text-[12px] font-medium hover:brightness-110"
+              <button onClick={() => setAngleDlg(null)} className="h-8 px-4 rounded text-xs font-medium hover:brightness-110"
                 style={{ background: C.accent, color: '#fff' }}>{t('common_confirm')}</button>
             </div>
           </div>
@@ -7861,7 +7862,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={cancel}>
           <div className="rounded-xl shadow-2xl" style={{ background: C.panel, border: `1px solid ${C.border}`, width: 320 }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center px-4 py-2.5" style={{ borderBottom: `1px solid ${C.border}` }}>
-              <span className="text-[13px] font-medium" style={{ color: C.text }}>{t(`apex_fx_${fx}` as 'apex_fx_twist')}</span>
+              <span className="text-xs font-medium" style={{ color: C.text }}>{t(`apex_fx_${fx}` as 'apex_fx_twist')}</span>
             </div>
             <div className="px-4 py-4 flex flex-col gap-3.5">
               <div className="flex flex-col gap-1.5">
@@ -7884,9 +7885,9 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
               )}
             </div>
             <div className="flex items-center justify-end gap-2 px-4 py-2.5" style={{ borderTop: `1px solid ${C.border}` }}>
-              <button onClick={cancel} className="h-8 px-4 rounded text-[12px] hover:brightness-110"
+              <button onClick={cancel} className="h-8 px-4 rounded text-xs hover:brightness-110"
                 style={{ background: C.toolbar, color: C.text, border: `1px solid ${C.border}` }}>{t('common_cancel')}</button>
-              <button onClick={() => { setDistortDlg(null); distortBaseRef.current = null }} className="h-8 px-4 rounded text-[12px] font-medium hover:brightness-110"
+              <button onClick={() => { setDistortDlg(null); distortBaseRef.current = null }} className="h-8 px-4 rounded text-xs font-medium hover:brightness-110"
                 style={{ background: C.accent, color: '#fff' }}>{t('common_confirm')}</button>
             </div>
           </div>
@@ -7906,7 +7907,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={() => setSymDlg(false)}>
           <div className="rounded-xl shadow-2xl" style={{ background: C.panel, border: `1px solid ${C.border}`, width: 440 }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center px-4 py-2.5" style={{ borderBottom: `1px solid ${C.border}` }}>
-              <span className="flex-1 text-center text-[13px] font-semibold" style={{ color: C.text }}>{selCont ? t('apex_symmetry_obj') : t('apex_live_sym_title')}</span>
+              <span className="flex-1 text-center text-xs font-semibold" style={{ color: C.text }}>{selCont ? t('apex_symmetry_obj') : t('apex_live_sym_title')}</span>
               <button onClick={() => setSymDlg(false)} className="w-6 h-6 rounded flex items-center justify-center hover:bg-white/10" style={{ color: C.textDim }}>✕</button>
             </div>
             <div className="px-4 py-3 flex flex-col gap-3">
@@ -7915,7 +7916,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                   const active = selCont ? curMode === m : symLive === m
                   return (
                   <button key={m} onClick={() => setMode(m)}
-                    className="h-7 px-2.5 rounded text-[12px] transition-colors"
+                    className="h-7 px-2.5 rounded text-xs transition-colors"
                     style={{ background: active ? C.accent : C.toolbar, color: active ? '#fff' : C.text }}>
                     {label}
                   </button>
@@ -7923,12 +7924,12 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
               </div>
               {curMode === 'radial' && (
                 <div className="flex items-center gap-2">
-                  <span className="text-[12px] flex-1" style={{ color: C.text }}>{t('apex_radial_count')}</span>
+                  <span className="text-xs flex-1" style={{ color: C.text }}>{t('apex_radial_count')}</span>
                   <RangeSlider min={2} max={72} step={1} value={curCount} onChange={setCount}
                     accent={C.accent} trackColor="rgba(255,255,255,0.15)" aria-label={t('apex_radial_count')} className="w-44" />
                   <input type="number" min={2} max={72} value={curCount}
                     onChange={e => setCount(Math.max(2, Math.min(72, Number(e.target.value))))}
-                    className="w-14 px-1.5 py-1 rounded text-right text-[12px] outline-none"
+                    className="w-14 px-1.5 py-1 rounded text-right text-xs outline-none"
                     style={{ background: '#2c2c2c', border: `1px solid ${C.border}`, color: C.text }} />
                 </div>
               )}
@@ -7939,16 +7940,16 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
             <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderTop: `1px solid ${C.border}` }}>
               {selCont ? (
                 <button onClick={() => { releaseSym([selCont.id]); setSymDlg(false) }}
-                  className="h-8 px-3 rounded text-[12px] hover:brightness-110"
+                  className="h-8 px-3 rounded text-xs hover:brightness-110"
                   style={{ background: C.toolbar, color: C.text, border: `1px solid ${C.border}` }}>{t('apex_sym_release')}</button>
               ) : (
                 <button onClick={() => { createSymmetry(curMode, curCount); setSymDlg(false) }}
                   disabled={!selectedIds.length}
-                  className="h-8 px-3 rounded text-[12px] font-medium hover:brightness-110 disabled:opacity-50"
+                  className="h-8 px-3 rounded text-xs font-medium hover:brightness-110 disabled:opacity-50"
                   style={{ background: C.accent, color: '#fff' }}>{t('apex_sym_create')}</button>
               )}
               <div style={{ flex: 1 }} />
-              <button onClick={() => setSymDlg(false)} className="h-8 px-4 rounded text-[12px] hover:brightness-110"
+              <button onClick={() => setSymDlg(false)} className="h-8 px-4 rounded text-xs hover:brightness-110"
                 style={{ background: C.toolbar, color: C.text, border: `1px solid ${C.border}` }}>{selCont ? t('filt_apply') : t('common_cancel')}</button>
             </div>
           </div>
@@ -7961,17 +7962,17 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
         const close = () => { setMirrorDlg(false); setRadialDlg(false); setGridDlg(false) }
         const numRow = (label: string, val: number, set: (v: number) => void, min: number, max: number) => (
           <div key={label} className="flex items-center gap-2">
-            <span className="text-[12px] flex-1" style={{ color: C.text }}>{label}</span>
+            <span className="text-xs flex-1" style={{ color: C.text }}>{label}</span>
             <RangeSlider min={min} max={max} step={1} value={val} onChange={set}
               accent={C.accent} trackColor="rgba(255,255,255,0.15)" aria-label={label} className="w-44" />
             <input type="number" min={min} max={max} value={Math.round(val)}
               onChange={e => set(Math.max(min, Math.min(max, Number(e.target.value))))}
-              className="w-14 px-1.5 py-1 rounded text-right text-[12px] outline-none"
+              className="w-14 px-1.5 py-1 rounded text-right text-xs outline-none"
               style={{ background: '#2c2c2c', border: `1px solid ${C.border}`, color: C.text }} />
           </div>
         )
         const btn = (label: string, cb: () => void, primary = false) => (
-          <button key={label} onClick={cb} className="h-8 px-4 rounded text-[12px] hover:brightness-110"
+          <button key={label} onClick={cb} className="h-8 px-4 rounded text-xs hover:brightness-110"
             style={{ background: primary ? C.accent : C.toolbar, color: primary ? '#fff' : C.text, border: `1px solid ${C.border}`, fontWeight: primary ? 600 : 400 }}>
             {label}
           </button>
@@ -7980,7 +7981,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
           <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={close}>
             <div className="rounded-xl shadow-2xl" style={{ background: C.panel, border: `1px solid ${C.border}`, width: 420 }} onClick={e => e.stopPropagation()}>
               <div className="flex items-center px-4 py-2.5" style={{ borderBottom: `1px solid ${C.border}` }}>
-                <span className="flex-1 text-center text-[13px] font-semibold" style={{ color: C.text }}>{title}</span>
+                <span className="flex-1 text-center text-xs font-semibold" style={{ color: C.text }}>{title}</span>
                 <button onClick={close} className="w-6 h-6 rounded flex items-center justify-center hover:bg-white/10" style={{ color: C.textDim }}>✕</button>
               </div>
               <div className="px-4 py-3 flex flex-col gap-3">
@@ -7988,7 +7989,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                   <div className="flex items-center gap-1.5">
                     {([['v', t('apex_axis_v')], ['h', t('apex_axis_h')], ['angle', t('apex_axis_angle')]] as ['v' | 'h' | 'angle', string][]).map(([m, label]) => (
                       <button key={m} onClick={() => setMirrorAxis(m)}
-                        className="h-7 px-2.5 rounded text-[12px] transition-colors"
+                        className="h-7 px-2.5 rounded text-xs transition-colors"
                         style={{ background: mirrorAxis === m ? C.accent : C.toolbar, color: mirrorAxis === m ? '#fff' : C.text }}>
                         {label}
                       </button>
@@ -8674,7 +8675,7 @@ function ApexExportDialog(props: {
       <div className="rounded-xl shadow-2xl" style={{ background: C.panel, border: `1px solid ${C.border}`, width: 960, maxWidth: 'calc(100vw - 40px)' }}
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center px-4 py-2.5" style={{ borderBottom: `1px solid ${C.border}` }}>
-          <span className="flex-1 text-center text-[13px] font-semibold" style={{ color: C.text }}>{t('apex_export_title')}</span>
+          <span className="flex-1 text-center text-xs font-semibold" style={{ color: C.text }}>{t('apex_export_title')}</span>
           <button onClick={onClose} className="w-6 h-6 rounded flex items-center justify-center hover:bg-white/10" style={{ color: C.textDim }}>✕</button>
         </div>
         <div className="flex items-stretch">
@@ -8771,7 +8772,7 @@ function ApexExportDialog(props: {
             {opts.scope === 'pages' && (
               <input value={opts.pagesSpec} onChange={e => patch({ pagesSpec: e.target.value })}
                 placeholder={t('apex_export_pages_hint')}
-                className="px-2 py-1 rounded text-[12px] outline-none"
+                className="px-2 py-1 rounded text-sm outline-none"
                 style={{ background: '#2c2c2c', border: `1px solid ${C.border}`, color: C.text }} />
             )}
             {isRaster && (
@@ -8782,18 +8783,18 @@ function ApexExportDialog(props: {
                     <Fragment key={i}>
                       <select value={sc.s}
                         onChange={e => patch({ scales: opts.scales.map((x, k) => k === i ? { ...x, s: Number(e.target.value) } : x) })}
-                        className="px-1.5 py-1 rounded text-[12px] outline-none"
+                        className="px-1.5 py-1 rounded text-sm outline-none"
                         style={{ background: '#2c2c2c', border: `1px solid ${C.border}`, color: C.text }}>
                         {[0.5, 1, 2, 3, 4].map(v => <option key={v} value={v}>×{v}</option>)}
                       </select>
                       <input value={sc.suffix}
                         placeholder={sc.s !== 1 ? `@${sc.s}x` : t('apex_export_suffix_none')}
                         onChange={e => patch({ scales: opts.scales.map((x, k) => k === i ? { ...x, suffix: e.target.value } : x) })}
-                        className="px-2 py-1 rounded text-[12px] outline-none"
+                        className="px-2 py-1 rounded text-sm outline-none"
                         style={{ background: '#2c2c2c', border: `1px solid ${C.border}`, color: C.text }} />
                       <button onClick={() => patch({ scales: opts.scales.filter((_, k) => k !== i) })}
                         disabled={opts.scales.length < 2}
-                        className="w-5 self-center rounded hover:bg-white/10 disabled:opacity-30 text-[13px]"
+                        className="w-5 self-center rounded hover:bg-white/10 disabled:opacity-30 text-xs"
                         style={{ color: C.textDim }}>✕</button>
                     </Fragment>
                   ))}
@@ -8819,7 +8820,7 @@ function ApexExportDialog(props: {
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input type="checkbox" checked={opts.svgResponsive} onChange={e => patch({ svgResponsive: e.target.checked })}
                     style={{ accentColor: C.accent }} />
-                  <span className="text-[12px]" style={{ color: C.text }}>{t('apex_export_responsive')}</span>
+                  <span className="text-xs" style={{ color: C.text }}>{t('apex_export_responsive')}</span>
                 </label>
               </>
             )}
@@ -8830,7 +8831,7 @@ function ApexExportDialog(props: {
                   <RangeSlider min={10} max={100} step={1} className="flex-1" value={opts.quality}
                     onChange={v => patch({ quality: v })} accent={C.accent} trackColor="rgba(255,255,255,0.15)"
                     aria-label={t('apex_export_quality')} />
-                  <span className="w-8 text-right text-[12px] tabular-nums" style={{ color: C.text }}>{opts.quality}</span>
+                  <span className="w-8 text-right text-xs tabular-nums" style={{ color: C.text }}>{opts.quality}</span>
                 </div>
                 <div className="flex justify-between text-[10px]" style={{ color: C.textDim, opacity: 0.75 }}>
                   <span>{t('apex_export_quality_small')}</span><span>{t('apex_export_quality_large')}</span>
@@ -8852,24 +8853,24 @@ function ApexExportDialog(props: {
             <div className="flex items-center gap-2">
               {label(t('apex_export_prefix'))}
               <input value={opts.prefix} onChange={e => patch({ prefix: e.target.value })}
-                className="flex-1 px-2 py-1 rounded text-[12px] outline-none"
+                className="flex-1 px-2 py-1 rounded text-xs outline-none"
                 style={{ background: '#2c2c2c', border: `1px solid ${C.border}`, color: C.text }} />
             </div>
             <div className="text-[11px]" style={{ color: C.textDim }}>
               {t('apex_export_summary', { pages: nPages, count: nFiles })}
             </div>
-            {err && <div className="text-[12px]" style={{ color: '#f87171' }}>{err}</div>}
-            {done && <div className="text-[12px]" style={{ color: '#4ade80' }}>{done}</div>}
+            {err && <div className="text-xs" style={{ color: '#f87171' }}>{err}</div>}
+            {done && <div className="text-xs" style={{ color: '#4ade80' }}>{done}</div>}
           </div>
         </div>
         <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderTop: `1px solid ${C.border}` }}>
           <div style={{ flex: 1 }} />
           <button onClick={() => { void doExport() }} disabled={busy}
-            className="h-8 px-4 rounded text-[12px] font-medium hover:brightness-110 disabled:opacity-60"
+            className="h-8 px-4 rounded text-xs font-medium hover:brightness-110 disabled:opacity-60"
             style={{ background: C.accent, color: '#fff' }}>
             {busy ? '…' : t('apex_export_do')}
           </button>
-          <button onClick={onClose} className="h-8 px-4 rounded text-[12px] hover:brightness-110"
+          <button onClick={onClose} className="h-8 px-4 rounded text-xs hover:brightness-110"
             style={{ background: C.toolbar, color: C.text, border: `1px solid ${C.border}` }}>{t('common_cancel')}</button>
         </div>
       </div>

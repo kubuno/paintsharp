@@ -42,23 +42,33 @@ export function register() {
     renderStatic: renderVectorsStatic,
   })
 
-  // Types de fichiers Kubuno propres à chaque sous-module Paintsharp (déclarés auprès de
-  // `files` — base du filtrage StartPage, des icônes et de « ouvrir avec »).
-  // `open` : résout l'entité via openByFile (renvoie { id }) puis navigue vers l'éditeur.
+  // Kubuno file types owned by each Paintsharp sub-module (declared to `files` —
+  // the basis for StartPage filtering, icons and "open with").
+  // `open`: resolves the entity via openByFile (returns { id }) then navigates to the editor.
   FileTypeRegistry.register({ moduleId: 'paintsharp-apex', label: 'Apex', icon: 'PenTool',
     mimeTypes: ['application/vnd.kubuno.vector+json', 'image/svg+xml'], extensions: ['kbvec', 'svg'],
     open: (f, nav) => {
       const isSvg = /\.svg$/i.test(f.name) || f.mime_type === 'image/svg+xml'
       if (isSvg) {
-        // SVG standard : import côté frontend dans un nouveau projet Apex.
+        // Plain SVG: imported client-side into a new Apex project.
         import('./apexSvgIO').then(({ openSvgAsApex }) => openSvgAsApex(f).then(id => nav(`/paintsharp/apex/${id}`)).catch(() => {}))
       } else {
         import('./api').then(({ apexApi }) => apexApi.openByFile(f.id).then(({ id }) => nav(`/paintsharp/apex/${id}`)).catch(() => {}))
       }
     } })
   FileTypeRegistry.register({ moduleId: 'paintsharp-layer', label: 'Layer', icon: 'Layers',
-    mimeTypes: ['application/vnd.kubuno.layer+json'], extensions: ['kblay'],
-    open: (f, nav) => { import('./api').then(({ layerApi }) => layerApi.openByFile(f.id).then(({ id }) => nav(`/paintsharp/layer/${id}`)).catch(() => {})) } })
+    // Native .kblay documents plus standard raster images (imported on the fly).
+    mimeTypes: ['application/vnd.kubuno.layer+json', 'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/bmp', 'image/avif'],
+    extensions: ['kblay', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif'],
+    open: (f, nav) => {
+      const isRaster = f.mime_type.startsWith('image/') && f.mime_type !== 'image/svg+xml'
+      if (isRaster) {
+        // Plain image: imported client-side into a new Layer document.
+        import('./layerImageIO').then(({ openImageAsLayer }) => openImageAsLayer(f).then(id => nav(`/paintsharp/layer/${id}`)).catch(() => {}))
+      } else {
+        import('./api').then(({ layerApi }) => layerApi.openByFile(f.id).then(({ id }) => nav(`/paintsharp/layer/${id}`)).catch(() => {}))
+      }
+    } })
   FileTypeRegistry.register({ moduleId: 'paintsharp-vertex', label: 'Vertex', icon: 'Box',
     mimeTypes: ['application/vnd.kubuno.scene+json'], extensions: ['kbscn'],
     open: (f, nav) => { import('./api').then(({ paintsharpApi }) => paintsharpApi.openByFile(f.id).then(({ id }) => nav(`/paintsharp/scene/${id}`)).catch(() => {})) } })
@@ -86,9 +96,9 @@ export function register() {
       }
     } })
 
-  // PdfWriter sait aussi ouvrir les PDF bruts (application/pdf) : contribué au menu
-  // « Ouvrir avec » du module Files (et non comme type de fichier, pour ne pas
-  // changer l'icône ni le double-clic). Le prédicat évite que l'item soit grisé.
+  // PdfWriter can also open raw PDFs (application/pdf): contributed to the Files
+  // module's "Open with" menu rather than registered as a file type, so neither the
+  // icon nor the double-click behaviour changes. The predicate keeps the item enabled.
   SlotRegistry.register('files-open-with', 'paintsharp', PaintsharpPdfOpenWithAction, (file) => {
     const f = file as { mime_type?: string; name?: string } | undefined
     return !!f && isPdfFile(f.mime_type ?? '', f.name ?? '')

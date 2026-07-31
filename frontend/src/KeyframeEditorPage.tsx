@@ -481,7 +481,7 @@ function GraphEditor({ kf, onApplyPreset }: {
         <span className="text-[10px] mr-1" style={{ color: '#7a7a7a' }}>{t('keyframe_easing')}</span>
         {EASING_PRESETS.map(({ id, labelKey, preset }) => (
           <button key={id} onClick={() => onApplyPreset(preset)}
-                  className="px-1.5 h-5 text-[9px] rounded transition-colors"
+                  className="px-1.5 h-5 text-[10px] rounded transition-colors"
                   style={{ color: '#9e9e9e', background: 'transparent' }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#333')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
@@ -492,7 +492,7 @@ function GraphEditor({ kf, onApplyPreset }: {
       <div className="flex gap-2 p-2">
         <canvas ref={canvasRef} width={96} height={80}
                 className="rounded border" style={{ borderColor: '#333' }} />
-        <div className="flex flex-col gap-1 text-[9px]" style={{ color: '#7a7a7a' }}>
+        <div className="flex flex-col gap-1 text-[10px]" style={{ color: '#7a7a7a' }}>
           {kf && <>
             <span>{t('keyframe_frame_label', { frame: kf.frame })}</span>
             <span>{t('keyframe_value_label', { value: typeof kf.value === 'number' ? kf.value.toFixed(2) : kf.value })}</span>
@@ -740,7 +740,7 @@ function PropertiesPanel({
         <p className="truncate">{layer.name}</p>
       </div>
       <div className="px-2 py-2">
-        <p className="text-[9px] mb-2 px-1" style={{ color: '#7a7a7a' }}>{t('keyframe_transform_caps')}</p>
+        <p className="text-[10px] mb-2 px-1" style={{ color: '#7a7a7a' }}>{t('keyframe_transform_caps')}</p>
         {PROP_KEYS.map(({ key, labelKey, step, fmt }) => {
           const prop = layer.properties[key] as AnimProperty<number> | undefined
           if (!prop) return null
@@ -760,7 +760,7 @@ function PropertiesPanel({
                 className="flex-1 min-w-0 h-5 text-right text-[10px] rounded border px-1 outline-none"
                 style={{ background: '#2c2c2c', borderColor: '#3a3a3a', color: '#e0e0e0' }}
               />
-              <span className="w-6 text-[9px] text-right flex-shrink-0" style={{ color: '#7a7a7a' }}>
+              <span className="w-6 text-[10px] text-right flex-shrink-0" style={{ color: '#7a7a7a' }}>
                 {fmt(currentVal).replace(/[\d.-]+/, '')}
               </span>
               <button
@@ -1811,7 +1811,7 @@ export default function KeyframeEditorPage() {
                         <div key={key}
                              className="flex items-center h-7 pl-6 pr-1 border-b"
                              style={{ borderColor: '#2a2a2a', background: '#181818' }}>
-                          <span className="text-[9px] truncate" style={{ color: '#7a7a7a' }}>{t(labelKey)}</span>
+                          <span className="text-[10px] truncate" style={{ color: '#7a7a7a' }}>{t(labelKey)}</span>
                         </div>
                       )
                     })}

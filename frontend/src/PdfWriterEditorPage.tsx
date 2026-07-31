@@ -25,7 +25,7 @@ import { uid } from './uid'
 import { pdfWriterApi, type Annotation, type PdfSignature, type TextAnnotation, type ShapeAnnotation } from './api'
 import { extractPageElements } from './pdfExtract'
 import { buildAnnotatedPdf, svgPathBounds, type ExportPage } from './pdfExport'
-import { useAuthStore } from '@kubuno/sdk'
+import { useAuthStore, pickImageFile } from '@kubuno/sdk'
 import { useConfirm } from '@kubuno/sdk'
 import { ConfirmDialog } from '@ui'
 import { Button, MenuDropdown, RangeSlider, FontSizeField, type MenuItem } from '@ui'
@@ -108,7 +108,6 @@ export default function PdfWriterEditorPage() {
   const dragSnappedRef = useRef(false) // historique : snapshot une fois au 1er mouvement
   // Positions d'origine des éléments sélectionnés (pour un déplacement groupé).
   const dragOrigRef = useRef<Map<string, { x: number; y: number; points?: [number, number][] }>>(new Map())
-  const imgInputRef = useRef<HTMLInputElement>(null)
   // Menu contextuel (clic droit) sur un objet — rendu via MenuDropdown de @ui.
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; id: string } | null>(null)
   // Menu des niveaux de zoom (façon Acrobat).
@@ -728,7 +727,7 @@ export default function PdfWriterEditorPage() {
     return () => { cancelled = true }
   }, [editMode, pdfDoc, currentPage, isExtracted, id, qc])
 
-  // Ajoute une image (téléversée) comme élément déplaçable/redimensionnable.
+  // Adds an image as a movable/resizable annotation element.
   const addImageFile = (file: File) => {
     const reader = new FileReader()
     reader.onload = () => {
@@ -748,6 +747,12 @@ export default function PdfWriterEditorPage() {
       probe.src = src
     }
     reader.readAsDataURL(file)
+  }
+
+  /** "Add an image": the image comes from the core picker. */
+  const addImageFromPicker = async () => {
+    const file = await pickImageFile({ title: t('pdf_add_image', { defaultValue: 'Ajouter une image' }) })
+    if (file) addImageFile(file)
   }
 
   // ── Zoom / ajustement (façon Acrobat) ──────────────────────────────────────
@@ -2400,7 +2405,7 @@ export default function PdfWriterEditorPage() {
           extraMenus: [
             { label: t('pdf_menu_insert', { defaultValue: 'Insertion' }), items: [
               { label: t('pdf_tool_text', { defaultValue: 'Zone de texte' }), onClick: () => setActiveTool('text') },
-              { label: t('pdf_add_image', { defaultValue: 'Image' }), onClick: () => imgInputRef.current?.click() },
+              { label: t('pdf_add_image', { defaultValue: 'Image' }), onClick: () => { void addImageFromPicker() } },
               { label: t('pdf_tool_sticky_note', { defaultValue: 'Note' }), onClick: () => setActiveTool('sticky-note') },
               'sep',
               { label: t('pdf_tool_stamp', { defaultValue: 'Tampon' }), onClick: () => { setShowStampPicker(true) } },
@@ -2525,7 +2530,7 @@ export default function PdfWriterEditorPage() {
 
         {/* Ajouter une image */}
         <button
-          onClick={() => imgInputRef.current?.click()}
+          onClick={() => { void addImageFromPicker() }}
           title={t('pdf_add_image', { defaultValue: 'Ajouter une image' })}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-[#212121] rounded-lg
                      hover:bg-[#454545] text-[#8e8e8e] transition-colors"
@@ -2533,10 +2538,6 @@ export default function PdfWriterEditorPage() {
           <ImageIcon size={14} />
           {t('pdf_add_image', { defaultValue: 'Image' })}
         </button>
-        <input
-          ref={imgInputRef} type="file" accept="image/*" hidden
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) addImageFile(f); e.target.value = '' }}
-        />
 
         {/* Imprimer (PDF aplati → dialogue d'impression du navigateur) */}
         <button

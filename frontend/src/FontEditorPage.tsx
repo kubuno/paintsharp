@@ -223,7 +223,7 @@ function PreviewPanel({ font, t }: { font: FontData; t: TFunction }) {
         onChange={e => setText(e.target.value)}
         placeholder={t('font_preview_placeholder')}
         rows={2}
-        className="w-full text-[12px] px-2 py-1.5 rounded outline-none resize-y"
+        className="w-full text-sm px-2 py-1.5 rounded outline-none resize-y"
         style={{ background: '#252525', color: C.text, border: `1px solid ${C.border}` }}
       />
       <label className="flex items-center gap-2 text-[11px]" style={{ color: C.textDim }}>
@@ -292,7 +292,7 @@ function KerningPanel({ font, commit, t }: {
       {label}
       <input value={v} maxLength={2}
              onChange={e => set([...e.target.value].slice(-1).join(''))}
-             className="w-10 h-7 text-center text-[14px] rounded outline-none"
+             className="w-10 h-7 text-center text-xs rounded outline-none"
              style={{ background: '#252525', color: C.text, border: `1px solid ${C.border}` }} />
     </label>
   )
@@ -305,7 +305,7 @@ function KerningPanel({ font, commit, t }: {
         <label className="flex flex-col gap-0.5 text-[10px] flex-1" style={{ color: C.textDim }}>
           {t('font_kern_value')}
           <input type="number" value={value} onChange={e => setValue(Math.round(+e.target.value) || 0)}
-                 className="w-full h-7 text-center text-[12px] rounded outline-none"
+                 className="w-full h-7 text-center text-xs rounded outline-none"
                  style={{ background: '#252525', color: C.text, border: `1px solid ${C.border}` }} />
         </label>
       </div>
@@ -343,7 +343,7 @@ function KerningPanel({ font, commit, t }: {
                  'sep',
                  { label: t('font_kern_remove'), onClick: remove, danger: true },
                ])}>
-            <button className="text-[13px] flex-1 text-left" style={{ color: C.text }} onClick={edit}>
+            <button className="text-xs flex-1 text-left" style={{ color: C.text }} onClick={edit}>
               {String.fromCodePoint(k.left)}{String.fromCodePoint(k.right)}
               <span className="ml-2 text-[11px]" style={{ color: C.textDim }}>{k.value}</span>
             </button>
@@ -1906,12 +1906,12 @@ export default function FontEditorPage() {
         {cp != null && (
           <>
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded flex items-center justify-center text-[20px] font-medium flex-shrink-0"
+              <div className="w-10 h-10 rounded flex items-center justify-center text-xl font-medium flex-shrink-0"
                    style={{ background: '#252525', border: `1px solid ${C.border}`, color: C.text }}>
                 {charLabel(cp)}
               </div>
               <div className="min-w-0">
-                <div className="text-[12px]" style={{ color: C.text }}>{t('font_glyph')}</div>
+                <div className="text-xs" style={{ color: C.text }}>{t('font_glyph')}</div>
                 <div className="text-[10px]" style={{ color: C.textDim }}>
                   {t('font_unicode')} U+{cp.toString(16).toUpperCase().padStart(4, '0')}
                   {' · '}{t('font_contours')}: {glyph?.contours.length ?? 0}
@@ -2172,7 +2172,7 @@ export default function FontEditorPage() {
           style={{ color: C.textDim }}>
           <ZoomIn size={13} />
         </button>
-        <span className="text-[9px] text-center" style={{ color: C.textDim }}>{Math.round(cs.zoom * 100)}%</span>
+        <span className="text-[10px] text-center" style={{ color: C.textDim }}>{Math.round(cs.zoom * 100)}%</span>
         <button title={t('font_zoom_out')}
           onClick={() => { const c = canvasRef.current; if (c) zoomAt(c.clientWidth / 2, c.clientHeight / 2, 1 / 1.25) }}
           className="w-8 h-7 rounded flex items-center justify-center hover:bg-white/10"
@@ -2181,7 +2181,7 @@ export default function FontEditorPage() {
         </button>
         <button title={t('font_fit')}
           onClick={() => centerGlyph(advance)}
-          className="w-8 h-7 rounded flex items-center justify-center hover:bg-white/10 text-[8px]"
+          className="w-8 h-7 rounded flex items-center justify-center hover:bg-white/10 text-[10px]"
           style={{ color: C.textDim }}>
           {t('font_fit')}
         </button>

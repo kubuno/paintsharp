@@ -1,0 +1,5 @@
+export { decodeGif, probeGif, isGif, type GifDecodeResult, type GifFrameMeta } from './decode.ts'
+export { encodeGif } from './encode.ts'
+export { lzwDecode, LzwTables, type LzwDecodeResult } from './lzwDecode.ts'
+export { lzwEncode, minCodeSizeFor } from './lzwEncode.ts'
+export { deinterlaceRow, readSubBlocks, writeSubBlocks, skipSubBlocks, ByteWriter } from './format.ts'

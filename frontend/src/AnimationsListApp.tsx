@@ -257,7 +257,7 @@ function AnimCard({
           </div>
         )}
         <div className="absolute bottom-1.5 right-1.5">
-          <span className="text-[9px] px-1.5 py-0.5 rounded"
+          <span className="text-[10px] px-1.5 py-0.5 rounded"
                 style={{ background: 'rgba(0,0,0,0.55)', color: '#ccc' }}>
             {(comp.duration_frames / comp.fps).toFixed(1)}s
           </span>

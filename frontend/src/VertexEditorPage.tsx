@@ -1970,7 +1970,7 @@ function SculptPanel({
                           <Sparkles size={8} style={{ position: 'absolute', top: -2, right: -2, color: C.accent }} />
                         )}
                       </div>
-                      <span className="text-[9px] leading-tight truncate w-full text-center"
+                      <span className="text-[10px] leading-tight truncate w-full text-center"
                             style={{ color: isActive ? C.text : C.textDim }}>
                         {brushDisplayName(t, b)}
                       </span>
@@ -1983,7 +1983,7 @@ function SculptPanel({
                     className="flex flex-col items-center justify-center gap-0.5 py-1.5 rounded"
                     style={{ border: `1px dashed ${C.border}`, color: C.textDim }}>
                     <Plus size={14} />
-                    <span className="text-[9px]">{t('vertex_brush_new_short', { defaultValue: 'Nouveau' })}</span>
+                    <span className="text-[10px]">{t('vertex_brush_new_short', { defaultValue: 'Nouveau' })}</span>
                   </button>
                 )}
               </div>
@@ -2063,7 +2063,7 @@ function ToolbarLeft({
   return (
     <>
       {/* Transforms (Object Mode) */}
-      <span className="text-[9px] uppercase tracking-widest mb-0.5" style={{ color: C.textDim }}>{t('vertex_group_object')}</span>
+      <span className="text-[10px] uppercase tracking-widest mb-0.5" style={{ color: C.textDim }}>{t('vertex_group_object')}</span>
       <Btn active={mode === 'object' && transformMode === 'translate'}
            onClick={() => { onMode('object'); onTransform('translate') }}
            title={`${t('vertex_tool_move')} (G)`}>
@@ -2120,7 +2120,7 @@ function ModeDropdown({ mode, onMode }: { mode: Mode; onMode: (m: Mode) => void 
           const r = e.currentTarget.getBoundingClientRect()
           setPos(p => p ? null : { top: r.bottom + 4, left: r.left })
         }}
-        className="flex items-center gap-2 px-2.5 h-7 rounded text-[12px] w-full"
+        className="flex items-center gap-2 px-2.5 h-7 rounded text-xs w-full"
         style={{ background: C.panel, color: C.text, border: `1px solid ${C.border}` }}>
         <cur.Icon size={14} style={{ color: C.accent }} />
         <span className="flex-1 text-left">{t(cur.labelKey)}</span>
@@ -2166,7 +2166,7 @@ function AddObjectButton({ onAdd, onImport }: { onAdd: (type: PrimType) => void;
           const r = e.currentTarget.getBoundingClientRect()
           setPos(p => p ? null : { top: r.bottom + 4, left: r.left })
         }}
-        className="flex items-center gap-1.5 px-2.5 h-7 rounded text-[12px]"
+        className="flex items-center gap-1.5 px-2.5 h-7 rounded text-xs"
         style={{ background: C.panel, color: C.text, border: `1px solid ${C.border}` }}>
         <Plus size={14} style={{ color: C.accent }} />
         {t('vertex_add_label')}

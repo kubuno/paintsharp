@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { pickImageFile } from '@kubuno/sdk'
 import { uid } from './uid'
 import { useDebouncedAutosave } from './useAutosave'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -12,713 +13,45 @@ import {
   SlidersHorizontal, Layers, Undo2, Redo2, Download,
   ZoomIn, ZoomOut, Wand2, Check, RotateCcw, Sun, Contrast,
   Droplet, Palette as PaletteIcon, PenTool,
-  Pencil, Wind, Highlighter, PenLine, Sparkles, Fingerprint, PanelRight, Lasso, Wand, Move,
+  Pencil, Sparkles, Fingerprint, PanelRight, Lasso, Wand, Move,
   Copy, Search, FolderClosed, FolderOpen, GripVertical, CornerDownRight, Grid2x2, Star,
-  SprayCan, Feather, X,
+  X, Image as ImageIcon, Link2, Sparkle, SquareDot,
 } from 'lucide-react'
-import { Dropdown, RangeSlider, FloatingWindow, FontSizeField } from '@ui'
+import { Dropdown, RangeSlider, FloatingWindow, FontSizeField, Toggle, MenuDropdown } from '@ui'
 import { layerApi, type LayerStructureItem } from './api'
 import { C, hexToRgb, rgbToHex, rgbToHsl, hslToRgb, ColorPicker, DockArea, Navigator, OptNum, EditorShell, paintsharpMenus, useContextMenu, type CtxItem, type DockController } from './ui'
 import { EmbedShell } from './EmbedShell'
 import { FILTER_GROUPS, filterDefaults, type FilterFn, type FilterDef } from './layerFilters'
+import { ToolRail } from './layer/tools/ToolRail'
+import { UNIMPLEMENTED_TOOLS, legacyForTool, toolForLegacy } from './layer/tools/legacyBridge'
+import { toolForKeystroke, ALL_TOOL_IDS } from './layer/tools/helpers'
+import { getTool, registeredTools } from './layer/tools/handlers'
+import type { ToolContext, ToolPointer } from './layer/tools/handlers'
+import type { ToolId } from './layer/tools/types'
+import { ColorSwatches } from './layer/tools/ColorSwatches'
+import { BLEND_INT, BLEND_KEYS, blendLabel } from './layer/model/blend'
+import { findInTree, mapTree, removeFromTree, leaves, allNodes, insertNode, isDescendant } from './layer/model/tree'
+import { displayLayerName } from './layer/model/naming'
+import { LAYER_COLORS, FONT_FAMILIES, ZOOM_PRESETS } from './layer/model/constants'
+import { VERT_COMP, VERT_DISP, FRAG_COMPOSITE, FRAG_DISPLAY, FRAG_ADJUST } from './layer/renderer/shaders'
+import { uloc, glProg, glVAO, glFB } from './layer/renderer/glUtils'
+import { BRUSH_CATEGORIES, BRUSH_PRESETS, DEFAULT_BRUSH, extractDyn, type BrushPreset, type BrushDyn } from './layer/paint/brushPresets'
+import { paintPreviewStroke } from './layer/paint/brushPreview'
+import { maskBlur, maskMorph } from './layer/select/maskOps'
+import { buildSelOutline } from './layer/select/outline'
+import { ADJUST_ZERO, adjustIsZero, applyAdjustments, type Adjust } from './layer/imaging/adjustments'
+import { ADJUSTMENT_DEFS, ADJ_BY_KIND, defaultAdjustment, readAdjustment, type AdjustmentKind } from './layer/model/adjustmentLayers'
+import { FILTER_ZERO, filterIsZero, applyFilters, type Filter } from './layer/imaging/filters'
 
 // Palette + colour math now live in the shared Paintsharp UI library (ui/theme.ts).
 
+/** Kind filter of the layers panel (Photoshop's "Type" row). */
+export type LayerKindFilter = 'raster' | 'adjustment' | 'text' | 'group'
+
 type Tool = 'select' | 'brush' | 'eraser' | 'eyedrop' | 'fill' | 'hand' | 'crop' | 'text' | 'rect-sel' | 'ellipse-sel' | 'lasso' | 'magic' | 'transform' | 'zoom' | 'rotate'
-
-// ── Brush presets (stamp/dab engine) ───────────────────────────────────────────
-// Each preset drives the dab distribution & shape. The user-adjustable size /
-// opacity sliders stay authoritative; presets only supply sensible defaults &
-// the "character" (hardness, spacing, flow, jitter, shape, pressure dynamics).
-type BrushPreset = {
-  id:             string
-  nameKey:        string  // i18n key
-  category:       string  // i18n key of the brush-library group
-  Icon:           React.ComponentType<{ size?: number; style?: React.CSSProperties }>
-  hardness:       number  // 0..100 default edge softness
-  spacing:        number  // dab interval as a fraction of the dab radius (>0)
-  flow:           number  // 0..1 per-dab alpha (accumulation control)
-  sizeJitter:     number  // 0..1 random radius variation per dab
-  opacityJitter:  number  // 0..1 random alpha variation per dab
-  scatter:        number  // 0..1 random positional offset (× radius)
-  angle:          number  // dab rotation in degrees (for elliptical dabs)
-  roundness:      number  // 0..1 (1 = circle, <1 = ellipse)
-  pressureSize:   boolean // pressure modulates radius
-  pressureOpacity:boolean // pressure modulates alpha
-  defaultSize:    number  // suggested size (px) applied on first selection
-}
-
-// The subset of a brush the Brush Studio lets the user tune live (everything but
-// identity/icon). `hardness`, size, opacity and flow already have their own state.
-type BrushDyn = Pick<BrushPreset, 'spacing'|'sizeJitter'|'opacityJitter'|'scatter'|'angle'|'roundness'|'pressureSize'|'pressureOpacity'>
-const extractDyn = (b: BrushPreset): BrushDyn => ({
-  spacing:b.spacing, sizeJitter:b.sizeJitter, opacityJitter:b.opacityJitter, scatter:b.scatter,
-  angle:b.angle, roundness:b.roundness, pressureSize:b.pressureSize, pressureOpacity:b.pressureOpacity,
-})
-
-// Ordered brush-library categories (Procreate-style sets).
-const BRUSH_CATEGORIES = ['sketching','inking','painting','airbrushing','calligraphy','textures'] as const
-
-const BRUSH_PRESETS: BrushPreset[] = [
-  { id:'hard',    nameKey:'layer_brush_preset_hard',   category:'layer_brushcat_painting',   Icon:Circle,      hardness:100, spacing:0.10, flow:1.0,  sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:0,  roundness:1,    pressureSize:true,  pressureOpacity:false, defaultSize:22 },
-  { id:'soft',    nameKey:'layer_brush_preset_soft',   category:'layer_brushcat_painting',   Icon:Brush,       hardness:0,   spacing:0.06, flow:0.85, sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:0,  roundness:1,    pressureSize:true,  pressureOpacity:true,  defaultSize:40 },
-  { id:'pencil',  nameKey:'layer_brush_preset_pencil', category:'layer_brushcat_sketching',  Icon:Pencil,      hardness:92,  spacing:0.05, flow:0.9,  sizeJitter:0.05, opacityJitter:0.12, scatter:0.04, angle:0,  roundness:1,    pressureSize:true,  pressureOpacity:true,  defaultSize:6  },
-  { id:'airbrush',nameKey:'layer_brush_preset_airbrush',category:'layer_brushcat_airbrushing',Icon:Wind,       hardness:0,   spacing:0.04, flow:0.10, sizeJitter:0,    opacityJitter:0.10, scatter:0.25, angle:0,  roundness:1,    pressureSize:false, pressureOpacity:true,  defaultSize:60 },
-  { id:'marker',  nameKey:'layer_brush_preset_marker', category:'layer_brushcat_inking',     Icon:Highlighter, hardness:75,  spacing:0.03, flow:1.0,  sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:0,  roundness:1,    pressureSize:false, pressureOpacity:false, defaultSize:30 },
-  { id:'calligr', nameKey:'layer_brush_preset_calligraphy', category:'layer_brushcat_calligraphy', Icon:PenLine, hardness:88, spacing:0.05, flow:1.0,  sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:40, roundness:0.28, pressureSize:true,  pressureOpacity:false, defaultSize:34 },
-  { id:'charcoal',nameKey:'layer_brush_preset_charcoal',category:'layer_brushcat_sketching',  Icon:Sparkles,   hardness:35,  spacing:0.07, flow:0.55, sizeJitter:0.18, opacityJitter:0.35, scatter:0.45, angle:0,  roundness:0.85, pressureSize:true,  pressureOpacity:true,  defaultSize:46 },
-  { id:'ink',     nameKey:'layer_brush_preset_ink',     category:'layer_brushcat_inking',     Icon:PenTool,    hardness:97,  spacing:0.04, flow:1.0,  sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:0,  roundness:1,    pressureSize:true,  pressureOpacity:false, defaultSize:10 },
-  { id:'water',   nameKey:'layer_brush_preset_watercolor',category:'layer_brushcat_painting', Icon:Droplet,  hardness:0,   spacing:0.05, flow:0.16, sizeJitter:0.08, opacityJitter:0.25, scatter:0.05, angle:0,  roundness:1,    pressureSize:true,  pressureOpacity:true,  defaultSize:70 },
-  { id:'spray',   nameKey:'layer_brush_preset_spray',   category:'layer_brushcat_airbrushing',Icon:SprayCan,   hardness:60,  spacing:0.02, flow:0.05, sizeJitter:0.75, opacityJitter:0.55, scatter:1.0,  angle:0,  roundness:1,    pressureSize:false, pressureOpacity:true,  defaultSize:80 },
-  { id:'chalk',   nameKey:'layer_brush_preset_chalk',   category:'layer_brushcat_sketching',  Icon:Feather,    hardness:55,  spacing:0.09, flow:0.7,  sizeJitter:0.3,  opacityJitter:0.45, scatter:0.3,  angle:25, roundness:0.7,  pressureSize:true,  pressureOpacity:true,  defaultSize:38 },
-  // Enriched set (Procreate-like breadth).
-  { id:'fineliner',nameKey:'layer_brush_preset_fineliner',category:'layer_brushcat_inking',  Icon:PenLine,    hardness:100, spacing:0.03, flow:1.0,  sizeJitter:0,    opacityJitter:0,    scatter:0,    angle:0,  roundness:1,    pressureSize:false, pressureOpacity:false, defaultSize:4  },
-  { id:'gouache', nameKey:'layer_brush_preset_gouache', category:'layer_brushcat_painting',   Icon:Brush,      hardness:70,  spacing:0.06, flow:0.9,  sizeJitter:0.04, opacityJitter:0.08, scatter:0.03, angle:0,  roundness:0.95, pressureSize:true,  pressureOpacity:false, defaultSize:48 },
-  { id:'oilpastel',nameKey:'layer_brush_preset_oilpastel',category:'layer_brushcat_sketching',Icon:Pencil,     hardness:45,  spacing:0.08, flow:0.75, sizeJitter:0.22, opacityJitter:0.3,  scatter:0.35, angle:15, roundness:0.8,  pressureSize:true,  pressureOpacity:true,  defaultSize:42 },
-  { id:'stipple', nameKey:'layer_brush_preset_stipple', category:'layer_brushcat_textures',   Icon:SprayCan,   hardness:85,  spacing:0.5,  flow:0.9,  sizeJitter:0.5,  opacityJitter:0.4,  scatter:1.2,  angle:0,  roundness:1,    pressureSize:false, pressureOpacity:false, defaultSize:26 },
-  { id:'grain',   nameKey:'layer_brush_preset_grain',   category:'layer_brushcat_textures',   Icon:Sparkles,   hardness:30,  spacing:0.12, flow:0.6,  sizeJitter:0.6,  opacityJitter:0.6,  scatter:0.7,  angle:0,  roundness:0.9,  pressureSize:true,  pressureOpacity:true,  defaultSize:36 },
-]
-const DEFAULT_BRUSH = BRUSH_PRESETS[0]
-
-// ── Brush preview renderer (self-contained, for the Brush Studio) ─────────────
-// A cache-free dab sprite (small previews don't need the painting hot-path LRU).
-function previewDabSprite(r: number, hardness: number, hex: string): HTMLCanvasElement {
-  const qr = Math.max(0.5, r)
-  const size = Math.max(1, Math.ceil(qr * 2))
-  const cv = document.createElement('canvas'); cv.width = size; cv.height = size
-  const g = cv.getContext('2d')!
-  const cx = size / 2, cy = size / 2
-  const [cr, cg, cb] = hexToRgb(hex)
-  const grad = g.createRadialGradient(cx, cy, 0, cx, cy, qr)
-  const solid = Math.min(0.98, hardness / 100)
-  grad.addColorStop(0, `rgba(${cr},${cg},${cb},1)`)
-  if (solid > 0) grad.addColorStop(solid, `rgba(${cr},${cg},${cb},1)`)
-  grad.addColorStop(Math.min(1, solid + (1 - solid) * 0.5), `rgba(${cr},${cg},${cb},0.55)`)
-  grad.addColorStop(1, `rgba(${cr},${cg},${cb},0)`)
-  g.fillStyle = grad
-  g.beginPath(); g.arc(cx, cy, qr, 0, Math.PI * 2); g.fill()
-  return cv
-}
-
-// Stamp a representative stroke (a tapered S-curve with a synthetic pressure ramp)
-// so the user sees exactly what a brush and its dynamics do. Mirrors the painting
-// engine's dab spacing/jitter/scatter/pressure logic on a plain 2D canvas.
-function paintPreviewStroke(
-  canvas: HTMLCanvasElement, b: BrushPreset,
-  sizePx: number, opacPct: number, flowPct: number, hex: string,
-) {
-  const ctx = canvas.getContext('2d'); if (!ctx) return
-  const W = canvas.width, H = canvas.height
-  ctx.clearRect(0, 0, W, H)
-  ctx.globalCompositeOperation = 'source-over'
-  const baseRad = Math.max(0.5, Math.min(H * 0.36, sizePx / 2))
-  const strokeOpac = Math.min(1, opacPct / 100)
-  const flow = Math.max(0.01, flowPct / 100)
-  let seed = 0x2545f491
-  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
-  // Pressure ramp: 0 → 1 → 0 across the stroke for a natural taper.
-  const press = (t: number) => Math.sin(Math.PI * t) * 0.9 + 0.1
-  const pad = baseRad + 4
-  const x0 = pad, x1 = W - pad, midY = H / 2, amp = Math.min(H * 0.28, (H - pad * 2) / 2)
-  const pt = (t: number): [number, number] => [x0 + (x1 - x0) * t, midY - Math.sin(t * Math.PI * 2) * amp]
-  const radAt = (p: number) => { let r = baseRad; if (b.pressureSize) r *= (0.15 + 0.85 * p); if (b.sizeJitter) r *= (1 - b.sizeJitter * rnd()); return r }
-  const alphaAt = (p: number) => { let a = flow * strokeOpac; if (b.pressureOpacity) a *= (0.1 + 0.9 * p); if (b.opacityJitter) a *= (1 - b.opacityJitter * rnd()); return a }
-  const stamp = (x: number, y: number, p: number) => {
-    const r = radAt(p)
-    let ox = x, oy = y
-    if (b.scatter) { const ang = rnd() * Math.PI * 2, d = rnd() * b.scatter * r; ox += Math.cos(ang) * d; oy += Math.sin(ang) * d }
-    if (r < 0.4) return
-    const sprite = previewDabSprite(r, b.hardness, hex)
-    ctx.globalAlpha = Math.min(1, alphaAt(p))
-    if (b.roundness < 1 || b.angle !== 0) {
-      ctx.save(); ctx.translate(ox, oy); if (b.angle) ctx.rotate(b.angle * Math.PI / 180); ctx.scale(1, b.roundness)
-      ctx.drawImage(sprite, -r, -r, r * 2, r * 2); ctx.restore()
-    } else ctx.drawImage(sprite, ox - r, oy - r, r * 2, r * 2)
-  }
-  // March the curve at the brush's dab spacing.
-  const N = 400
-  let carry = 0, px = -1, py = -1
-  for (let i = 0; i <= N; i++) {
-    const t = i / N, p = press(t)
-    const [cx, cy] = pt(t)
-    if (px < 0) { stamp(cx, cy, p); px = cx; py = cy; continue }
-    const dx = cx - px, dy = cy - py, seg = Math.hypot(dx, dy)
-    const spacing = Math.max(0.5, b.spacing * radAt(p) * 2)
-    let dist = carry
-    while (dist < seg) { const f = dist / seg; stamp(px + dx * f, py + dy * f, p); dist += spacing }
-    carry = dist - seg
-    px = cx; py = cy
-  }
-  ctx.globalAlpha = 1
-}
-
-// Colour tags for organising the layers panel (label dot uses the same colour).
-const LAYER_COLORS: { value: string; key: string; dot: string }[] = [
-  { value: '#ef4444', key: 'layer_color_red',    dot: '🔴' },
-  { value: '#f59e0b', key: 'layer_color_orange', dot: '🟠' },
-  { value: '#eab308', key: 'layer_color_yellow', dot: '🟡' },
-  { value: '#22c55e', key: 'layer_color_green',  dot: '🟢' },
-  { value: '#3b82f6', key: 'layer_color_blue',   dot: '🔵' },
-  { value: '#a855f7', key: 'layer_color_purple', dot: '🟣' },
-]
-
-// Web-safe font families offered by the text tool.
-const FONT_FAMILIES = [
-  'Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New',
-  'Verdana', 'Trebuchet MS', 'Tahoma', 'Impact', 'Comic Sans MS',
-]
-
-const BLEND_INT: Record<string, number> = {
-  // 10 is reserved internally for the eraser stroke compositing.
-  normal: 0, multiply: 1, screen: 2, overlay: 3,
-  darken: 4, lighten: 5, difference: 6, 'color-dodge': 7, 'color-burn': 8, 'soft-light': 9,
-  'hard-light': 11, 'linear-dodge': 12, 'linear-burn': 13, 'vivid-light': 14,
-  'linear-light': 15, 'pin-light': 16, exclusion: 17, subtract: 18, divide: 19,
-  hue: 20, saturation: 21, color: 22, luminosity: 23,
-}
-// Grouped like Photoshop's blend-mode menu; separators are inserted by the UI.
-const BLEND_KEYS = [
-  'normal',
-  'darken', 'multiply', 'color-burn', 'linear-burn',
-  'lighten', 'screen', 'color-dodge', 'linear-dodge',
-  'overlay', 'soft-light', 'hard-light', 'vivid-light', 'linear-light', 'pin-light',
-  'difference', 'exclusion', 'subtract', 'divide',
-  'hue', 'saturation', 'color', 'luminosity',
-] as const
-const blendLabel = (t: TFunction, k: string): string => ({
-  normal: t('layer_blend_normal'), multiply: t('layer_blend_multiply'),
-  screen: t('layer_blend_screen'), overlay: t('layer_blend_overlay'),
-  darken: t('layer_blend_darken'), lighten: t('layer_blend_lighten'),
-  difference: t('layer_blend_difference'), 'color-dodge': t('layer_blend_color_dodge'),
-  'color-burn': t('layer_blend_color_burn'), 'soft-light': t('layer_blend_soft_light'),
-  'hard-light': t('layer_blend_hard_light'), 'linear-dodge': t('layer_blend_linear_dodge'),
-  'linear-burn': t('layer_blend_linear_burn'), 'vivid-light': t('layer_blend_vivid_light'),
-  'linear-light': t('layer_blend_linear_light'), 'pin-light': t('layer_blend_pin_light'),
-  exclusion: t('layer_blend_exclusion'), subtract: t('layer_blend_subtract'),
-  divide: t('layer_blend_divide'), hue: t('layer_blend_hue'),
-  saturation: t('layer_blend_saturation'), color: t('layer_blend_color'),
-  luminosity: t('layer_blend_luminosity'),
-}[k] ?? k)
 
 function newId() { return uid() }
 
-// Zoom presets offered by the status-bar zoom menu (fractions of 100%).
-const ZOOM_PRESETS = [0.0625, 0.125, 0.25, 0.5, 0.66, 1, 1.5, 2, 3, 4, 8]
-
-// Per-program uniform-location cache: getUniformLocation is a driver round-trip
-// and composeLayer runs once per layer per composited frame, so looking these up
-// by name every call shows up on big layer stacks.
-const uniformCache = new WeakMap<WebGLProgram, Map<string, WebGLUniformLocation | null>>()
-function uloc(gl: WebGL2RenderingContext, prog: WebGLProgram, name: string): WebGLUniformLocation | null {
-  let m = uniformCache.get(prog)
-  if (!m) { m = new Map(); uniformCache.set(prog, m) }
-  if (!m.has(name)) m.set(name, gl.getUniformLocation(prog, name))
-  return m.get(name)!
-}
-
-// ── Single-channel (selection mask) morphology & blur ─────────────────────────
-// Separable box blur on a Uint8 mask (used by "feather"). 3 iterations ≈ Gaussian.
-function maskBlur(src: Uint8Array, w: number, h: number, radius: number): Uint8Array {
-  const r = Math.max(1, Math.round(radius / 2))
-  const win = r * 2 + 1
-  let a = new Float32Array(src), b = new Float32Array(src.length)
-  const pass = (s: Float32Array, d: Float32Array, horiz: boolean) => {
-    const outer = horiz ? h : w, inner = horiz ? w : h
-    for (let o = 0; o < outer; o++) {
-      const at = (i: number) => horiz ? o * w + i : i * w + o
-      let sum = 0
-      for (let k = -r; k <= r; k++) sum += s[at(Math.max(0, Math.min(inner - 1, k)))]
-      for (let i = 0; i < inner; i++) {
-        d[at(i)] = sum / win
-        const ia = Math.max(0, Math.min(inner - 1, i - r)), ib = Math.max(0, Math.min(inner - 1, i + r + 1))
-        sum += s[at(ib)] - s[at(ia)]
-      }
-    }
-  }
-  for (let it = 0; it < 3; it++) { pass(a, b, true); pass(b, a, false) }
-  const out = new Uint8Array(src.length)
-  for (let i = 0; i < out.length; i++) out[i] = Math.round(a[i])
-  return out
-}
-// Chebyshev dilation (grow) / erosion (shrink) via two separable max/min passes.
-function maskMorph(src: Uint8Array, w: number, h: number, radius: number, grow: boolean): Uint8Array {
-  const r = Math.max(1, Math.round(radius))
-  const pick = grow ? Math.max : Math.min
-  const pass = (s: Uint8Array, horiz: boolean): Uint8Array => {
-    const d = new Uint8Array(s.length)
-    const outer = horiz ? h : w, inner = horiz ? w : h
-    for (let o = 0; o < outer; o++) {
-      const at = (i: number) => horiz ? o * w + i : i * w + o
-      for (let i = 0; i < inner; i++) {
-        let v = s[at(i)]
-        for (let k = 1; k <= r; k++) {
-          if (i - k >= 0)      v = pick(v, s[at(i - k)])
-          if (i + k < inner)   v = pick(v, s[at(i + k)])
-        }
-        d[at(i)] = v
-      }
-    }
-    return d
-  }
-  return pass(pass(src, true), false)
-}
-
-// Trace the outline of a selection mask (threshold 128) into a doc-space Path2D.
-// Horizontal / vertical boundary edges are merged into runs so the path stays
-// small enough to stroke every ants-animation frame even on large selections.
-function buildSelOutline(m: Uint8Array, w: number, h: number): Path2D {
-  const path = new Path2D()
-  const inside = (x: number, y: number) => x >= 0 && x < w && y >= 0 && y < h && m[y * w + x] >= 128
-  // Horizontal edges (top & bottom of inside cells), merged into runs.
-  for (let y = 0; y <= h; y++) {
-    let run = -1
-    for (let x = 0; x <= w; x++) {
-      const edge = x < w && (inside(x, y) !== inside(x, y - 1))
-      if (edge && run < 0) run = x
-      else if (!edge && run >= 0) { path.moveTo(run, y); path.lineTo(x, y); run = -1 }
-    }
-  }
-  // Vertical edges (left & right of inside cells).
-  for (let x = 0; x <= w; x++) {
-    let run = -1
-    for (let y = 0; y <= h; y++) {
-      const edge = y < h && (inside(x, y) !== inside(x - 1, y))
-      if (edge && run < 0) run = y
-      else if (!edge && run >= 0) { path.moveTo(x, run); path.lineTo(x, y); run = -1 }
-    }
-  }
-  return path
-}
-
-// ── Layer-tree helpers (immutable; the layer list is a tree via `children`) ────
-function findInTree(nodes: LayerStructureItem[], id: string | null): LayerStructureItem | null {
-  if (!id) return null
-  for (const n of nodes) {
-    if (n.id === id) return n
-    if (n.children) { const f = findInTree(n.children, id); if (f) return f }
-  }
-  return null
-}
-function mapTree(nodes: LayerStructureItem[], id: string, patch: Partial<LayerStructureItem>): LayerStructureItem[] {
-  return nodes.map(n => {
-    if (n.id === id) return { ...n, ...patch }
-    if (n.children) return { ...n, children: mapTree(n.children, id, patch) }
-    return n
-  })
-}
-function removeFromTree(nodes: LayerStructureItem[], id: string): { tree: LayerStructureItem[]; removed: LayerStructureItem | null } {
-  let removed: LayerStructureItem | null = null
-  const walk = (list: LayerStructureItem[]): LayerStructureItem[] => {
-    const out: LayerStructureItem[] = []
-    for (const n of list) {
-      if (n.id === id) { removed = n; continue }
-      out.push(n.children ? { ...n, children: walk(n.children) } : n)
-    }
-    return out
-  }
-  return { tree: walk(nodes), removed }
-}
-// Raster leaves (depth-first) — used for texture management & flat queries.
-function leaves(nodes: LayerStructureItem[]): LayerStructureItem[] {
-  const out: LayerStructureItem[] = []
-  const walk = (list: LayerStructureItem[]) => list.forEach(n => n.children ? walk(n.children) : out.push(n))
-  walk(nodes)
-  return out
-}
-// Every node in the subtree (groups + leaves).
-function allNodes(nodes: LayerStructureItem[]): LayerStructureItem[] {
-  const out: LayerStructureItem[] = []
-  const walk = (list: LayerStructureItem[]) => list.forEach(n => { out.push(n); if (n.children) walk(n.children) })
-  walk(nodes)
-  return out
-}
-// Insert `node` above (or below) `targetId` in the same parent list; if the
-// target is a group and `intoGroup`, insert as its first child instead.
-function insertNode(nodes: LayerStructureItem[], node: LayerStructureItem, targetId: string | null, after = false, intoGroup = false): LayerStructureItem[] {
-  if (!targetId) return [node, ...nodes]
-  let done = false
-  const walk = (list: LayerStructureItem[]): LayerStructureItem[] => {
-    const out: LayerStructureItem[] = []
-    for (const n of list) {
-      if (n.id === targetId) {
-        if (intoGroup && n.children) { out.push({ ...n, children: [node, ...n.children] }); done = true; continue }
-        if (after) { out.push(n); out.push(node) } else { out.push(node); out.push(n) }
-        done = true
-      } else out.push(n.children ? { ...n, children: walk(n.children) } : n)
-    }
-    return out
-  }
-  const r = walk(nodes)
-  return done ? r : [node, ...nodes]
-}
-// Is `id` a descendant of `ancestorId`? (block dropping a group into itself)
-function isDescendant(nodes: LayerStructureItem[], ancestorId: string, id: string): boolean {
-  const a = findInTree(nodes, ancestorId)
-  return !!(a?.children && findInTree(a.children, id))
-}
-
-// Display-name translation for default layer names (stored value stays canonical for logic/persistence)
-function displayLayerName(t: TFunction, name: string): string {
-  if (name === 'Fond') return t('layer_default_background')
-  const m = name.match(/^Calque (\d+)$/)
-  if (m) return t('layer_default_layer', { n: m[1] })
-  return name
-}
-// Colour math moved to ui/theme.ts (imported above).
-
-// ── Adjustment definitions (filters) ──────────────────────────────────────────
-type Adjust = {
-  brightness: number // -100..100
-  contrast:   number // -100..100
-  saturation: number // -100..100
-  hue:        number // -180..180
-  exposure:   number // -100..100
-}
-const ADJUST_ZERO: Adjust = { brightness:0, contrast:0, saturation:0, hue:0, exposure:0 }
-function adjustIsZero(a: Adjust): boolean {
-  return a.brightness===0 && a.contrast===0 && a.saturation===0 && a.hue===0 && a.exposure===0
-}
-
-// Apply non-destructive adjustments to a fresh copy of src pixels.
-function applyAdjustments(src: Uint8Array, a: Adjust, invert: boolean, grayscale: boolean): Uint8Array {
-  const out = new Uint8Array(src.length)
-  out.set(src)
-  if (adjustIsZero(a) && !invert && !grayscale) return out
-
-  const bright   = a.brightness * 2.55           // additive
-  const contrast = (a.contrast/100) + 1           // multiplier around 0.5
-  const expGain  = Math.pow(2, a.exposure/100)    // exposure stops-ish
-  const satF     = (a.saturation/100) + 1
-  const hueShift = a.hue
-  const needHsl  = a.saturation !== 0 || a.hue !== 0
-
-  for (let i = 0; i < out.length; i += 4) {
-    if (out[i+3] === 0) continue // skip fully transparent
-    let r = out[i], g = out[i+1], b = out[i+2]
-
-    // exposure (multiplicative)
-    if (a.exposure !== 0) { r *= expGain; g *= expGain; b *= expGain }
-    // brightness (additive)
-    if (a.brightness !== 0) { r += bright; g += bright; b += bright }
-    // contrast (around mid-gray 128)
-    if (a.contrast !== 0) {
-      r = (r-128)*contrast + 128
-      g = (g-128)*contrast + 128
-      b = (b-128)*contrast + 128
-    }
-    // clamp before HSL
-    r = r<0?0:r>255?255:r; g = g<0?0:g>255?255:g; b = b<0?0:b>255?255:b
-    // saturation + hue via HSL
-    if (needHsl) {
-      const hsl = rgbToHsl(r, g, b)
-      let h = hsl[0] + hueShift
-      const s = Math.max(0, Math.min(1, hsl[1] * satF))
-      const rgb = hslToRgb(h, s, hsl[2])
-      r = rgb[0]; g = rgb[1]; b = rgb[2]
-    }
-    if (grayscale) {
-      const y = 0.299*r + 0.587*g + 0.114*b
-      r = g = b = y
-    }
-    if (invert) { r = 255-r; g = 255-g; b = 255-b }
-
-    out[i]   = r<0?0:r>255?255:r
-    out[i+1] = g<0?0:g>255?255:g
-    out[i+2] = b<0?0:b>255?255:b
-  }
-  return out
-}
-
-// ── Filters (blur / sharpen / noise) ────────────────────────────────────────────
-type Filter = { blur: number; sharpen: number; noise: number } // blur 0..20px, sharpen 0..100, noise 0..100
-const FILTER_ZERO: Filter = { blur: 0, sharpen: 0, noise: 0 }
-function filterIsZero(f: Filter): boolean { return f.blur === 0 && f.sharpen === 0 && f.noise === 0 }
-
-// Premultiplied separable box blur, 3 iterations ≈ Gaussian. Radius-independent
-// cost (running sums) so even large blurs preview instantly. Returns premultiplied
-// RGBA floats (channel 3 = alpha 0..255).
-function boxBlur3(px: Uint8Array, w: number, h: number, radiusPx: number): Float32Array {
-  const n = w * h
-  let a = new Float32Array(n * 4), b = new Float32Array(n * 4)
-  for (let i = 0; i < n; i++) { const al = px[i*4+3] / 255
-    a[i*4] = px[i*4]*al; a[i*4+1] = px[i*4+1]*al; a[i*4+2] = px[i*4+2]*al; a[i*4+3] = px[i*4+3] }
-  const r = Math.max(1, Math.round(radiusPx / 3))
-  const win = r * 2 + 1
-  const boxH = (src: Float32Array, dst: Float32Array) => {
-    for (let y = 0; y < h; y++) {
-      const row = y * w
-      let s0=0,s1=0,s2=0,s3=0
-      for (let k = -r; k <= r; k++) { const x = Math.max(0, Math.min(w-1, k)); const o=(row+x)*4; s0+=src[o];s1+=src[o+1];s2+=src[o+2];s3+=src[o+3] }
-      for (let x = 0; x < w; x++) {
-        const o=(row+x)*4; dst[o]=s0/win; dst[o+1]=s1/win; dst[o+2]=s2/win; dst[o+3]=s3/win
-        const xa=Math.max(0,Math.min(w-1,x-r)), xb=Math.max(0,Math.min(w-1,x+r+1))
-        const oa=(row+xa)*4, ob=(row+xb)*4
-        s0+=src[ob]-src[oa]; s1+=src[ob+1]-src[oa+1]; s2+=src[ob+2]-src[oa+2]; s3+=src[ob+3]-src[oa+3]
-      }
-    }
-  }
-  const boxV = (src: Float32Array, dst: Float32Array) => {
-    for (let x = 0; x < w; x++) {
-      let s0=0,s1=0,s2=0,s3=0
-      for (let k = -r; k <= r; k++) { const y = Math.max(0, Math.min(h-1, k)); const o=(y*w+x)*4; s0+=src[o];s1+=src[o+1];s2+=src[o+2];s3+=src[o+3] }
-      for (let y = 0; y < h; y++) {
-        const o=(y*w+x)*4; dst[o]=s0/win; dst[o+1]=s1/win; dst[o+2]=s2/win; dst[o+3]=s3/win
-        const ya=Math.max(0,Math.min(h-1,y-r)), yb=Math.max(0,Math.min(h-1,y+r+1))
-        const oa=(ya*w+x)*4, ob=(yb*w+x)*4
-        s0+=src[ob]-src[oa]; s1+=src[ob+1]-src[oa+1]; s2+=src[ob+2]-src[oa+2]; s3+=src[ob+3]-src[oa+3]
-      }
-    }
-  }
-  for (let it = 0; it < 3; it++) { boxH(a, b); boxV(b, a) }
-  return a
-}
-
-function applyFilters(src: Uint8Array, w: number, h: number, f: Filter): Uint8Array {
-  const out = new Uint8Array(src.length); out.set(src)
-  if (filterIsZero(f)) return out
-  const n = w * h
-  // Gaussian blur (premultiplied → correct transparent edges)
-  if (f.blur > 0) {
-    const bl = boxBlur3(out, w, h, f.blur)
-    for (let i = 0; i < n; i++) { const a = bl[i*4+3]; const inv = a > 0.5 ? 255 / a : 0
-      out[i*4]   = Math.round(bl[i*4]  *inv); out[i*4+1] = Math.round(bl[i*4+1]*inv)
-      out[i*4+2] = Math.round(bl[i*4+2]*inv); out[i*4+3] = Math.round(a) }
-  }
-  // Unsharp mask: out + amount·(out − blurred)
-  if (f.sharpen > 0) {
-    const amt = f.sharpen / 100 * 1.4
-    const bl = boxBlur3(out, w, h, 2)
-    for (let i = 0; i < n; i++) { const a = out[i*4+3]; if (a === 0) continue; const al = a/255
-      for (let c = 0; c < 3; c++) { const o=i*4+c
-        const blur = al > 0 ? bl[o] / al : out[o]   // unpremult blurred channel
-        let v = out[o] + amt*(out[o] - blur)
-        out[o] = v < 0 ? 0 : v > 255 ? 255 : v } }
-  }
-  // Monochromatic noise
-  if (f.noise > 0) {
-    const amp = f.noise / 100 * 80
-    for (let i = 0; i < n; i++) { if (out[i*4+3] === 0) continue
-      const dn = (Math.random()*2 - 1) * amp
-      for (let c = 0; c < 3; c++) { const o=i*4+c; let v=out[o]+dn; out[o]=v<0?0:v>255?255:v } }
-  }
-  return out
-}
-
-// ── WebGL Shaders ─────────────────────────────────────────────────────────────
-
-// Composite pass: NO Y-flip. Layer textures store doc-top at t=0.
-// Each ping-pong step is consistent → no alternating flip.
-const VERT_COMP = `#version 300 es
-in vec2 aPos; out vec2 vUv;
-void main() { vUv = aPos*.5+.5; gl_Position=vec4(aPos,0,1); }`
-
-// Display pass: Y-flip so that vUv.y=0 maps to screen-top which reads fb-bottom=doc-top.
-const VERT_DISP = `#version 300 es
-in vec2 aPos; out vec2 vUv;
-void main() { vUv = aPos*.5+.5; vUv.y=1.-vUv.y; gl_Position=vec4(aPos,0,1); }`
-
-const FRAG_COMPOSITE = `#version 300 es
-precision highp float;
-uniform sampler2D uBase, uLayer, uMask, uClip;
-uniform float uOpacity;
-uniform int uMode;
-uniform int uHasMask;
-uniform int uHasClip;
-in vec2 vUv; out vec4 fragColor;
-vec3 fScreen(vec3 b,vec3 l){return b+l-b*l;}
-vec3 fOvl(vec3 b,vec3 l){
-  return vec3(
-    b.r<.5?2.*b.r*l.r:1.-2.*(1.-b.r)*(1.-l.r),
-    b.g<.5?2.*b.g*l.g:1.-2.*(1.-b.g)*(1.-l.g),
-    b.b<.5?2.*b.b*l.b:1.-2.*(1.-b.b)*(1.-l.b));
-}
-vec3 fSoft(vec3 b,vec3 l){
-  return mix(2.*b*l+b*b*(1.-2.*l), 2.*b*(1.-l)+sqrt(b)*(2.*l-1.), step(.5,l));
-}
-vec3 fVivid(vec3 b,vec3 l){
-  return vec3(
-    l.r<.5? 1.-min((1.-b.r)/max(2.*l.r,1e-4),1.) : min(b.r/max(2.*(1.-l.r),1e-4),1.),
-    l.g<.5? 1.-min((1.-b.g)/max(2.*l.g,1e-4),1.) : min(b.g/max(2.*(1.-l.g),1e-4),1.),
-    l.b<.5? 1.-min((1.-b.b)/max(2.*l.b,1e-4),1.) : min(b.b/max(2.*(1.-l.b),1e-4),1.));
-}
-vec3 fPin(vec3 b,vec3 l){
-  return vec3(
-    l.r<.5? min(b.r,2.*l.r) : max(b.r,2.*(l.r-.5)),
-    l.g<.5? min(b.g,2.*l.g) : max(b.g,2.*(l.g-.5)),
-    l.b<.5? min(b.b,2.*l.b) : max(b.b,2.*(l.b-.5)));
-}
-// Non-separable (HSL) blends — hue / saturation / color / luminosity.
-float bLum(vec3 c){return dot(c,vec3(0.3,0.59,0.11));}
-vec3 clipColor(vec3 c){
-  float l=bLum(c), n=min(min(c.r,c.g),c.b), x=max(max(c.r,c.g),c.b);
-  if(n<0.) c=l+(c-l)*l/max(l-n,1e-5);
-  if(x>1.) c=l+(c-l)*(1.-l)/max(x-l,1e-5);
-  return c;
-}
-vec3 setLum(vec3 c,float l){return clipColor(c+(l-bLum(c)));}
-float bSat(vec3 c){return max(max(c.r,c.g),c.b)-min(min(c.r,c.g),c.b);}
-vec3 setSat(vec3 c,float s){
-  float mn=min(min(c.r,c.g),c.b), mx=max(max(c.r,c.g),c.b), rg=mx-mn;
-  return rg>0.? (c-mn)/rg*s : vec3(0.);
-}
-void main(){
-  vec4 base=texture(uBase,vUv), lay=texture(uLayer,vUv);
-  // Erase mode: reduce base alpha by stroke alpha (opacity already baked into lay.a)
-  if(uMode==10){
-    float newA=max(0.,base.a-lay.a);
-    fragColor=vec4(base.a>.001?base.rgb:vec3(0.),newA); return;
-  }
-  if(uHasMask==1) lay.a*=texture(uMask,vUv).r; // layer mask: white=visible, black=hidden
-  if(uHasClip==1) lay.a*=texture(uClip,vUv).a; // clipping mask: confined to clip base's alpha
-  lay.a*=uOpacity;
-  vec3 bl;
-  if(uMode==1) bl=base.rgb*lay.rgb;
-  else if(uMode==2) bl=fScreen(base.rgb,lay.rgb);
-  else if(uMode==3) bl=fOvl(base.rgb,lay.rgb);
-  else if(uMode==4) bl=min(base.rgb,lay.rgb);
-  else if(uMode==5) bl=max(base.rgb,lay.rgb);
-  else if(uMode==6) bl=abs(base.rgb-lay.rgb);
-  else if(uMode==7) bl=clamp(base.rgb/max(1.-lay.rgb,.001),0.,1.);
-  else if(uMode==8) bl=1.-clamp((1.-base.rgb)/max(lay.rgb,.001),0.,1.);
-  else if(uMode==9) bl=fSoft(base.rgb,lay.rgb);
-  else if(uMode==11) bl=fOvl(lay.rgb,base.rgb);                       // hard light
-  else if(uMode==12) bl=min(base.rgb+lay.rgb,1.);                     // linear dodge (add)
-  else if(uMode==13) bl=max(base.rgb+lay.rgb-1.,0.);                  // linear burn
-  else if(uMode==14) bl=fVivid(base.rgb,lay.rgb);                     // vivid light
-  else if(uMode==15) bl=clamp(base.rgb+2.*lay.rgb-1.,0.,1.);          // linear light
-  else if(uMode==16) bl=fPin(base.rgb,lay.rgb);                       // pin light
-  else if(uMode==17) bl=base.rgb+lay.rgb-2.*base.rgb*lay.rgb;         // exclusion
-  else if(uMode==18) bl=max(base.rgb-lay.rgb,0.);                     // subtract
-  else if(uMode==19) bl=clamp(base.rgb/max(lay.rgb,vec3(1e-4)),0.,1.);// divide
-  else if(uMode==20) bl=setLum(setSat(lay.rgb,bSat(base.rgb)),bLum(base.rgb)); // hue
-  else if(uMode==21) bl=setLum(setSat(base.rgb,bSat(lay.rgb)),bLum(base.rgb)); // saturation
-  else if(uMode==22) bl=setLum(lay.rgb,bLum(base.rgb));               // color
-  else if(uMode==23) bl=setLum(base.rgb,bLum(lay.rgb));               // luminosity
-  else bl=lay.rgb;
-  float a=lay.a+base.a*(1.-lay.a);
-  vec3 c=a<.0001?vec3(0.):(bl*lay.a+base.rgb*base.a*(1.-lay.a))/a;
-  fragColor=vec4(c,a);
-}`
-
-const FRAG_DISPLAY = `#version 300 es
-precision highp float;
-uniform sampler2D uTex;
-uniform vec2 uOffset, uScale, uViewport;
-uniform float uRot;
-in vec2 vUv; out vec4 fragColor;
-
-// Scale-aware resampler, three regimes chosen by fp (texels per device pixel):
-//  • fp ≤ ~1 (100% and any magnification): "sharp bilinear" / texel anti-aliasing —
-//    the sample is snapped to texel centres but the boundary between two texels is
-//    anti-aliased over exactly one screen pixel. At exactly 100% this is a 1:1
-//    pixel-perfect blit (the old code fell through to the supersampler at fp==1.0,
-//    which box-blurred the canvas at the single most-used zoom level).
-//  • 1 < fp ≤ 4 (zoom 25%..100%): 4×4 supersample at LOD 0 — each tap covers at
-//    most one texel, so the average is a true box filter. Crisper than the old
-//    trilinear-mip taps AND mip-free, so the doc mipchain no longer has to be
-//    regenerated every brush-stroke frame (that was the main paint-time cost).
-//  • fp > 4 (far zoom-out): 4×4 supersample through the mip chain (textureGrad).
-// dx/dy are dFdx/dFdy(uv), passed from main() so derivatives stay in uniform flow.
-vec4 sampleDoc(vec2 uv, vec2 dx, vec2 dy){
-  vec2 ts=vec2(textureSize(uTex,0));
-  float fp=max(length(dx*ts), length(dy*ts)); // texels covered per device pixel
-  if(fp<=1.001){
-    vec2 px=uv*ts;
-    vec2 fl=floor(px)+0.5;
-    vec2 w=max((abs(dx)+abs(dy))*ts, vec2(1e-5)); // = fwidth(px), one screen px in texels
-    vec2 aa=clamp((px-fl)/w, -0.5, 0.5);
-    return textureLod(uTex, (fl+aa)/ts, 0.0);     // LINEAR mag turns the offset into a 1px AA edge
-  }
-  // Both minification regimes average in PREMULTIPLIED alpha: the doc texture holds
-  // straight (unpremultiplied) RGBA, and a transparent texel stores rgb=0, so a
-  // plain average darkens colour toward black along transparent edges (the classic
-  // halo/fringe). Accumulating rgb·a and dividing by Σa reconstructs the correct
-  // edge colour at no extra tap cost.
-  vec4 acc=vec4(0.0);
-  if(fp<=4.0){
-    for(int j=0;j<4;j++) for(int i=0;i<4;i++){
-      vec2 o=(vec2(float(i),float(j))+0.5)*0.25-0.5;
-      vec4 c=textureLod(uTex, uv+dx*o.x+dy*o.y, 0.0);
-      acc+=vec4(c.rgb*c.a, c.a);
-    }
-  } else {
-    vec2 sdx=dx*0.25, sdy=dy*0.25;
-    for(int j=0;j<4;j++) for(int i=0;i<4;i++){
-      vec2 o=(vec2(float(i),float(j))+0.5)*0.25-0.5;
-      vec4 c=textureGrad(uTex, uv+dx*o.x+dy*o.y, sdx, sdy);
-      acc+=vec4(c.rgb*c.a, c.a);
-    }
-  }
-  float a=acc.a*0.0625;
-  return vec4(acc.a>1e-5? acc.rgb/acc.a : vec3(0.0), a);
-}
-
-void main(){
-  vec2 sp=vUv*uViewport;
-  // Rotate the screen point about the viewport centre (inverse, to sample the doc).
-  vec2 cv=uViewport*0.5;
-  float cs=cos(-uRot), sn=sin(-uRot);
-  vec2 d=sp-cv;
-  vec2 base=cv+vec2(d.x*cs-d.y*sn, d.x*sn+d.y*cs);
-  vec2 tc=(base-uOffset)/uScale;
-  // Derivatives in uniform control flow (before the edge discard) so the footprint
-  // and mip LOD stay defined right up to the doc border.
-  vec2 tdx=dFdx(tc), tdy=dFdy(tc);
-  if(tc.x<0.||tc.x>1.||tc.y<0.||tc.y>1.){
-    float ck=mod(floor(sp.x/14.)+floor(sp.y/14.),2.);
-    fragColor=vec4(ck>.5?vec3(.18):vec3(.14),1.); return;
-  }
-  vec4 col=sampleDoc(tc, tdx, tdy);
-  float ck=mod(floor(tc.x*uScale.x/14.)+floor(tc.y*uScale.y/14.),2.);
-  vec3 bg=ck>.5?vec3(.7):vec3(.5);
-  fragColor=vec4(col.rgb*col.a+bg*(1.-col.a),1.);
-}`
-
-// ── WebGL helpers ─────────────────────────────────────────────────────────────
-function glShader(gl: WebGL2RenderingContext, type: number, src: string) {
-  const s = gl.createShader(type)!
-  gl.shaderSource(s, src); gl.compileShader(s)
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)!)
-  return s
-}
-function glProg(gl: WebGL2RenderingContext, vs: string, fs: string) {
-  const p = gl.createProgram()!
-  gl.attachShader(p, glShader(gl, gl.VERTEX_SHADER, vs))
-  gl.attachShader(p, glShader(gl, gl.FRAGMENT_SHADER, fs))
-  gl.linkProgram(p)
-  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)!)
-  return p
-}
-function glVAO(gl: WebGL2RenderingContext, prog: WebGLProgram) {
-  const vao = gl.createVertexArray()!; gl.bindVertexArray(vao)
-  const buf = gl.createBuffer()!; gl.bindBuffer(gl.ARRAY_BUFFER, buf)
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW)
-  const loc = gl.getAttribLocation(prog, 'aPos')
-  gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0)
-  gl.bindVertexArray(null); return vao
-}
-function glFB(gl: WebGL2RenderingContext, w: number, h: number) {
-  const tex = gl.createTexture()!
-  gl.bindTexture(gl.TEXTURE_2D, tex)
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-  // Anisotropic filtering: the single biggest quality win when the document is
-  // viewed minified AND rotated/oblique (trilinear alone picks one LOD and either
-  // blurs or aliases along the stretched axis).
-  const aniso = gl.getExtension('EXT_texture_filter_anisotropic')
-  if (aniso) {
-    const max = gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number
-    gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, max))
-  }
-  const fb = gl.createFramebuffer()!
-  gl.bindFramebuffer(gl.FRAMEBUFFER, fb)
-  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-  return { tex, fb }
-}
 
 // ── Main component ────────────────────────────────────────────────────────────
 // Embedded mode: the SAME raster editor mounted inside another app (Keyframe draws
@@ -747,7 +80,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     enabled:  !!docId,
   })
 
-  // ── Titre éditable (standard WorkspaceShell) — synchronisé depuis le doc ───────
+  // ── Editable title (standard WorkspaceShell) — synced from the document ───────
   const [titleDraft, setTitleDraft] = useState('')
   useEffect(() => { if (doc?.title != null) setTitleDraft(doc.title) }, [doc?.title])
 
@@ -775,7 +108,12 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   // Layers-panel thumbnail refresh (no continuous timer; never tied to view state).
   const [thumbNonce,   setThumbNonce]  = useState(0)
   const [activeId,     setActiveId]    = useState<string | null>(null)
-  const [tool,         setTool]        = useState<Tool>('brush')
+  // The rail speaks the full 65-tool vocabulary; the behaviours already wired in
+  // this file still switch on the legacy 15-value `tool`. New tools resolve to
+  // no legacy equivalent and are driven by the handler registry instead.
+  const [toolId,       setToolId]      = useState<ToolId>('brush')
+  const tool: Tool = legacyForTool(toolId) ?? 'select'
+  const setTool = (t: Tool) => setToolId(toolForLegacy(t))
   const [brushSize,    setBrushSize]   = useState(20)
   const [brushHard,    setBrushHard]   = useState(80)
   const [brushOpac,    setBrushOpac]   = useState(100)
@@ -787,6 +125,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   // Track whether the user manually changed the size (so a preset won't clobber it).
   const sizeTouched    = useRef(false)
   const [fgColor,      setFgColor]     = useState('#000000')
+  const [bgColor,      setBgColor]     = useState('#ffffff')
   // Text tool: the in-progress text box anchored at a doc-space point (null = none).
   const [textEdit,     setTextEdit]    = useState<{ dx: number; dy: number } | null>(null)
   const [textValue,    setTextValue]   = useState('')
@@ -804,6 +143,10 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       return next
     })
   }
+  /** X — exchange foreground and background, as Photoshop does. */
+  const swapColors = () => { setFgColor(bgColor); setBgColor(fgColor) }
+  /** D — restore the black / white defaults. */
+  const resetColors = () => { setFgColor('#000000'); setBgColor('#ffffff') }
   const [viewState,    setViewState]   = useState({ zoom: 0.4, panX: 60, panY: 60 })
   const [viewRot,      setViewRot]     = useState(0) // canvas rotation in radians
   const [editLayerId,  setEditLayerId] = useState<string | null>(null)
@@ -833,7 +176,6 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   // Detected input device + its live pressure (pen = stylus/Apple Pencil, touch = finger).
   const [inputKind,    setInputKind]   = useState<'pen'|'touch'|'mouse'|null>(null)
   const [inputPressure,setInputPressure] = useState(0)   // current live pressure 0..1
-  const [colorPickerOpen, setColorPickerOpen] = useState(false)
   // Photoshop-style docks: the bottom panel group switches between tabs, and the
   // whole right dock can be hidden (Tab-to-hide) for a full-width canvas.
   const [panelsHidden, setPanelsHidden] = useState(false)
@@ -861,6 +203,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   const viewportRef = useRef<HTMLDivElement>(null)
   const glRef       = useRef<WebGL2RenderingContext | null>(null)
   const progComp    = useRef<WebGLProgram | null>(null)
+  const progAdj     = useRef<WebGLProgram | null>(null)
   const progDisp    = useRef<WebGLProgram | null>(null)
   const quadVAO     = useRef<WebGLVertexArrayObject | null>(null)
   const textures    = useRef<Map<string, WebGLTexture>>(new Map())
@@ -897,6 +240,9 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   const layersRef= useRef(layers)
   const activeRef= useRef(activeId)
   const toolRef  = useRef(tool)
+  const toolIdRef= useRef(toolId)
+  /** True while a registered handler owns the in-flight gesture. */
+  const toolGesture = useRef(false)
   const bsRef    = useRef(brushSize)
   const bhRef    = useRef(brushHard)
   const boRef    = useRef(brushOpac)
@@ -914,6 +260,18 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   useEffect(() => { layersRef.current = layers },     [layers])
   useEffect(() => { activeRef.current = activeId },   [activeId])
   useEffect(() => { toolRef.current   = tool },       [tool])
+  // Leaving a tool aborts whatever gesture it had in flight (an open pen path, a
+  // half-drawn polygonal lasso…), so nothing lingers behind the new tool.
+  useEffect(() => {
+    const previous = toolIdRef.current
+    if (previous !== toolId) {
+      const h = getTool(previous)
+      if (h?.onCancel) h.onCancel(makeToolCtx())
+      toolGesture.current = false
+      toolPreview.current = null
+    }
+    toolIdRef.current = toolId
+  }, [toolId]) // eslint-disable-line react-hooks/exhaustive-deps
   // Leaving the text tool commits any open text box.
   useEffect(() => { if (tool !== 'text' && textEdit) commitText() }, [tool]) // eslint-disable-line react-hooks/exhaustive-deps
   // Enter free-transform when the tool is selected; commit when leaving it.
@@ -962,7 +320,21 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   // (a brush stroke stores its bounding box, not the whole document), bounded by
   // a total byte budget instead of a tiny fixed depth — cheap strokes go deep,
   // whole-layer ops (fills, filters) evict older history sooner.
-  type UndoEntry = { id: string; x: number; y: number; w: number; h: number; px: Uint8Array }
+  // A pixel entry is a dirty rect inside one layer, expressed in the geometry
+  // that was current when it was recorded. A doc entry is a whole-document
+  // snapshot, needed because crop / rotate / resize change that very geometry —
+  // without it those operations could not be undone at all, and the stack had to
+  // be thrown away (which is exactly what used to happen).
+  type PxEntry  = { kind: 'px'; id: string; x: number; y: number; w: number; h: number; px: Uint8Array }
+  type DocEntry = {
+    kind: 'doc'; w: number; h: number
+    texes: { id: string; px: Uint8Array }[]
+    layers: LayerStructureItem[]
+    activeId: string | null
+  }
+  type UndoEntry = PxEntry | DocEntry
+  const entryBytes = (e: UndoEntry): number =>
+    e.kind === 'px' ? e.px.byteLength : e.texes.reduce((s, t) => s + t.px.byteLength, 0)
   const undoStack = useRef<UndoEntry[]>([])
   const redoStack = useRef<UndoEntry[]>([])
   const UNDO_MAX_ENTRIES = 60
@@ -1036,6 +408,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     glRef.current = gl
     try {
       progComp.current = glProg(gl, VERT_COMP, FRAG_COMPOSITE)
+      progAdj.current  = glProg(gl, VERT_COMP, FRAG_ADJUST)
       progDisp.current = glProg(gl, VERT_DISP, FRAG_DISPLAY)
       quadVAO.current  = glVAO(gl, progDisp.current)
     } catch(e) { setWebglError(String(e)); return }
@@ -1052,7 +425,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     setDocDims({ w: W, h: H })
 
     const lsRaw = embedded ? [] : ((doc!.layers_structure as LayerStructureItem[]) ?? [])
-    // Métadonnée conservée en state (sans les pixels) ; les pixels vont en texture.
+    // Metadata kept in state (without the pixels); the pixels live in a texture.
     const stripData = (nodes: LayerStructureItem[]): LayerStructureItem[] =>
       nodes.map(({ data: _d, mask_data: _m, children, ...meta }) =>
         children ? { ...meta, children: stripData(children) } : { ...meta })
@@ -1082,10 +455,11 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
         leaves(src).forEach(l => {
           if (l.type !== 'raster') return
           if (!textures.current.has(l.id)) createTex(gl, l.id, W, H, l.name === 'Fond')
-          if (l.data) loadPngToTex(l.id, l.data)
+          const at = (l.x != null && l.y != null) ? { x: l.x, y: l.y } : undefined
+          if (l.data) loadPngToTex(l.id, l.data, at)
           if (l.mask?.enabled && l.mask_data) {
             if (!textures.current.has(maskKey(l.id))) createTex(gl, maskKey(l.id), W, H, true)
-            loadPngToTex(maskKey(l.id), l.mask_data)
+            loadPngToTex(maskKey(l.id), l.mask_data, at)
           }
         })
       }
@@ -1129,11 +503,22 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   useEffect(() => {
     const ov = overlayRef.current
     if (!ov) return
-    const sync = () => { ov.width = ov.offsetWidth; ov.height = ov.offsetHeight }
+    // The backing store must follow the device pixel ratio, exactly like the WebGL
+    // canvas does. Sizing it in CSS pixels made the browser upscale the whole
+    // overlay — cursor, marching ants, crop frame and guides all came out soft.
+    // Drawing code keeps working in CSS pixels: `overlayCtx()` applies the scale.
+    const sync = () => {
+      const dpr = window.devicePixelRatio || 1
+      const w = Math.max(1, Math.round(ov.offsetWidth * dpr))
+      const h = Math.max(1, Math.round(ov.offsetHeight * dpr))
+      if (ov.width !== w || ov.height !== h) { ov.width = w; ov.height = h }
+    }
     const ro = new ResizeObserver(sync)
     ro.observe(ov)
     sync()
-    return () => ro.disconnect()
+    const onDpr = () => { sync(); repaintOverlay() }
+    window.addEventListener('resize', onDpr)
+    return () => { ro.disconnect(); window.removeEventListener('resize', onDpr) }
   }, [])
 
   // Global pointer listeners for pan (works for mouse AND stylus, survives canvas exit)
@@ -1153,9 +538,9 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sauvegarde automatique (debounce + flush au démontage/fermeture).
-  // Sauvegarde auto : déclenchée par les changements de structure (`layers`) ET
-  // de pixels (`thumbNonce`, incrémenté à chaque writeTex). Sérialise les pixels.
+  // Autosave (debounced, with a flush on unmount/close).
+  // Triggered by both structure changes (`layers`) and pixel changes
+  // (`thumbNonce`, bumped on every writeTex). Serialises the pixels.
   useDebouncedAutosave(
     { s: layers, p: thumbNonce },
     (embedded || !!docId) && layers.length > 0,
@@ -1255,11 +640,10 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   }
 
   // ── Persistance des pixels (.kblay) ──────────────────────────────────────────
-  // Les pixels d'un calque raster sont sérialisés en PNG (data URL) et stockés
-  // dans `layers_structure`. La lecture/écriture passe par read/writeTex ; la
-  // sérialisation est symétrique → round-trip exact (le PNG interne peut être
-  // verticalement inversé, sans incidence puisque save/load utilisent le même
-  // chemin).
+  // A raster layer's pixels are serialised to PNG (data URL) and stored in
+  // `layers_structure`. Reads and writes go through read/writeTex; serialisation
+  // is symmetric, so the round-trip is exact (the internal PNG may be flipped
+  // vertically — harmless, since save and load share the same path).
   function texToPng(id: string): string | undefined {
     // Version-keyed cache: autosave serialises the whole tree, but only layers
     // whose pixels changed since the previous save pay the PNG encode again.
@@ -1277,19 +661,25 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     return png
   }
 
-  function loadPngToTex(id: string, dataUrl: string) {
+  // `at` carries the layer's own origin when the PNG holds only its tight
+  // rectangle — that is how importers (PSD, XCF…) avoid storing one
+  // document-sized bitmap per layer. Legacy documents have no origin and their
+  // PNG *is* document-sized, so they keep the historical stretch-to-fit path:
+  // that also absorbs a document resized after the pixels were written.
+  function loadPngToTex(id: string, dataUrl: string, at?: { x: number; y: number }) {
     const img = new Image()
     img.onload = () => {
       const { w, h } = docSize.current
       const c = document.createElement('canvas'); c.width = w; c.height = h
       const ctx = c.getContext('2d'); if (!ctx) return
-      ctx.drawImage(img, 0, 0, w, h)
+      if (at) ctx.drawImage(img, at.x, at.y)   // tight rect, natural size
+      else    ctx.drawImage(img, 0, 0, w, h)   // legacy: full-document bitmap
       writeTex(id, new Uint8Array(ctx.getImageData(0, 0, w, h).data.buffer))
     }
     img.src = dataUrl
   }
 
-  // Construit la structure à sauvegarder en y injectant les pixels courants.
+  // Build the structure to persist, injecting the current pixels into it.
   function buildSaveStructure(): LayerStructureItem[] {
     const walk = (nodes: LayerStructureItem[]): LayerStructureItem[] => nodes.map(n => {
       const copy: LayerStructureItem = { ...n }
@@ -1496,8 +886,32 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
             }
           }
           if (!node.clipping) clipBase = layerTex ?? null
+        } else if (node.type === 'adjustment') {
+          // Non-destructive: transform everything composited so far, leaving the
+          // layers underneath untouched.
+          const adj = readAdjustment(node.adjustment)
+          const def = adj ? ADJ_BY_KIND[adj.kind] : null
+          const pa = progAdj.current
+          if (adj && def && def.uKind > 0 && pa && eff > 0.001) {
+            gl.useProgram(pa)
+            gl.bindFramebuffer(gl.FRAMEBUFFER, P[dst].fb)
+            gl.viewport(0, 0, w, h)
+            gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, P[src].tex)
+            gl.uniform1i(uloc(gl, pa, 'uTex'), 0)
+            gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, mTex ?? P[src].tex)
+            gl.uniform1i(uloc(gl, pa, 'uMask'), 1)
+            gl.uniform1i(uloc(gl, pa, 'uHasMask'), mTex ? 1 : 0)
+            gl.uniform1i(uloc(gl, pa, 'uKind'), def.uKind)
+            gl.uniform1f(uloc(gl, pa, 'uOpacity'), eff)
+            gl.uniform4f(uloc(gl, pa, 'uP'), adj.p[0], adj.p[1], adj.p[2], adj.p[3])
+            gl.uniform3f(uloc(gl, pa, 'uColor'), adj.color[0], adj.color[1], adj.color[2])
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+            ;[src, dst] = [dst, src]
+            gl.useProgram(pc)
+          }
+          if (!node.clipping) clipBase = null
         } else if (!node.clipping) {
-          clipBase = null   // text/adjustment leaves not composited yet
+          clipBase = null   // text leaves are not composited yet
         }
       }
       return src
@@ -1515,10 +929,10 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
 
   // ── Undo / Redo (dirty-rect entries under a byte budget) ─────────────────
   function trimUndo() {
-    let bytes = undoStack.current.reduce((s, e) => s + e.px.byteLength, 0)
+    let bytes = undoStack.current.reduce((s, e) => s + entryBytes(e), 0)
     while (undoStack.current.length > 1 &&
            (undoStack.current.length > UNDO_MAX_ENTRIES || bytes > UNDO_MAX_BYTES)) {
-      bytes -= undoStack.current.shift()!.px.byteLength
+      bytes -= entryBytes(undoStack.current.shift()!)
     }
   }
 
@@ -1538,7 +952,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const px = readTex(id)
     if (!px) return
     const { w, h } = docSize.current
-    pushUndoEntry({ id, x: 0, y: 0, w, h, px })
+    pushUndoEntry({ kind: 'px', id, x: 0, y: 0, w, h, px })
   }
 
   // Rect snapshot cut out of a pre-stroke full-layer snapshot: history for a
@@ -1550,16 +964,92 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const x1 = Math.min(docW, Math.ceil(bbox.x1)), y1 = Math.min(docH, Math.ceil(bbox.y1))
     const w = x1 - x0, h = y1 - y0
     if (w <= 0 || h <= 0) return
-    pushUndoEntry({ id, x: x0, y: y0, w, h, px: cropPixels(snap, docW, x0, y0, w, h) })
+    pushUndoEntry({ kind: 'px', id, x: x0, y: y0, w, h, px: cropPixels(snap, docW, x0, y0, w, h) })
+  }
+
+  /** Whole-document snapshot: geometry, every texture, and the layer tree. */
+  function captureDocState(): DocEntry {
+    const { w, h } = docSize.current
+    const texes: { id: string; px: Uint8Array }[] = []
+    for (const id of [...textures.current.keys()]) {
+      const px = readTex(id)
+      if (px) texes.push({ id, px })
+    }
+    return {
+      kind: 'doc', w, h, texes,
+      layers: JSON.parse(JSON.stringify(layersRef.current)) as LayerStructureItem[],
+      activeId: activeRef.current,
+    }
+  }
+
+  /** Reinstates a snapshot: dimensions, GPU resources, textures and the tree. */
+  function restoreDocState(s: DocEntry) {
+    const gl = glRef.current; if (!gl) return
+    // Anything that references the outgoing geometry has to go first.
+    if (xfActive.current) { xfActive.current = false; xfSnap.current = null; xfDrag.current = null }
+    setTextEdit(null); setTextValue('')
+    adjBaseRef.current = null; filtBaseRef.current = null
+    setAdjust(ADJUST_ZERO); setAdjInvert(false); setAdjGray(false); setFilter(FILTER_ZERO)
+    clearBrushStroke(); clearMaskStroke()
+    selMask.current = null; lastSelMask.current = null; selCanvas.current = null; selPathRef.current = null
+    setHasSel(false); setSelection(null); setCropRect(null)
+    clipboardRef.current = null
+    pngCache.current.clear()
+
+    docSize.current = { w: s.w, h: s.h }
+    setDocDims({ w: s.w, h: s.h })
+
+    // Drop textures the snapshot does not know about (layers added afterwards).
+    const keep = new Set(s.texes.map(t => t.id))
+    for (const id of [...textures.current.keys()]) {
+      if (keep.has(id)) continue
+      const tex = textures.current.get(id)
+      if (tex) gl.deleteTexture(tex)
+      textures.current.delete(id)
+    }
+    for (const { id, px } of s.texes) {
+      const old = textures.current.get(id)
+      if (old) gl.deleteTexture(old)
+      textures.current.delete(id)
+      createTex(gl, id, s.w, s.h)
+      gl.bindTexture(gl.TEXTURE_2D, textures.current.get(id)!)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, s.w, s.h, gl.RGBA, gl.UNSIGNED_BYTE, px)
+      texVersion.current.set(id, (texVersion.current.get(id) ?? 0) + 1)
+    }
+
+    fbPair.current = [glFB(gl, s.w, s.h), glFB(gl, s.w, s.h)]
+    fbPoolAll.current.forEach(f => { gl.deleteFramebuffer(f.fb); gl.deleteTexture(f.tex) })
+    fbPoolAll.current = []; fbPoolFree.current = []
+    if (strokeTexRef.current) { gl.deleteTexture(strokeTexRef.current); strokeTexRef.current = null }
+    if (strokeCanvasRef.current) { strokeCanvasRef.current.width = s.w; strokeCanvasRef.current.height = s.h }
+
+    setLayers(s.layers)
+    layersRef.current = s.layers
+    setActiveId(s.activeId)
+    activeRef.current = s.activeId
+
+    renderComposite()
+    setThumbNonce(v => v + 1)
+    fitToScreen()
+
+    if (!embedded && docId) {
+      layerApi.updateDoc(docId, { width: s.w, height: s.h }).catch(() => {})
+      saveMut.mutate(buildSaveStructure())
+    }
   }
 
   function undo() {
     const entry = undoStack.current.pop()
     if (!entry) return
-    // Save the same rect's current pixels for redo.
-    const cur = readTexRect(entry.id, entry.x, entry.y, entry.w, entry.h)
-    if (cur) redoStack.current.push({ ...entry, px: cur })
-    writeTexRect(entry.id, entry.x, entry.y, entry.w, entry.h, entry.px)
+    if (entry.kind === 'doc') {
+      redoStack.current.push(captureDocState())
+      restoreDocState(entry)
+    } else {
+      // Save the same rect's current pixels for redo.
+      const cur = readTexRect(entry.id, entry.x, entry.y, entry.w, entry.h)
+      if (cur) redoStack.current.push({ ...entry, px: cur })
+      writeTexRect(entry.id, entry.x, entry.y, entry.w, entry.h, entry.px)
+    }
     setUndoCount(undoStack.current.length)
     setRedoCount(redoStack.current.length)
   }
@@ -1567,9 +1057,14 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   function redo() {
     const entry = redoStack.current.pop()
     if (!entry) return
-    const cur = readTexRect(entry.id, entry.x, entry.y, entry.w, entry.h)
-    if (cur) undoStack.current.push({ ...entry, px: cur })
-    writeTexRect(entry.id, entry.x, entry.y, entry.w, entry.h, entry.px)
+    if (entry.kind === 'doc') {
+      undoStack.current.push(captureDocState())
+      restoreDocState(entry)
+    } else {
+      const cur = readTexRect(entry.id, entry.x, entry.y, entry.w, entry.h)
+      if (cur) undoStack.current.push({ ...entry, px: cur })
+      writeTexRect(entry.id, entry.x, entry.y, entry.w, entry.h, entry.px)
+    }
     setUndoCount(undoStack.current.length)
     setRedoCount(redoStack.current.length)
   }
@@ -2160,15 +1655,12 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     ctx.restore()
   }
 
-  function redrawOverlay() {
-    const ov = overlayRef.current; if (!ov) return
-    const ctx = ov.getContext('2d'); if (!ctx) return
-    ctx.clearRect(0,0,ov.width,ov.height)
-    drawPixelGrid(ctx)
-    drawSelectionOverlay(ctx)
-    drawTransformOverlay(ctx)
-    drawCropOverlay(ctx)
-  }
+  /**
+   * Single repaint path for the overlay. It goes through `drawCursor` so the
+   * cursor is redrawn along with the guides — repainting them separately used to
+   * erase the cursor until the next pointer move, which is why it kept vanishing.
+   */
+  function redrawOverlay() { repaintOverlay() }
 
   // Marching-ants animation: advance the dash phase on a light timer while a
   // selection is active (nothing runs when there is no selection).
@@ -2316,17 +1808,105 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     rotRef.current = 0; setViewRot(0)
   }
 
+  // ── Tool handler plumbing ─────────────────────────────────────────────────
+  /** Live overlay preview owned by the active tool, if any. */
+  const toolPreview = useRef<((ctx: CanvasRenderingContext2D) => void) | null>(null)
+  const [toolStatus, setToolStatus] = useState<string | null>(null)
+
+  /**
+   * Builds the narrow surface tools are allowed to touch. Rebuilt per event so a
+   * tool always sees current values without holding on to refs of its own.
+   */
+  function makeToolCtx(): ToolContext {
+    return {
+      docW: docSize.current.w,
+      docH: docSize.current.h,
+      layers: layersRef.current,
+      activeId: activeRef.current,
+      layerById: id => findInTree(layersRef.current, id),
+
+      readTex, readTexRect, writeTex, writeTexRect,
+      pushUndo, pushUndoRect,
+
+      selection: selMask.current,
+      setSelection: setSelectionMask,
+      combineSelection: (mask, mode) => {
+        selModeRef.current = mode
+        setSelectionMask(combineSelection(mask))
+      },
+      selectModeFor: p => selModeFromEvent(p),
+
+      foreground: fgRef.current,
+      background: bgColor,
+      setForeground: hex => { setFgColor(hex); pushColorHistory(hex) },
+      brushSize: bsRef.current,
+      brushHardness: brushHard,
+      brushOpacity: brushOpac,
+      brushFlow: brushFlow,
+
+      zoom: vsRef.current.zoom,
+      screenToDoc, docToScreen,
+
+      invalidate: () => { renderComposite(); setThumbNonce(v => v + 1) },
+      repaintOverlay,
+      setPreview: draw => { toolPreview.current = draw; repaintOverlay() },
+      setStatus: setToolStatus,
+    }
+  }
+
+  /** Normalises a pointer event into the sample tools receive. */
+  function toolPointer(e: React.PointerEvent, sx: number, sy: number): ToolPointer {
+    const [x, y] = screenToDoc(sx, sy)
+    return {
+      sx, sy, x, y,
+      pressure: e.pointerType === 'mouse' ? 0.5 : (e.pressure || 0.5),
+      altKey: e.altKey, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey,
+      button: e.button, pointerType: e.pointerType,
+    }
+  }
+
+  /** Tools the rail must grey out: no legacy behaviour AND no registered handler. */
+  const unimplementedTools = (() => {
+    const live = new Set<ToolId>([...registeredTools()])
+    for (const id of ALL_TOOL_IDS) if (legacyForTool(id)) live.add(id)
+    return ALL_TOOL_IDS.filter(id => !live.has(id))
+  })()
+
   // ── Brush cursor overlay ──────────────────────────────────────────────────
-  function drawCursor(cx: number, cy: number) {
+  /**
+   * Clears the overlay and returns a context whose units are CSS pixels while the
+   * backing store stays at device resolution — that is what keeps thin strokes
+   * crisp on HiDPI screens.
+   */
+  function overlayCtx(): CanvasRenderingContext2D | null {
     const ov = overlayRef.current
-    if (!ov) return
+    if (!ov) return null
     const ctx = ov.getContext('2d')
-    if (!ctx) return
+    if (!ctx) return null
+    const dpr = ov.width / Math.max(1, ov.offsetWidth)
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, ov.width, ov.height)
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    return ctx
+  }
+
+  /** Last pointer position, so the overlay can be repainted without a move event. */
+  const cursorPt = useRef<{ x: number; y: number } | null>(null)
+  /** Redraws the overlay at the remembered cursor position. */
+  function repaintOverlay() {
+    const p = cursorPt.current
+    drawCursor(p?.x ?? -9999, p?.y ?? -9999)
+  }
+
+  function drawCursor(cx: number, cy: number) {
+    if (cx > -9000) cursorPt.current = { x: cx, y: cy }
+    const ctx = overlayCtx()
+    if (!ctx) return
     drawPixelGrid(ctx)
     drawSelectionOverlay(ctx)   // active pixel selection (always visible)
     drawTransformOverlay(ctx)   // free-transform box stays visible while hovering
     drawCropOverlay(ctx)
+    toolPreview.current?.(ctx)   // live preview owned by the active tool
     // Lasso in-progress polyline (doc points → screen, plus the live cursor segment)
     if (lassoPts.current && lassoPts.current.length) {
       ctx.beginPath()
@@ -2338,20 +1918,37 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const t = toolRef.current
     if (t === 'hand' || t === 'eyedrop' || t === 'zoom' || t === 'rotate') return
 
+    // Every cursor is stroked twice — a dark halo then a light core — so it stays
+    // readable over white paper as well as over a dark image. A single white
+    // crosshair simply vanished on a light document.
+    // Odd-width strokes are snapped to the half-pixel grid: on a 1× screen an
+    // unsnapped 1px line straddles two pixels and renders as two grey ones.
+    const snap = (v: number) => Math.round(v) + 0.5
+    const twoPass = (path: () => void, core = 'rgba(255,255,255,0.95)') => {
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'
+      ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 3; path(); ctx.stroke()
+      ctx.strokeStyle = core;               ctx.lineWidth = 1; path(); ctx.stroke()
+    }
+
     if (t === 'brush' || t === 'eraser') {
       const r = Math.max(2, (bsRef.current / 2) * vsRef.current.zoom)
-      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2)
-      ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 1.5; ctx.stroke()
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 0.8; ctx.stroke()
-      // Crosshair center
-      ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 0.8
-      ctx.beginPath(); ctx.moveTo(cx-4,cy); ctx.lineTo(cx+4,cy); ctx.stroke()
-      ctx.beginPath(); ctx.moveTo(cx,cy-4); ctx.lineTo(cx,cy+4); ctx.stroke()
+      twoPass(() => { ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2) })
+      // A small centre cross marks the exact sample point.
+      const sx = snap(cx), sy = snap(cy)
+      twoPass(() => {
+        ctx.beginPath()
+        ctx.moveTo(sx - 4, sy); ctx.lineTo(sx + 4, sy)
+        ctx.moveTo(sx, sy - 4); ctx.lineTo(sx, sy + 4)
+      })
     } else {
-      // Simple crosshair for other tools
-      ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1
-      ctx.beginPath(); ctx.moveTo(cx-8,cy); ctx.lineTo(cx+8,cy); ctx.stroke()
-      ctx.beginPath(); ctx.moveTo(cx,cy-8); ctx.lineTo(cx,cy+8); ctx.stroke()
+      const sx = snap(cx), sy = snap(cy)
+      twoPass(() => {
+        ctx.beginPath()
+        ctx.moveTo(sx - 9, sy); ctx.lineTo(sx - 2, sy)
+        ctx.moveTo(sx + 2, sy); ctx.lineTo(sx + 9, sy)
+        ctx.moveTo(sx, sy - 9); ctx.lineTo(sx, sy - 2)
+        ctx.moveTo(sx, sy + 2); ctx.lineTo(sx, sy + 9)
+      })
     }
 
     // Draw selection rect if active (as a quad so it tracks canvas rotation).
@@ -2370,10 +1967,10 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     }
   }
 
+  /** Pointer left the canvas: drop the cursor but keep selection/crop guides. */
   function clearCursor() {
-    const ov = overlayRef.current
-    if (!ov) return
-    ov.getContext('2d')?.clearRect(0, 0, ov.width, ov.height)
+    cursorPt.current = null
+    repaintOverlay()
   }
 
   // ── StrokeTex helpers ─────────────────────────────────────────────────────
@@ -2877,7 +2474,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
         }
       }
       writeTex(id, currentPx)
-      pushUndoEntry({ id, x: bx0, y: by0, w: bw, h: bh, px: undoPx })
+      pushUndoEntry({ kind: 'px', id, x: bx0, y: by0, w: bw, h: bh, px: undoPx })
     }
     clearBrushStroke()
   }
@@ -3117,6 +2714,15 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     if (!rect) return
     const cx = e.clientX - rect.left, cy = e.clientY - rect.top
 
+    // A registered handler takes precedence over the legacy if-chain, which is
+    // what lets new tools ship without touching this function.
+    const handler = getTool(toolIdRef.current)
+    if (handler?.onDown && !spaceHeld.current) {
+      toolGesture.current = true
+      handler.onDown(makeToolCtx(), toolPointer(e, cx, cy))
+      return
+    }
+
     const t = toolRef.current
     // Space held → temporary hand: pan regardless of the active tool.
     if (t === 'hand' || spaceHeld.current) {
@@ -3209,6 +2815,16 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) return
     const cx = e.clientX - rect.left, cy = e.clientY - rect.top
+
+    // Registered handlers get both hover and drag; the cursor overlay still
+    // follows so the user keeps their crosshair.
+    const mvHandler = getTool(toolIdRef.current)
+    if (mvHandler?.onMove && !spaceHeld.current && !gesture.current) {
+      mvHandler.onMove(makeToolCtx(), toolPointer(e, cx, cy))
+      drawCursor(cx, cy)
+      if (toolGesture.current) return
+      return
+    }
 
     // Two-finger gesture takes priority over everything else.
     if (e.pointerType === 'touch' && touchPts.current.has(e.pointerId)) {
@@ -3312,6 +2928,14 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   }
 
   function onPointerUp(e: React.PointerEvent) {
+    if (toolGesture.current) {
+      toolGesture.current = false
+      const rect = canvasRef.current?.getBoundingClientRect()
+      const h = getTool(toolIdRef.current)
+      if (rect && h?.onUp) h.onUp(makeToolCtx(), toolPointer(e, e.clientX - rect.left, e.clientY - rect.top))
+      activePtrId.current = null
+      return
+    }
     // Zoom tool: a click without a real drag = single zoom step (in / out by button).
     if (zoomDrag.current) {
       const z = zoomDrag.current; zoomDrag.current = null
@@ -3424,32 +3048,46 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       if (!mod && e.key === '{') { setBrushHard(v => Math.max(0,   v - 10)); return }
       if (!mod && e.key === '}') { setBrushHard(v => Math.min(100, v + 10)); return }
 
+      // A registered handler gets first refusal on Enter / Escape so a path or a
+      // polygonal lasso can commit or abort without the legacy branches firing.
+      {
+        const h = getTool(toolIdRef.current)
+        if (h && (e.key === 'Enter' || e.key === 'Escape')) {
+          const fn = e.key === 'Enter' ? h.onCommit : h.onCancel
+          if (fn) { e.preventDefault(); fn(makeToolCtx()); return }
+        }
+      }
+
       // Crop tool: Enter applies, Escape cancels.
       if (e.key === 'Enter'  && toolRef.current === 'crop' && cropRectRef.current) { e.preventDefault(); applyCrop(); return }
       if (e.key === 'Escape' && toolRef.current === 'crop' && cropRectRef.current) { e.preventDefault(); setCropRect(null); return }
 
-      // Single-key tool switches (never with a modifier held).
+      // Free transform is a COMMAND, not a tool (Ctrl+T, like Photoshop). `T`
+      // itself now belongs to the type family, so the two no longer collide.
+      if (mod && k === 't') { e.preventDefault(); setTool('transform'); return }
+
+      // Single-key tool switches, resolved against the family table so that
+      // Shift+<key> cycles inside a family exactly as the rail's flyout does.
       if (!mod && !e.altKey) {
-        if (k === 'b') setTool('brush')
-        if (k === 'e') setTool('eraser')
-        if (k === 'h') setTool('hand')
-        if (k === 'i') setTool('eyedrop')
-        if (k === 'g') setTool('fill')
-        if (k === 'v') setTool('select')
-        if (k === 'm') setTool('rect-sel')
-        if (k === 'l') setTool('lasso')
-        if (k === 'w') setTool('magic')
-        if (k === 'c') setTool('crop')
-        if (k === 't') setTool('transform')
-        if (k === 'z') setTool('zoom')
-        if (e.key === 'r') setTool('rotate')
-        if (e.key === 'R') { rotRef.current = 0; setViewRot(0) } // Shift+R resets rotation
+        if (e.key === 'R') { rotRef.current = 0; setViewRot(0); return } // Shift+R resets rotation
+        // Colour swatches: X swaps, D restores black/white (Photoshop bindings).
+        if (k === 'x') { e.preventDefault(); swapColors();  return }
+        if (k === 'd') { e.preventDefault(); resetColors(); return }
+        const next = toolForKeystroke(k, { shift: e.shiftKey, current: toolForLegacy(toolRef.current) })
+        if (next) {
+          const legacy = legacyForTool(next)
+          // Silently ignore keys that resolve to a family we cannot drive yet,
+          // rather than dropping the user on an inert tool.
+          if (legacy) { e.preventDefault(); setTool(legacy); return }
+        }
       }
 
       if (e.key === 'Enter' && xfActive.current)  { e.preventDefault(); commitTransform() }
       if (e.key === 'Escape' && xfActive.current) { e.preventDefault(); cancelTransform() }
-      if (mod && !e.shiftKey && e.key==='z') { e.preventDefault(); undo() }
-      if (mod && (e.shiftKey && e.key==='z' || e.key==='y')) { e.preventDefault(); redo() }
+      // Compare against the lowercased key: with Shift held `e.key` is 'Z', so
+      // testing for 'z' meant Ctrl+Shift+Z never reached redo at all.
+      if (mod && !e.shiftKey && k === 'z') { e.preventDefault(); undo() }
+      if (mod && (e.shiftKey && k === 'z' || k === 'y')) { e.preventDefault(); redo() }
       if (mod && e.key==='0') {
         e.preventDefault()
         const vp = viewportRef.current
@@ -3512,6 +3150,25 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       x: 0, y: 0, mask: null, effects: [],
     }
     // Insert above the active layer (lands in the same group); else at the top.
+    setLayers(prev => pinBackground(insertNode(prev, newL, activeRef.current, false)))
+    setActiveId(id)
+  }
+
+  /**
+   * Adds an adjustment layer above the active one. It carries no pixels — the
+   * compositor applies it to everything below, which is what "non-destructive"
+   * means here.
+   */
+  function addAdjustmentLayer(kind: AdjustmentKind) {
+    const def = ADJ_BY_KIND[kind]
+    if (!def?.implemented) return
+    const id = newId()
+    const newL: LayerStructureItem = {
+      id, type: 'adjustment', name: t(def.labelKey).replace(/\.\.\.$/, ''),
+      visible: true, locked: false, opacity: 100, fill: 100, blendMode: 'normal',
+      x: 0, y: 0, mask: null, effects: [],
+      adjustment: defaultAdjustment(kind),
+    }
     setLayers(prev => pinBackground(insertNode(prev, newL, activeRef.current, false)))
     setActiveId(id)
   }
@@ -3727,6 +3384,12 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     // cel size it asked for).
     if (embedded && (newW !== oldW || newH !== oldH)) return
 
+    // 0. Snapshot the whole document BEFORE anything changes. This is what makes
+    //    crop / rotate / flip undoable: pixel entries are expressed in the old
+    //    geometry, so restoring that geometry is a prerequisite for replaying
+    //    them — which is why the stack no longer has to be discarded.
+    const beforeState = captureDocState()
+
     // 1. Read every texture (layer colours AND masks) and transform it on CPU.
     const src = document.createElement('canvas'); src.width = oldW; src.height = oldH
     const sctx = src.getContext('2d', { willReadFrequently: true })!
@@ -3761,8 +3424,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     selMask.current = null; lastSelMask.current = null; selCanvas.current = null; selPathRef.current = null
     setHasSel(false); setSelection(null); setCropRect(null)
     clipboardRef.current = null
-    undoStack.current = []; redoStack.current = []
-    setUndoCount(0); setRedoCount(0)
+    pushUndoEntry(beforeState)
     pngCache.current.clear()
 
     // 3. Swap in the new geometry and rebuild every GPU resource at the new size.
@@ -3961,7 +3623,11 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     img.onerror = () => URL.revokeObjectURL(url)
     img.src = url
   }
-  const importInputRef = useRef<HTMLInputElement>(null)
+  /** "Import image as layer": the image comes from the core picker. */
+  async function importImageFromPicker() {
+    const file = await pickImageFile({ title: t('layer_import_image') })
+    if (file) importImageAsLayer(file)
+  }
 
   // Isolate a layer: hide everything except it and its ancestors. Clicking the same
   // layer's solo again restores the previous visibility of every node.
@@ -4112,7 +3778,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
         onSelect={setActiveId}
         onToggleVisible={id => updateLayer(id, { visible: !findInTree(layers, id)?.visible })}
         onToggleLock={id => updateLayer(id, { locked: !findInTree(layers, id)?.locked })}
-        onDelete={deleteLayer} onAdd={addLayer}
+        onDelete={deleteLayer} onAdd={addLayer} onAddAdjustment={addAdjustmentLayer}
         onOpacity={(id,v) => updateLayer(id, { opacity: v })}
         onBlend={(id,v) => updateLayer(id, { blendMode: v })}
         onStartRename={(id, name) => { setEditLayerId(id); setEditName(name) }}
@@ -4198,7 +3864,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
         fileExtra: [
           { label: t('menu_export_jpeg'),   onClick: () => exportImage('jpeg') },
           'sep',
-          { label: t('layer_import_image'), onClick: () => importInputRef.current?.click() },
+          { label: t('layer_import_image'), onClick: () => { void importImageFromPicker() } },
         ],
         onClose:  () => { if(docId&&layers.length>0) saveMut.mutate(buildSaveStructure()); navigate('/paintsharp/layer') },
         onUndo: undo, onRedo: redo, canUndo: undoCount>0, canRedo: redoCount>0,
@@ -4340,31 +4006,19 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
           <span style={{ color:C.textDim }}>{t('layer_adjust_hint')}</span>
         )}</>}
       toolRail={<>
-          {([
-            { id:'select',      icon:MousePointer2, label:t('layer_tool_select') },
-            { id:'brush',       icon:Brush,         label:t('layer_tool_brush') },
-            { id:'eraser',      icon:Eraser,        label:t('layer_tool_eraser') },
-            { id:'fill',        icon:Square,        label:t('layer_tool_fill') },
-            { id:'eyedrop',     icon:Pipette,       label:t('layer_tool_eyedrop') },
-            { id:'crop',        icon:Crop,          label:t('layer_tool_crop') },
-            { id:'text',        icon:Type,          label:t('layer_tool_text') },
-            { id:'rect-sel',    icon:Square,        label:t('layer_tool_rect_sel') },
-            { id:'ellipse-sel', icon:Circle,        label:t('layer_tool_ellipse_sel') },
-            { id:'lasso',       icon:Lasso,         label:t('layer_tool_lasso') },
-            { id:'magic',       icon:Wand,          label:t('layer_tool_magic') },
-            { id:'transform',   icon:Move,          label:t('layer_tool_transform') },
-            { id:'zoom',        icon:ZoomIn,        label:t('layer_tool_zoom') },
-            { id:'rotate',      icon:RotateCcw,     label:t('layer_tool_rotate') },
-            { id:'hand',        icon:Hand,          label:t('layer_tool_hand') },
-          ] as {id:Tool; icon:React.ComponentType<{size?:number;style?:React.CSSProperties}>; label:string}[]).map(({ id, icon:Icon, label }) => (
-            <button key={id} title={label} onClick={() => setTool(id)}
-                    className="w-8 h-8 flex items-center justify-center transition-colors"
-                    style={{ borderRadius:3, background:tool===id?C.active:'transparent', color:tool===id?'#fff':C.textDim }}>
-              <Icon size={16} />
-            </button>
-          ))}
-
-          <div style={{ flex:1 }} />
+          {/* Photoshop-shaped rail: one button per family, sub-tools behind a
+              flyout (long press, right click, or the corner triangle). Entries the
+              editor cannot perform yet are greyed rather than hidden. */}
+          {/* `flex:1` + `minHeight:0` so the rail measures the column it actually
+              has, not its own content — otherwise it collapses families away as if
+              the viewport were tiny. It doubles as the spacer above the swatches. */}
+          <ToolRail
+            t={t}
+            tool={toolId}
+            onSelect={setToolId}
+            disabledTools={unimplementedTools}
+            style={{ flex: 1, minHeight: 0 }}
+          />
 
           {/* Indicateur du périphérique détecté (stylet / tactile) */}
           {(inputKind === 'pen' || inputKind === 'touch') && (
@@ -4373,7 +4027,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
               {inputKind === 'pen'
                 ? <PenTool size={13} style={{ color:C.accent }} />
                 : <Fingerprint size={13} style={{ color:C.accent }} />}
-              <span className="text-[8px] mt-0.5" style={{ color:C.accent }}>
+              <span className="text-[10px] mt-0.5" style={{ color:C.accent }}>
                 {Math.round(inputPressure*100)}
               </span>
             </div>
@@ -4389,14 +4043,17 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
             </button>
           )}
 
-          {/* Couleur avant-plan */}
-          <button onClick={() => setColorPickerOpen(v => !v)} title={t('layer_color_title')}
-                  className="relative w-8 h-8 mb-1 flex items-center justify-center rounded hover:bg-white/10"
-                  style={{ outline: colorPickerOpen ? `1px solid ${C.accent}` : 'none' }}>
-            <div className="w-6 h-6 rounded border"
-                 style={{ background:fgColor, borderColor:'#555' }} />
-          </button>
-          <span className="text-[9px] mb-1" style={{ color:C.textDim }}>
+          {/* Foreground / background swatches with swap (X) and defaults (D). */}
+          <ColorSwatches
+            t={t} C={C}
+            fg={fgColor} bg={bgColor}
+            onFg={hex => { setFgColor(hex); pushColorHistory(hex) }}
+            onBg={setBgColor}
+            onSwap={swapColors} onReset={resetColors}
+            history={colorHistory} onPickHistory={setFgColor}
+            railBg={C.toolbar}
+          />
+          <span className="text-[10px] mb-1" style={{ color:C.textDim }}>
             {Math.round(viewState.zoom*100)}%
           </span></>}
       statusBar={<>
@@ -4494,6 +4151,13 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
                   onPointerUp={onPointerUp}
                   onPointerCancel={onPointerUp}
                   onPointerLeave={clearCursor}
+                  onDoubleClick={e => {
+                    const h = getTool(toolIdRef.current)
+                    const rect = canvasRef.current?.getBoundingClientRect()
+                    if (!h?.onDoubleClick || !rect) return
+                    e.preventDefault()
+                    h.onDoubleClick(makeToolCtx(), toolPointer(e as unknown as React.PointerEvent, e.clientX - rect.left, e.clientY - rect.top))
+                  }}
                   onContextMenu={e => { if (tool === 'zoom') e.preventDefault() }}
                   onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
                   onDrop={e => {
@@ -4502,13 +4166,6 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
                   }} />
           <canvas ref={overlayRef}
                   className="absolute inset-0 w-full h-full pointer-events-none" />
-          {/* Hidden file input backing "Import image as layer". */}
-          <input ref={importInputRef} type="file" accept="image/*" className="hidden"
-                 onChange={e => {
-                   const f = e.target.files?.[0]
-                   if (f) importImageAsLayer(f)
-                   e.target.value = ''
-                 }} />
           {textEdit && (() => {
             const [sx, sy] = docToScreen(textEdit.dx, textEdit.dy)
             const z = viewState.zoom
@@ -4531,13 +4188,6 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
                             transformOrigin: 'top left' }} />
             )
           })()}
-          {colorPickerOpen && (
-            <div className="absolute left-2 bottom-2 z-20">
-              <ColorPicker t={t} color={fgColor} onChange={setFgColor}
-                onClose={() => { pushColorHistory(fgColor); setColorPickerOpen(false) }}
-                history={colorHistory} onPickHistory={setFgColor} C={C} />
-            </div>
-          )}
         </DockArea>
         {filterDialog && (
           <FilterDialog
@@ -4604,7 +4254,7 @@ function LayersPanel({
   editingMask, onAddMask, onRemoveMask, onToggleEditMask,
   onDuplicate, onReorder, paintThumb, thumbVersion,
   onFill, onToggleLockAlpha, onToggleLockPosition, onGroup, onUngroup, onToggleClip, onToggleExpand,
-  onMergeDown, canMergeDown, onFlatten, onSolo, onSetColor, bare,
+  onMergeDown, canMergeDown, onFlatten, onSolo, onSetColor, onAddAdjustment, bare,
 }: {
   t: TFunction
   layers: LayerStructureItem[]
@@ -4641,12 +4291,24 @@ function LayersPanel({
   onFlatten: () => void
   onSolo: (id: string) => void
   onSetColor: (id: string, color: string | undefined) => void
+  onAddAdjustment: (kind: AdjustmentKind) => void
   bare?: boolean
 }) {
   const C2 = C
   const [open, setOpen] = useState(true)
   const isOpen = bare || open
   const [filter, setFilter] = useState('')
+  // Photoshop's filter row: a set of kind toggles plus a master switch that turns
+  // the whole thing off without losing what was selected.
+  const [kinds, setKinds] = useState<Set<LayerKindFilter>>(() => new Set())
+  const [filterOn, setFilterOn] = useState(true)
+  const adjBtnRef = useRef<HTMLSpanElement>(null)
+  const [adjMenu, setAdjMenu] = useState<{ top: number; left: number } | null>(null)
+  const toggleKind = (k: LayerKindFilter) => setKinds(prev => {
+    const next = new Set(prev)
+    if (next.has(k)) next.delete(k); else next.add(k)
+    return next
+  })
   // Drag-and-drop reorder. dragIdRef is synchronous (drag events fire faster
   // than React commits state); dragId/drop states drive only the visuals.
   const dragIdRef = useRef<string | null>(null)
@@ -4797,22 +4459,9 @@ function LayersPanel({
             </div>
           )}
         </div>
-        {/* Row 2: blend + opacity + fill */}
-        <div className="flex items-center gap-1.5 pr-2 pb-1.5 pt-0.5" style={{ paddingLeft: indent + 16 }} onClick={e => e.stopPropagation()}>
-          <Dropdown variant="dark" className="flex-1" fontSize={10} value={layer.blendMode}
-                    onChange={v => onBlend(layer.id, v)}
-                    options={BLEND_KEYS.map(k => ({ value: k, label: blendLabel(t, k) }))} />
-          <span className="text-[8px]" style={{ color:C2.textDim }} title={t('layer_opacity')}>O</span>
-          <input type="number" min={0} max={100} value={layer.opacity}
-                 onChange={e => onOpacity(layer.id, Math.max(0,Math.min(100,+e.target.value)))}
-                 className="w-8 h-4 text-[10px] text-center rounded outline-none"
-                 style={{ background:'#2a2a2a', color:C2.text, border:`1px solid #3a3a3a` }} />
-          <span className="text-[8px]" style={{ color:C2.textDim }} title={t('layer_fill')}>F</span>
-          <input type="number" min={0} max={100} value={layer.fill ?? 100}
-                 onChange={e => onFill(layer.id, Math.max(0,Math.min(100,+e.target.value)))}
-                 className="w-8 h-4 text-[10px] text-center rounded outline-none"
-                 style={{ background:'#2a2a2a', color:C2.text, border:`1px solid #3a3a3a` }} />
-        </div>
+        {/* Blend mode, opacity and fill are NOT repeated per row: like Photoshop
+            they live in the panel header and act on the selected layer, which
+            keeps every row a single compact line. */}
       </div>
     )
     if (isGroup && layer.expanded && !q) {
@@ -4821,12 +4470,36 @@ function LayersPanel({
     return row
   }
 
-  const flat = q ? allNodes(layers).filter(l => displayLayerName(t, l.name).toLowerCase().includes(q)) : null
+  // Filtering flattens the tree, exactly as Photoshop does while a filter is on.
+  const kindOf = (l: LayerStructureItem): LayerKindFilter =>
+    l.children ? 'group' : l.type === 'adjustment' ? 'adjustment' : l.type === 'text' ? 'text' : 'raster'
+  const filterActive = filterOn && (!!q || kinds.size > 0)
+  const flat = filterActive
+    ? allNodes(layers).filter(l =>
+        (!q || displayLayerName(t, l.name).toLowerCase().includes(q))
+        && (kinds.size === 0 || kinds.has(kindOf(l))))
+    : null
 
   const LockBtn = ({ on, title, children, onClick }: { on?: boolean; title: string; children: React.ReactNode; onClick: () => void }) => (
     <button onClick={onClick} title={title} disabled={!active}
             className="p-1 rounded disabled:opacity-30"
             style={{ background: on ? C2.accent+'33' : 'transparent', border:`1px solid ${on ? C2.accent : 'transparent'}` }}>
+      {children}
+    </button>
+  )
+
+  const KindBtn = ({ on, title, children, onClick, disabled }: { on?: boolean; title: string; children: React.ReactNode; onClick: () => void; disabled?: boolean }) => (
+    <button onClick={onClick} title={title} disabled={disabled} aria-pressed={!!on}
+            className="p-1 rounded disabled:opacity-30"
+            style={{ background: on ? C2.accent+'33' : 'transparent', border:`1px solid ${on ? C2.accent : 'transparent'}` }}>
+      {children}
+    </button>
+  )
+
+  /** Bottom action bar button; `todo` marks a slot whose feature is not wired yet. */
+  const ActBtn = ({ title, onClick, children, disabled, todo }: { title: string; onClick?: () => void; children: React.ReactNode; disabled?: boolean; todo?: boolean }) => (
+    <button onClick={onClick} title={todo ? `${title} — ${t('layer_soon')}` : title} disabled={disabled || todo}
+            className="p-1 rounded hover:bg-white/10 disabled:opacity-25">
       {children}
     </button>
   )
@@ -4844,23 +4517,53 @@ function LayersPanel({
       </div>
       )}
 
-      {/* Barre de filtre */}
+      {/* Filter row: search by name + kind toggles + master switch. */}
       {isOpen && (
-        <div className="flex items-center gap-1.5 px-2 flex-shrink-0" style={{ height:26, background:C2.toolbar, borderBottom:`1px solid ${C2.border}` }}>
-          <Search size={11} style={{ color:C2.textDim }} />
-          <input value={filter} onChange={e => setFilter(e.target.value)} placeholder={t('layer_filter_placeholder')}
-                 className="flex-1 text-[11px] bg-transparent outline-none" style={{ color:C2.text }} />
-          {filter && <button onClick={() => setFilter('')} className="p-0.5 rounded hover:bg-white/10"><Plus size={11} style={{ color:C2.textDim, transform:'rotate(45deg)' }} /></button>}
+        <div className="flex items-center gap-1 px-2 flex-shrink-0 overflow-hidden" style={{ height:28, background:C2.toolbar, borderBottom:`1px solid ${C2.border}`, opacity: filterOn ? 1 : 0.45 }}>
+          <div className="flex items-center gap-1 rounded px-1.5 min-w-0 flex-1"
+               style={{ height:20, border:`1px solid ${C2.border}`, background:'#2b2b2b' }}>
+            <Search size={10} style={{ color:C2.textDim }} />
+            <input value={filter} onChange={e => setFilter(e.target.value)} placeholder={t('layer_filter_placeholder')}
+                   disabled={!filterOn}
+                   className="w-full text-[11px] bg-transparent outline-none" style={{ color:C2.text }} />
+          </div>
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            <KindBtn on={kinds.has('raster')}     title={t('layer_kind_raster')}     onClick={() => toggleKind('raster')}     disabled={!filterOn}><ImageIcon size={12} style={{ color:C2.text }} /></KindBtn>
+            <KindBtn on={kinds.has('adjustment')} title={t('layer_kind_adjustment')} onClick={() => toggleKind('adjustment')} disabled={!filterOn}><Contrast size={12} style={{ color:C2.text }} /></KindBtn>
+            <KindBtn on={kinds.has('text')}       title={t('layer_kind_text')}       onClick={() => toggleKind('text')}       disabled={!filterOn}><Type size={12} style={{ color:C2.text }} /></KindBtn>
+            <KindBtn on={kinds.has('group')}      title={t('layer_kind_group')}      onClick={() => toggleKind('group')}      disabled={!filterOn}><FolderClosed size={12} style={{ color:C2.text }} /></KindBtn>
+          </div>
+          {/* Master switch — keeps the chosen kinds while showing everything. */}
+          <span className="ml-1 flex-shrink-0" title={t('layer_filter_toggle')}>
+            <Toggle size="sm" checked={filterOn} onChange={e => setFilterOn(e.target.checked)}
+                    aria-label={t('layer_filter_toggle')} />
+          </span>
         </div>
       )}
 
-      {/* Rangée de verrous (calque actif) — façon Photoshop */}
+      {/* Blend mode + opacity of the active layer. */}
       {isOpen && (
         <div className="flex items-center gap-1 px-2 flex-shrink-0" style={{ height:26, background:C2.toolbar, borderBottom:`1px solid ${C2.border}` }}>
-          <span className="text-[10px] mr-1" style={{ color:C2.textDim }}>{t('layer_lock_label')}</span>
+          <Dropdown variant="dark" className="flex-1 min-w-0" fontSize={11} height={20}
+                    value={active?.blendMode ?? 'normal'} disabled={!active}
+                    onChange={v => active && onBlend(active.id, v)}
+                    options={BLEND_KEYS.map(k => ({ value: k, label: blendLabel(t, k) }))} />
+          <OptNum label={t('layer_opacity_label')} value={active?.opacity ?? 100} min={0} max={100} suffix="%"
+                  onChange={v => active && onOpacity(active.id, v)} disabled={!active} C={C2} />
+        </div>
+      )}
+
+      {/* Locks + fill opacity, mirroring Photoshop's "Verrou / Fond" row. */}
+      {isOpen && (
+        <div className="flex items-center gap-1 px-2 flex-shrink-0" style={{ height:26, background:C2.toolbar, borderBottom:`1px solid ${C2.border}` }}>
+          <span className="text-[10px] mr-0.5 flex-shrink-0" style={{ color:C2.textDim }}>{t('layer_lock_label')}</span>
           <LockBtn on={!!active?.lockAlpha} title={t('layer_lock_alpha')} onClick={() => active && onToggleLockAlpha(active.id)}><Grid2x2 size={11} style={{ color:C2.text }} /></LockBtn>
           <LockBtn on={!!active?.lockPosition} title={t('layer_lock_position')} onClick={() => active && onToggleLockPosition(active.id)}><Move size={11} style={{ color:C2.text }} /></LockBtn>
           <LockBtn on={!!active?.locked} title={t('layer_lock_all')} onClick={() => active && onToggleLock(active.id)}><Lock size={11} style={{ color:C2.text }} /></LockBtn>
+          <div className="ml-auto flex-shrink-0">
+            <OptNum label={t('layer_fill_label')} value={active?.fill ?? 100} min={0} max={100} suffix="%"
+                    onChange={v => active && onFill(active.id, v)} disabled={!active} C={C2} />
+          </div>
         </div>
       )}
 
@@ -4870,21 +4573,59 @@ function LayersPanel({
         </div>
       )}
 
-      {/* Barre d'actions : masque · groupe · dupliquer · nouveau · supprimer */}
+      {/* Action bar, in Photoshop's order: link · fx · mask · adjustment ·
+          group · new · delete. Slots whose feature is not implemented yet are
+          present but disabled, so the bar does not silently change shape later. */}
       {isOpen && (
-        <div className="flex items-center justify-end gap-0.5 px-2 flex-shrink-0" style={{ height:26, background:C2.toolbar, borderTop:`1px solid ${C2.border}` }}>
-          <button onClick={() => active && !active.children && (active.mask?.enabled ? onRemoveMask(active.id) : onAddMask(active.id))}
-                  title={t('layer_mask_add')} className="p-1 rounded hover:bg-white/10"><Circle size={13} style={{ color:C2.textDim }} /></button>
-          <button onClick={() => active && (active.children ? onUngroup(active.id) : onGroup(active.id))}
-                  title={t(active?.children ? 'layer_ungroup' : 'layer_group')} className="p-1 rounded hover:bg-white/10">
+        <div className="flex items-center justify-center gap-1 px-2 flex-shrink-0" style={{ height:28, background:C2.toolbar, borderTop:`1px solid ${C2.border}` }}>
+          <ActBtn title={t('layer_link')} todo><Link2 size={13} style={{ color:C2.textDim }} /></ActBtn>
+          <ActBtn title={t('layer_effects')} todo><Sparkle size={13} style={{ color:C2.textDim }} /></ActBtn>
+          <ActBtn title={active?.mask?.enabled ? t('layer_mask_remove') : t('layer_mask_add')}
+                  disabled={!active || !!active.children}
+                  onClick={() => active && !active.children && (active.mask?.enabled ? onRemoveMask(active.id) : onAddMask(active.id))}>
+            <SquareDot size={13} style={{ color:C2.textDim }} />
+          </ActBtn>
+          <ActBtn title={t('layer_adjustment_new')}
+                  onClick={() => {
+                    const r = adjBtnRef.current?.getBoundingClientRect()
+                    setAdjMenu(r ? { top: r.top, left: r.right + 4 } : null)
+                  }}>
+            <span ref={adjBtnRef}><Contrast size={13} style={{ color:C2.textDim }} /></span>
+          </ActBtn>
+          <ActBtn title={t(active?.children ? 'layer_ungroup' : 'layer_group')} disabled={!active}
+                  onClick={() => active && (active.children ? onUngroup(active.id) : onGroup(active.id))}>
             {active?.children ? <FolderOpen size={13} style={{ color:C2.textDim }} /> : <FolderClosed size={13} style={{ color:C2.textDim }} />}
-          </button>
-          <button onClick={() => activeId && onDuplicate(activeId)} title={t('layer_duplicate')} className="p-1 rounded hover:bg-white/10"><Copy size={13} style={{ color:C2.textDim }} /></button>
-          <button onClick={onAdd} title={t('layer_new_layer')} className="p-1 rounded hover:bg-white/10"><Plus size={14} style={{ color:C2.textDim }} /></button>
-          <button onClick={() => activeId && onDelete(activeId)} disabled={leafCount<=1} title={t('layer_delete')} className="p-1 rounded hover:bg-white/10 disabled:opacity-30"><Trash2 size={13} style={{ color:C2.textDim }} /></button>
+          </ActBtn>
+          <ActBtn title={t('layer_duplicate')} disabled={!activeId} onClick={() => activeId && onDuplicate(activeId)}>
+            <Copy size={13} style={{ color:C2.textDim }} />
+          </ActBtn>
+          <ActBtn title={t('layer_new_layer')} onClick={onAdd}><Plus size={14} style={{ color:C2.textDim }} /></ActBtn>
+          <ActBtn title={t('layer_delete')} disabled={leafCount<=1 || !activeId} onClick={() => activeId && onDelete(activeId)}>
+            <Trash2 size={13} style={{ color:C2.textDim }} />
+          </ActBtn>
         </div>
       )}
       {ctx.menu}
+      {/* Adjustment-layer menu, grouped exactly like Photoshop's: fill layers,
+          tonal, colour, then the mapping operators. Entries the compositor
+          cannot render yet are listed but disabled. */}
+      {adjMenu && (
+        <MenuDropdown
+          theme="dark"
+          pos={{ top: adjMenu.top, left: adjMenu.left, minWidth: 230 }}
+          onClose={() => setAdjMenu(null)}
+          items={ADJUSTMENT_DEFS.flatMap((d, i, arr) => {
+            const sep = i > 0 && arr[i - 1].group !== d.group
+            const item = {
+              type: 'action' as const,
+              label: t(d.labelKey),
+              disabled: !d.implemented,
+              onClick: () => { onAddAdjustment(d.kind); setAdjMenu(null) },
+            }
+            return sep ? [{ type: 'separator' as const }, item] : [item]
+          })}
+        />
+      )}
     </div>
   )
 }
@@ -4954,7 +4695,7 @@ function ToolProps({ t, tool, brushSize,setBrushSize, brushHard,setBrushHard, br
                     <span className="flex items-center gap-0.5" style={{ color:C2.accent }}
                           title={inputKind === 'pen' ? t('layer_pen_detected') : t('layer_touch_detected')}>
                       {inputKind === 'pen' ? <PenTool size={9} /> : <Fingerprint size={9} />}
-                      <span className="text-[8px]">{Math.round(inputPressure*100)}%</span>
+                      <span className="text-[10px]">{Math.round(inputPressure*100)}%</span>
                     </span>
                   )}
                 </span>
@@ -5045,7 +4786,7 @@ function BrushPicker({ t, activeId, active, open, setOpen, onSelect, C2 }: {
                         color: isActive ? C2.accent : C2.textDim,
                       }}>
                 <Icon size={16} />
-                <span className="text-[8px] leading-tight text-center px-0.5"
+                <span className="text-[10px] leading-tight text-center px-0.5"
                       style={{ color: isActive ? C2.accent : C2.textDim }}>
                   {t(bp.nameKey)}
                 </span>
@@ -5134,7 +4875,7 @@ function BrushStudio({
             if (!brushes.length) return null
             return (
               <div key={cat} className="mb-2">
-                <div className="px-3 py-1 text-[9px] uppercase tracking-wide" style={{ color: '#6e6e6e' }}>{t(catKey)}</div>
+                <div className="px-3 py-1 text-[10px] uppercase tracking-wide" style={{ color: '#6e6e6e' }}>{t(catKey)}</div>
                 {brushes.map(b => {
                   const isActive = b.id === activeId
                   return (
@@ -5163,7 +4904,7 @@ function BrushStudio({
           <BrushSlider label={t('layer_brush_hardness')}  value={hard} min={0} max={100} unit="%"  onChange={onSetHard} accent={accent} />
           <BrushSlider label={t('layer_brush_opacity')}   value={opac} min={0} max={100} unit="%"  onChange={onSetOpac} accent={accent} />
           <BrushSlider label={t('layer_brush_flow')}      value={flow} min={1} max={100} unit="%"  onChange={onSetFlow} accent={accent} />
-          <div className="text-[9px] uppercase tracking-wide pt-1" style={{ color: '#6e6e6e' }}>{t('layer_brush_dynamics')}</div>
+          <div className="text-[10px] uppercase tracking-wide pt-1" style={{ color: '#6e6e6e' }}>{t('layer_brush_dynamics')}</div>
           <BrushSlider label={t('layer_brush_spacing')}       value={Math.round(dyn.spacing * 100)} min={1} max={120} unit="%" onChange={v => set({ spacing: v / 100 })} accent={accent} />
           <BrushSlider label={t('layer_brush_sizejitter')}    value={Math.round(dyn.sizeJitter * 100)} min={0} max={100} unit="%" onChange={v => set({ sizeJitter: v / 100 })} accent={accent} />
           <BrushSlider label={t('layer_brush_opacityjitter')} value={Math.round(dyn.opacityJitter * 100)} min={0} max={100} unit="%" onChange={v => set({ opacityJitter: v / 100 })} accent={accent} />
@@ -5222,10 +4963,11 @@ function FilterDialog({ def, values, preview, accent, t, onChange, onTogglePrevi
           <input type="checkbox" checked={preview} onChange={e => onTogglePreview(e.target.checked)} style={{ accentColor: accent }} />
           {t('filt_preview')}
         </label>
+        {/* Both actions share one width class so Cancel and Apply line up (project rule). */}
         <div className="flex justify-end gap-2 mt-1">
-          <button onClick={onCancel} className="px-3 h-7 text-[11px] rounded"
+          <button onClick={onCancel} className="px-3 h-7 min-w-[88px] text-[11px] rounded"
                   style={{ background: '#333', color: '#ddd', border: '1px solid #444' }}>{t('common_cancel')}</button>
-          <button onClick={onApply} className="px-3 h-7 text-[11px] rounded font-medium"
+          <button onClick={onApply} className="px-3 h-7 min-w-[88px] text-[11px] rounded"
                   style={{ background: accent, color: '#fff' }}>{t('filt_apply')}</button>
         </div>
       </div>
@@ -5246,7 +4988,7 @@ function BrushSlider({ label, value, min, max, unit, onChange, accent }: {
              onChange={e => onChange(+e.target.value)}
              className="w-10 h-5 text-[10px] text-center rounded outline-none"
              style={{ background:'#2c2c2c', border:`1px solid #3a3a3a`, color:'#e0e0e0' }} />
-      <span className="text-[9px] w-4" style={{ color:'#5a5a5a' }}>{unit}</span>
+      <span className="text-[10px] w-4" style={{ color:'#5a5a5a' }}>{unit}</span>
     </div>
   )
 }
@@ -5330,7 +5072,7 @@ function AdjustmentsPanel({
               {/* Apply / Reset */}
               <div className="flex gap-1.5 pt-1">
                 <button onClick={onApply} disabled={!dirty}
-                        className="flex-1 flex items-center justify-center gap-1 text-[10px] py-1.5 rounded font-medium transition-colors disabled:opacity-40"
+                        className="flex-1 flex items-center justify-center gap-1 text-[10px] py-1.5 rounded transition-colors disabled:opacity-40"
                         style={{ background:C2.accent, color:'#fff' }}>
                   <Check size={11} /> {t('layer_adjust_apply')}
                 </button>
@@ -5340,7 +5082,7 @@ function AdjustmentsPanel({
                   <RotateCcw size={11} /> {t('layer_adjust_reset')}
                 </button>
               </div>
-              <p className="text-[9px] leading-snug" style={{ color:'#666' }}>{t('layer_adjust_hint')}</p>
+              <p className="text-[10px] leading-snug" style={{ color:'#666' }}>{t('layer_adjust_hint')}</p>
             </>
           )}
         </div>
@@ -5387,7 +5129,7 @@ function FiltersPanel({
               <BrushSlider label={t('layer_filter_noise')}   value={filter.noise}   min={0} max={100} unit="%"  onChange={set('noise')}   accent={C2.accent} />
               <div className="flex gap-1.5 pt-1">
                 <button onClick={onApply} disabled={!dirty}
-                        className="flex-1 flex items-center justify-center gap-1 text-[10px] py-1.5 rounded font-medium transition-colors disabled:opacity-40"
+                        className="flex-1 flex items-center justify-center gap-1 text-[10px] py-1.5 rounded transition-colors disabled:opacity-40"
                         style={{ background:C2.accent, color:'#fff' }}>
                   <Check size={11} /> {t('layer_adjust_apply')}
                 </button>
@@ -5397,7 +5139,7 @@ function FiltersPanel({
                   <RotateCcw size={11} /> {t('layer_adjust_reset')}
                 </button>
               </div>
-              <p className="text-[9px] leading-snug" style={{ color:'#666' }}>{t('layer_adjust_hint')}</p>
+              <p className="text-[10px] leading-snug" style={{ color:'#666' }}>{t('layer_adjust_hint')}</p>
             </>
           )}
         </div>

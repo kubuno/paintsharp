@@ -2,6 +2,7 @@
 // ink signature, type one in a cursive font, or import an image (with optional
 // white-background removal). Saved signatures are listed with live previews.
 import { useEffect, useRef, useState } from 'react'
+import { pickImageFile } from '@kubuno/sdk'
 import type { TFunction } from 'i18next'
 import { X, Trash2, Undo2, PenLine, Type as TypeIcon, ImagePlus, Loader2 } from 'lucide-react'
 import { Button, RangeSlider } from '@ui'
@@ -152,7 +153,6 @@ export function PdfSignatureDialog({ t, sigs, busy, onPlace, onSave, onDelete, o
   }
 
   // ── Import tab ──────────────────────────────────────────────────────────────
-  const fileRef = useRef<HTMLInputElement>(null)
   const [removeWhite, setRemoveWhite] = useState(true)
   const [imported, setImported] = useState<{ data: string; ratio: number } | null>(null)
 
@@ -184,6 +184,12 @@ export function PdfSignatureDialog({ t, sigs, busy, onPlace, onSave, onDelete, o
       img.src = reader.result as string
     }
     reader.readAsDataURL(file)
+  }
+
+  /** Signature image import: the image comes from the core picker. */
+  const importFromPicker = async () => {
+    const file = await pickImageFile({ title: t('pdf_sig_import', { defaultValue: 'Importer une signature' }) })
+    if (file) importFile(file)
   }
 
   // ── Apply (place + optional save) ───────────────────────────────────────────
@@ -342,11 +348,9 @@ export function PdfSignatureDialog({ t, sigs, busy, onPlace, onSave, onDelete, o
 
         {tab === 'import' && (
           <>
-            <input ref={fileRef} type="file" accept="image/*" hidden
-              onChange={e => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = '' }} />
             <div
               className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#212121] py-6 cursor-pointer hover:border-[#5a9bdc] transition-colors"
-              onClick={() => fileRef.current?.click()}
+              onClick={() => { void importFromPicker() }}
             >
               {imported
                 ? <img src={imported.data} alt="" className="max-h-24 max-w-[300px] object-contain" style={{ background: 'repeating-conic-gradient(#3a3a3a 0% 25%, #2e2e2e 0% 50%) 0 0 / 14px 14px' }} />
