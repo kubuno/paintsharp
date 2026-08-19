@@ -34,6 +34,23 @@ fn gunzip(raw: &[u8]) -> Result<Vec<u8>, PaintsharpError> {
     }
 }
 
+// ── Plafond de taille d'un document (réglage d'instance) ──────────────────────
+// Single enforcement point for every editor of the suite: Vertex, Apex, Layer,
+// Motion, Keyframe, PdfWriter and FontEditor all reach the drive through the
+// helpers below. Measured on the GZIPPED payload — what is actually stored.
+
+fn check_document_size(state: &AppState, gz_len: usize) -> Result<(), PaintsharpError> {
+    let max = state.instance().max_document_bytes;
+    if gz_len as u64 > max {
+        return Err(PaintsharpError::PayloadTooLarge(format!(
+            "Document trop volumineux ({} Mo compressés, maximum {} Mo)",
+            gz_len as u64 / 1_048_576,
+            max / 1_048_576,
+        )));
+    }
+    Ok(())
+}
+
 // ── Lecture / écriture génériques ──────────────────────────────────────────────
 
 pub async fn read_content(state: &AppState, user_id: Uuid, file_id: Uuid) -> Result<Value, PaintsharpError> {
@@ -47,6 +64,7 @@ pub async fn read_content(state: &AppState, user_id: Uuid, file_id: Uuid) -> Res
 pub async fn write_content(state: &AppState, user_id: Uuid, file_id: Uuid, content: &Value) -> Result<(), PaintsharpError> {
     let raw = serde_json::to_vec(content).map_err(|e| PaintsharpError::Internal(anyhow::anyhow!(e)))?;
     let gz  = gzip(&raw)?;
+    check_document_size(state, gz.len())?;
     state.files_client.update_file_content(user_id, file_id, Bytes::from(gz)).await
         .map_err(PaintsharpError::Internal).map(|_| ())
 }
@@ -86,6 +104,9 @@ async fn create_kubuno_file(
         .map_err(PaintsharpError::Internal)?;
     let raw = serde_json::to_vec(content).map_err(|e| PaintsharpError::Internal(anyhow::anyhow!(e)))?;
     let gz  = gzip(&raw)?;
+    // An import (« ouvrir avec ») creates the file with its full content, so the
+    // ceiling has to be enforced here too, not only on later saves.
+    check_document_size(state, gz.len())?;
     let name = content_file_name(title, ext);
     let file = state.files_client.create_file_with_content(
         user_id, Some(folder.id), &name, mime, Bytes::from(gz),

@@ -3185,7 +3185,6 @@ export default function VertexEditorPage() {
       onTitleChange={setTitleDraft}
       onTitleCommit={commitTitle}
       titlePlaceholder={t('common_untitled', { defaultValue: 'Sans titre' })}
-      saveStatus={saveMut.isPending ? t('vertex_saving') : t('doc_saved', { defaultValue: 'Enregistré' })}
       subtitle="Vertex"
       titleActions={(
         <button

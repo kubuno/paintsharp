@@ -3826,7 +3826,6 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       onTitleChange={embedded ? undefined : setTitleDraft}
       onTitleCommit={embedded ? undefined : commitTitle}
       titlePlaceholder={t('common_untitled', { defaultValue: 'Sans titre' })}
-      saveStatus={saveMut.isPending ? t('layer_saving') : t('doc_saved', { defaultValue: 'Enregistré' })}
       subtitle="Layer" docInfo={docDims ? `${docDims.w}×${docDims.h}` : doc ? `${doc.width}×${doc.height}` : undefined}
       titleActions={embedded ? undefined : (
         <button

@@ -22,10 +22,11 @@ internal_secret = "change_me"
 # Pour un démarrage hors superviseur, exporter ces variables manuellement.
 
 [paintsharp]
-# Taille maximale d'un fichier de scène exporté (en octets). Défaut : 50 Mo
-max_scene_bytes = 52428800
-# Taille maximale d'un asset importé (mesh, texture). Défaut : 100 Mo
-max_asset_bytes = 104857600
+# Taille maximale d'un média importé dans un projet Motion (en octets).
+# Défaut : 5 Go. Ce plafond peut aussi être fixé depuis la console
+# d'administration (Paintsharp ▸ Stockage) ; la valeur de la console l'emporte
+# dès que l'administrateur l'écarte de sa valeur d'usine.
+max_media_bytes = 5368709120
 
 [logging]
 level  = "info"

@@ -1,43 +1,45 @@
+/**
+ * Items of the sidebar "New" button for PaintSharp — DATA for the project's
+ * menu component (`MenuDropdown` from @ui), contributed through the generic
+ * 'shell.new-actions' extension point (see entry.ts). Evaluated when the menu
+ * opens, so labels are always fresh, without hooks.
+ */
+import type { MenuItem } from '@ui'
 import { Plus, FileEdit } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
-import { useTranslation } from 'react-i18next'
+// `navigate` is the core's SPA navigation helper for code running outside
+// React: the shell hands it the router's real `navigate`.
+import { i18n, navigate } from '@kubuno/sdk'
 import { paintsharpApi, pdfWriterApi } from './api'
 
-export default function PaintsharpNewActions() {
-  const navigate = useNavigate()
-  const { t } = useTranslation('paintsharp')
+// Creation failures were already silent in the previous useMutation-based menu
+// (no onError handler); keep that behaviour without unhandled rejections.
+const run = (fn: () => Promise<void>) => () => { fn().catch(() => {}) }
 
-  const createScene = useMutation({
-    mutationFn: () => paintsharpApi.createScene({ title: t('common_untitled') }),
-    onSuccess:  (res) => navigate(`/paintsharp/scene/${res.data.id}`),
-  })
+const newScene = async () => {
+  const res = await paintsharpApi.createScene({ title: i18n.t('paintsharp:common_untitled') })
+  navigate(`/paintsharp/scene/${res.data.id}`)
+}
 
-  const createPdf = useMutation({
-    mutationFn: () => pdfWriterApi.createDocument({ title: t('paintsharp_untitled_document') }),
-    onSuccess:  (res) => navigate(`/paintsharp/pdfwriter/${res.data.id}`),
-  })
+const newPdfDocument = async () => {
+  const res = await pdfWriterApi.createDocument({ title: i18n.t('paintsharp:paintsharp_untitled_document') })
+  navigate(`/paintsharp/pdfwriter/${res.data.id}`)
+}
 
-  return (
-    <>
-      <button
-        onClick={() => createScene.mutate()}
-        disabled={createScene.isPending}
-        className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-primary
-                   hover:bg-surface-2 transition-colors disabled:opacity-50"
-      >
-        <Plus size={15} className="text-text-secondary" />
-        {t('paintsharp_new_scene_3d')}
-      </button>
-      <button
-        onClick={() => createPdf.mutate()}
-        disabled={createPdf.isPending}
-        className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-primary
-                   hover:bg-surface-2 transition-colors disabled:opacity-50"
-      >
-        <FileEdit size={15} className="text-text-secondary" />
-        {t('paintsharp_new_pdf_document')}
-      </button>
-    </>
-  )
+export function paintsharpNewActionItems(): MenuItem[] {
+  if (!window.location.pathname.startsWith('/paintsharp')) return []
+
+  return [
+    {
+      type: 'action',
+      label: i18n.t('paintsharp:paintsharp_new_scene_3d'),
+      icon: <Plus size={16} className="text-text-secondary" />,
+      onClick: run(newScene),
+    },
+    {
+      type: 'action',
+      label: i18n.t('paintsharp:paintsharp_new_pdf_document'),
+      icon: <FileEdit size={16} className="text-text-secondary" />,
+      onClick: run(newPdfDocument),
+    },
+  ]
 }

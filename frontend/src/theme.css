@@ -15,17 +15,18 @@
   --color-surface-3: #e8eaed;
 
   /* Cartes de widgets (accueil) : fond ton sur ton avec la page + bordure nette. */
-  --color-surface-card:        #f1f4f8;
+  --color-surface-card:        #f8fafd;
   --color-surface-card-border: #dadde2;
 
   /* ── Search bar ────────────────────────────────────────── */
-  --color-search-bg: #eaf1fb;
+  --color-search-bg: #e9eef6;
 
   /* ── Texte ─────────────────────────────────────────────── */
   --color-text-primary:   #202124;
   --color-text-secondary: #5f6368;
   --color-text-tertiary:  #80868b;
-  --color-text-nav-active: #041e49;  /* texte item nav actif */
+  --color-text-nav:        #1f1f1f;  /* texte item nav au repos */
+  --color-text-nav-active: #001d35;  /* texte item nav actif */
 
   /* ── Bordures ──────────────────────────────────────────── */
   --color-border:       #e0e0e0;
@@ -54,7 +55,7 @@
   --radius-2xl: 8px;
 
   /* ── Thème — surchargeables au runtime ─────────────────── */
-  --body-bg:               #f1f4f8;
+  --body-bg:               #f8fafd;
   --scrollbar-thumb:       #dadce0;
   --scrollbar-thumb-hover: #bdc1c6;
 }

@@ -1515,8 +1515,11 @@ export default function KeyframeEditorPage() {
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement).tagName) || drawState) return
+      const tgt = e.target as HTMLElement | null
+      if (!tgt || ['INPUT', 'TEXTAREA', 'SELECT'].includes(tgt.tagName) || tgt.isContentEditable || drawState) return
       const mod = e.ctrlKey || e.metaKey
+      // Delete removes the selected layer, exactly like the layer context-menu entry.
+      if (e.key === 'Delete' && !mod && selectedLayerId && !showExport) { e.preventDefault(); handleDeleteLayer(selectedLayerId); return }
       if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undoAnim(); return }
       if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redoAnim(); return }
       if (e.code === 'Space') { e.preventDefault(); handlePlayPause() }
@@ -1527,7 +1530,7 @@ export default function KeyframeEditorPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [comp.duration_frames, handlePlayPause, undoAnim, redoAnim, drawState])
+  }, [comp.duration_frames, handlePlayPause, undoAnim, redoAnim, drawState, selectedLayerId, handleDeleteLayer, showExport])
 
   // ─────────────────────────────────────────────────────────────────────────
   if (isLoading || !animData) {
@@ -1643,7 +1646,6 @@ export default function KeyframeEditorPage() {
       onTitleChange={setTitleDraft}
       onTitleCommit={commitTitle}
       titlePlaceholder={t('common_untitled', { defaultValue: 'Sans titre' })}
-      saveStatus={saveMut.isPending ? t('keyframe_saving', { defaultValue: 'Enregistrement…' }) : t('doc_saved', { defaultValue: 'Enregistré' })}
       subtitle="Keyframe"
       docInfo={`${comp.width}×${comp.height} · ${comp.fps}fps`}
       onDelete={() => trashMut.mutate()}

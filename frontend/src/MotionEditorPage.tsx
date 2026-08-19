@@ -1457,7 +1457,6 @@ export default function MotionEditorPage() {
         onTitleChange={setTitleDraft}
         onTitleCommit={commitTitle}
         titlePlaceholder={t('common_untitled', { defaultValue: 'Sans titre' })}
-        saveStatus={(isSaving || saveTimelineMut.isPending) ? t('motion_saving') : t('doc_saved', { defaultValue: 'Enregistré' })}
         subtitle="Motion"
         docInfo={`${project.composition.width}×${project.composition.height} · ${fps}fps`}
         onDelete={() => trashMut.mutate()}

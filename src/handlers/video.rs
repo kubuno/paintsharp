@@ -355,7 +355,9 @@ pub async fn import_media(
             PaintsharpError::Validation(format!("Erreur lecture fichier: {e}"))
         })?;
 
-        let max_bytes = state.settings.paintsharp.max_media_bytes;
+        // Instance ceiling (admin console); falls back to config.toml while the
+        // administrator has not moved it off the compiled default.
+        let max_bytes = state.instance().max_media_bytes_or(state.settings.paintsharp.max_media_bytes);
         if data.len() as u64 > max_bytes {
             return Err(PaintsharpError::Validation(
                 format!("Fichier trop volumineux (max {} MB)", max_bytes / 1_048_576)
@@ -443,7 +445,8 @@ pub async fn import_media_from_file(
     let data = base64::engine::general_purpose::STANDARD.decode(b64)
         .map_err(|e| PaintsharpError::Internal(anyhow!("Décodage base64 échoué: {e}")))?;
 
-    let max_bytes = state.settings.paintsharp.max_media_bytes;
+    // Same ceiling as the multipart upload path above.
+    let max_bytes = state.instance().max_media_bytes_or(state.settings.paintsharp.max_media_bytes);
     if data.len() as u64 > max_bytes {
         return Err(PaintsharpError::Validation(format!("Fichier trop volumineux (max {} MB)", max_bytes / 1_048_576)));
     }

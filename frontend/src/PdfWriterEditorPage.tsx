@@ -2365,7 +2365,6 @@ export default function PdfWriterEditorPage() {
         onTitleChange={setTitleDraft}
         onTitleCommit={commitTitle}
         titlePlaceholder={t('common_untitled', { defaultValue: 'Sans titre' })}
-        saveStatus={saveMut.isPending ? t('pdf_saving', { defaultValue: 'Enregistrement…' }) : (dirty ? t('pdf_unsaved_changes', { defaultValue: 'Modifications non enregistrées' }) : t('doc_saved', { defaultValue: 'Enregistré' }))}
         subtitle="PdfWriter"
         docInfo={`${currentPage} / ${totalPages}`}
         titleActions={(
@@ -2812,7 +2811,7 @@ export default function PdfWriterEditorPage() {
           { type: 'action', label: t('pdf_ctx_backward', { defaultValue: 'Reculer' }), onClick: () => reorderAnn(a.id, 'backward') },
           { type: 'action', label: t('pdf_ctx_to_back', { defaultValue: 'Mettre à l’arrière-plan' }), icon: <ArrowDown size={14} />, onClick: () => reorderAnn(a.id, 'back') },
           { type: 'separator' },
-          { type: 'action', label: t('common_delete', { defaultValue: 'Supprimer' }), icon: <Trash2 size={14} />, danger: true, onClick: () => deleteSelected() },
+          { type: 'action', label: t('common_delete', { defaultValue: 'Supprimer' }), icon: <Trash2 size={14} />, danger: true, shortcut: 'Suppr', onClick: () => deleteSelected() },
         )
         return <MenuDropdown items={items} pos={{ top: ctxMenu.y, left: ctxMenu.x }} onClose={() => setCtxMenu(null)} />
       })()}

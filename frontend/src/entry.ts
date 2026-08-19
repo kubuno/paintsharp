@@ -15,6 +15,7 @@ import {
   FileTypeRegistry,
   FaviconRegistry,
   SlotRegistry,
+  ExtensionRegistry,
   ModuleSettingsRegistry,
   useSidebarStore,
   useToolbarStore,
@@ -24,7 +25,7 @@ import { Box, Image, PenTool, Clapperboard, Film, FileEdit, Type } from 'lucide-
 import './index.css'
 import './i18n'
 import { PaintsharpLogo } from './PaintsharpLogo'
-import PaintsharpNewActions from './PaintsharpNewActions'
+import { paintsharpNewActionItems } from './PaintsharpNewActions'
 import PaintsharpSidebarBody from './PaintsharpSidebarBody'
 import PaintsharpPdfOpenWithAction, { isPdfFile } from './PaintsharpPdfOpenWithAction'
 import { registerDataCardRenderer } from './kubunoData'
@@ -128,9 +129,15 @@ export function register() {
     moduleId:          'paintsharp',
     routePrefix:       '/paintsharp',
     newButtonLabelKey: 'paintsharp:common_create',
-    NewActions:        PaintsharpNewActions,
     SidebarBody:       PaintsharpSidebarBody,
     collapsedBody:     true,
+  })
+
+  // Shell "New" button: contribute MenuItem[] DATA to the generic
+  // 'shell.new-actions' extension point (consumed by the shell's MenuDropdown).
+  ExtensionRegistry.register('shell.new-actions', 'paintsharp', {
+    moduleId: 'paintsharp',
+    items: paintsharpNewActionItems,
   })
 
   useToolbarStore.getState().register({

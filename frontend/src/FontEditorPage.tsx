@@ -2008,7 +2008,6 @@ export default function FontEditorPage() {
       onTitleChange={setTitleDraft}
       onTitleCommit={commitTitle}
       titlePlaceholder={t('common_untitled', { defaultValue: 'Sans titre' })}
-      saveStatus={saveMut.isPending ? t('font_saving') : t('font_saved')}
       subtitle="FontEditor"
       docInfo={`${font.unitsPerEm} upm · ${t('fontproj_glyph_count', { count: countDrawnGlyphs(font) })}`}
       titleActions={

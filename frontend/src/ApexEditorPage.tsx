@@ -7213,9 +7213,6 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
       onTitleChange={embedded ? undefined : setTitleDraft}
       onTitleCommit={embedded ? undefined : commitTitle}
       titlePlaceholder={t('common_untitled', { defaultValue: 'Sans titre' })}
-      saveStatus={embedded ? '' : saveState === 'saving' ? t('apex_saving')
-        : saveState === 'error' ? t('apex_save_failed')
-        : t('doc_saved', { defaultValue: 'Enregistré' })}
       subtitle="Apex"
       docInfo={pageData.artboards[0] ? `${pageData.artboards[0].width}×${pageData.artboards[0].height}` : undefined}
       titleActions={embedded ? undefined : (

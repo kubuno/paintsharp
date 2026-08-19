@@ -51,8 +51,9 @@ impl DatabaseSettings {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PaintsharpSettings {
-    pub max_scene_bytes: u64,
-    pub max_asset_bytes: u64,
+    /// Ceiling on a media file imported into a Motion project. The admin
+    /// console can override it (see `config::instance`); this stays the value
+    /// used until an administrator moves the setting off its factory default.
     pub max_media_bytes: u64,
     pub media_path:      String,
 }
@@ -95,8 +96,6 @@ impl Settings {
             .set_default("database.min_connections", 1i64)?
             .set_default("database.connect_timeout", 10i64)?
             .set_default("database.run_migrations", true)?
-            .set_default("paintsharp.max_scene_bytes", 52_428_800i64)?
-            .set_default("paintsharp.max_asset_bytes", 104_857_600i64)?
             .set_default("paintsharp.max_media_bytes", 5_368_709_120i64)?
             .set_default("paintsharp.media_path", default_media_path)?
             .set_default("logging.level", "info")?

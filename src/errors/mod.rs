@@ -22,6 +22,10 @@ pub enum PaintsharpError {
     #[error("Conflit: {0}")]
     Conflict(String),
 
+    /// The payload exceeds an instance ceiling set by the administrator.
+    #[error("{0}")]
+    PayloadTooLarge(String),
+
     #[error("Erreur base de données")]
     Database(#[from] sqlx::Error),
 
@@ -37,6 +41,7 @@ impl IntoResponse for PaintsharpError {
             PaintsharpError::NotFound(_)   => (StatusCode::NOT_FOUND,            "NOT_FOUND",    self.to_string()),
             PaintsharpError::Validation(_) => (StatusCode::UNPROCESSABLE_ENTITY, "VALIDATION",   self.to_string()),
             PaintsharpError::Conflict(_)   => (StatusCode::CONFLICT,             "CONFLICT",     self.to_string()),
+            PaintsharpError::PayloadTooLarge(_) => (StatusCode::PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE", self.to_string()),
             PaintsharpError::Database(e) => {
                 tracing::error!(error = %e, "Database error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "DATABASE_ERROR", "Erreur base de données".to_string())

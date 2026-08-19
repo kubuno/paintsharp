@@ -19,6 +19,23 @@ struct Manifest {
     /// Declarative settings manifest pushed to the core at registration.
     #[serde(default)]
     settings:      Vec<SettingDefRaw>,
+    /// Pages the module's admin surface is split into (`[[setting_groups]]`).
+    #[serde(default)]
+    setting_groups: Vec<SettingGroupRaw>,
+}
+
+/// One `[[setting_groups]]` entry of module.toml, forwarded verbatim. `id` is a
+/// STABLE, UNTRANSLATED slug: it travels in the URL of the admin page.
+#[derive(Deserialize, Serialize)]
+struct SettingGroupRaw {
+    id:          String,
+    label:       String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    icon:        Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    position:    Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
 }
 
 /// One `[[settings]]` entry from module.toml. Serialized verbatim into the
@@ -38,8 +55,30 @@ struct SettingDefRaw {
     description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     category:    Option<String>,
+    /// Id of a `[[setting_groups]]` entry of this manifest: which admin page the
+    /// setting belongs to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    group:       Option<String>,
     #[serde(default)]
     public:      bool,
+
+    // Presentation metadata rendered by the generic admin console.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    min:         Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    max:         Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    unit:        Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    placeholder: Option<String>,
+    #[serde(default)]
+    multiline:   bool,
+    #[serde(default)]
+    advanced:    bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    risk:        Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    depends_on:  Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -176,6 +215,26 @@ async fn main() -> Result<()> {
         settings.core.internal_secret.clone(),
     );
 
+    let http = Client::new();
+
+    // Instance settings: compiled defaults, then one read from the core so the
+    // first requests already see the administrator's ceilings rather than the
+    // defaults. A failed read just leaves the defaults in place.
+    let instance = Arc::new(std::sync::RwLock::new(
+        kubuno_paintsharp::config::instance::InstanceConfig::default(),
+    ));
+    if let Some(cfg) = kubuno_paintsharp::config::instance::fetch(
+        &http,
+        &settings.core.url,
+        &settings.core.internal_secret,
+    )
+    .await
+    {
+        if let Ok(mut w) = instance.write() {
+            *w = cfg;
+        }
+    }
+
     let state = AppState {
         db:          pool,
         settings:    Arc::new(settings.clone()),
@@ -185,10 +244,34 @@ async fn main() -> Result<()> {
         anim_hub:    Arc::new(AnimHub::new()),
         video_hub:   Arc::new(VideoHub::new()),
         pdf_hub:     Arc::new(PdfHub::new()),
+        instance:    instance.clone(),
     };
 
-    let http = Client::new();
     register_with_core(&http, &settings).await;
+
+    // Instance-settings refresher: an admin edit takes effect within a minute,
+    // no restart. A failed read keeps the last good values.
+    {
+        let http_refresh     = http.clone();
+        let settings_refresh = settings.clone();
+        let instance_refresh = instance.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                if let Some(cfg) = kubuno_paintsharp::config::instance::fetch(
+                    &http_refresh,
+                    &settings_refresh.core.url,
+                    &settings_refresh.core.internal_secret,
+                )
+                .await
+                {
+                    if let Ok(mut w) = instance_refresh.write() {
+                        *w = cfg;
+                    }
+                }
+            }
+        });
+    }
 
     {
         let http2     = http.clone();
@@ -259,8 +342,13 @@ async fn register_with_core(http: &Client, settings: &Settings) {
         .and_then(|m| m.events.as_ref())
         .map(|e| e.subscribed.clone())
         .unwrap_or_else(|| vec!["UserDeleted".into()]);
+    // Declarative instance settings + admin pages, forwarded so the core can render
+    // the generic form and split the admin panel into sub-menus.
     let settings_schema: Value = manifest.as_ref()
         .map(|m| serde_json::to_value(&m.settings).unwrap_or_else(|_| json!([])))
+        .unwrap_or_else(|| json!([]));
+    let setting_groups: Value = manifest.as_ref()
+        .map(|m| serde_json::to_value(&m.setting_groups).unwrap_or_else(|_| json!([])))
         .unwrap_or_else(|| json!([]));
 
     let payload = json!({
@@ -274,6 +362,7 @@ async fn register_with_core(http: &Client, settings: &Settings) {
         "sidebar_items":     sidebar_items,
         "subscribed_events": subscribed_events,
         "settings_schema":   settings_schema,
+        "setting_groups":    setting_groups,
     });
 
     for attempt in 1u32.. {

@@ -17,6 +17,11 @@ pub async fn ws_handler(
     Extension(user): Extension<PaintsharpUser>,
     Path(project_id): Path<Uuid>,
 ) -> Response {
+    // Instance switch: no collaborative session at all when the admin
+    // turned real-time editing off (see config::instance).
+    if let Some(refusal) = crate::handlers::collaboration_refusal(&state) {
+        return refusal;
+    }
     ws.on_upgrade(move |socket| handle_socket(socket, state, user.id, project_id))
 }
 
