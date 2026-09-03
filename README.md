@@ -24,13 +24,13 @@ PaintSharp bundles several creative editors, each reachable under `/paintsharp/<
 
 | App | Path | What it does |
 |---|---|---|
-| 🖌️ **Layer** | `/paintsharp/layer` | Raster / image editor (Photoshop-like) |
-| ✒️ **Apex** | `/paintsharp/apex` | Vector editor (paths, nodes, gradients) |
-| 📦 **Vertex** | `/paintsharp/vertex` | 3D editor |
-| 🎬 **Motion** | `/paintsharp/motion` | Video editor |
-| 🎞️ **Keyframe** | `/paintsharp/keyframe` | 2D animation |
-| 📝 **PdfWriter** | `/paintsharp/pdfwriter` | PDF editor (import & edit content) |
-| 🔤 **FontEditor** | `/paintsharp/fonteditor` | Type design (glyph drawing, metrics, kerning, OTF export) |
+| <img src=".github/logo-layer.png" width="18" height="18" alt=""> **Layer** | `/paintsharp/layer` | Raster / image editor (Photoshop-like) |
+| <img src=".github/logo-apex.png" width="18" height="18" alt=""> **Apex** | `/paintsharp/apex` | Vector editor (paths, nodes, gradients) |
+| <img src=".github/logo-vertex.png" width="18" height="18" alt=""> **Vertex** | `/paintsharp/vertex` | 3D editor |
+| <img src=".github/logo-motion.png" width="18" height="18" alt=""> **Motion** | `/paintsharp/motion` | Video editor |
+| <img src=".github/logo-keyframe.png" width="18" height="18" alt=""> **Keyframe** | `/paintsharp/keyframe` | 2D animation |
+| <img src=".github/logo-pdfwriter.png" width="18" height="18" alt=""> **PdfWriter** | `/paintsharp/pdfwriter` | PDF editor (import & edit content) |
+| <img src=".github/logo-fonteditor.png" width="18" height="18" alt=""> **FontEditor** | `/paintsharp/fonteditor` | Type design (glyph drawing, metrics, kerning, OTF export) |
 
 The editors share a common UI library (EditorShell, color tools, navigator…).
 
