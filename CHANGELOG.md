@@ -13,6 +13,12 @@ number at release time, and CI publishes that section as the GitHub Release note
 ### Changed
 
 
+
+- **The package maintainer address moved to the project's own domain.** The
+  Debian package's `Maintainer` field now reads
+  `Martinien OLINGA <kubuno@martinienolinga.com>`. Nothing about what the
+  package installs changes.
+
 - **The app table in the README now shows each editor's real logo.** The seven
   editors — Layer, Apex, Vertex, Motion, Keyframe, PdfWriter and FontEditor —
   are listed with the same artwork the applications menu and the browser tab
