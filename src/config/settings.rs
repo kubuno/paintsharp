@@ -86,7 +86,7 @@ impl Settings {
             .set_default("server.port", 3106i64)?
             .set_default("core.url", "http://127.0.0.1:8080")?
             .set_default("core.internal_secret", "")?
-            .set_default("core.files_url", "http://127.0.0.1:3101")?
+            .set_default("core.files_url", "http://127.0.0.1:8080")?
             .set_default("database.host", "localhost")?
             .set_default("database.port", 5432i64)?
             .set_default("database.user", "kubuno")?
@@ -108,7 +108,12 @@ impl Settings {
                     .try_parsing(true),
             );
 
-        if let Ok(v) = std::env::var("KUBUNO_CORE_URL")        { builder = builder.set_override("core.url",             v)?; }
+        if let Ok(v) = std::env::var("KUBUNO_CORE_URL") {
+            // FilesClient reaches the drive THROUGH the core relay now, so
+            // files_url must point at the core, not the drive port.
+            builder = builder.set_override("core.url",       v.clone())?;
+            builder = builder.set_override("core.files_url", v)?;
+        }
         if let Ok(v) = std::env::var("KUBUNO_INTERNAL_SECRET") { builder = builder.set_override("core.internal_secret", v)?; }
         if let Ok(v) = std::env::var("KUBUNO_DB_HOST")         { builder = builder.set_override("database.host",     v)?; }
         if let Ok(v) = std::env::var("KUBUNO_DB_PORT")         { builder = builder.set_override("database.port",     v.parse::<i64>().unwrap_or(5432))?; }

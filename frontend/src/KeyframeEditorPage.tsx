@@ -1,3 +1,4 @@
+import { cn } from '@ui'
 import {
   useRef, useState, useEffect, useCallback, useLayoutEffect, memo, lazy, Suspense,
 } from 'react'
@@ -11,7 +12,6 @@ import {
   MousePointer, Square, Type, Image as ImageIcon, Layers, GripVertical, PenTool, Brush,
   Undo2, Redo2,
 } from 'lucide-react'
-import clsx from 'clsx'
 import { uid } from './uid'
 import { keyframeApi, type AnimData, type AnimLayer, type AnimProperty, type AnimKeyframe, type EasingDef, type VectorPageData } from './api'
 import { pageDataToSvg } from './apexSvg'
@@ -367,7 +367,7 @@ function TransportBar({
       </button>
       <button
         onClick={onPlayPause}
-        className={clsx(
+        className={cn(
           'w-7 h-6 flex items-center justify-center rounded transition-colors',
           isPlaying ? 'bg-[#e8824a] text-white' : 'bg-[#333] text-[#e0e0e0] hover:bg-[#444]'
         )}

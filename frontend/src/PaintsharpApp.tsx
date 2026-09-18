@@ -1,3 +1,4 @@
+import { formatDate, formatRelative } from '@kubuno/sdk'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -5,6 +6,13 @@ import {
   Plus, Box, Clock, Star, Trash2, MoreVertical, Pencil, RotateCcw,
   Image, PenTool, Film, Clapperboard, ArrowRight, FileEdit, ExternalLink, Type,
 } from 'lucide-react'
+import ApexLogo from './ApexLogo'
+import LayerLogo from './LayerLogo'
+import MotionLogo from './MotionLogo'
+import VertexLogo from './VertexLogo'
+import KeyframeLogo from './KeyframeLogo'
+import PdfWriterLogo from './PdfWriterLogo'
+import FontEditorLogo from './FontEditorLogo'
 import { PaintsharpLogo } from './PaintsharpLogo'
 import { paintsharpApi, type SceneSummary } from './api'
 import { ApexProjectsApp } from './ApexProjectsApp'
@@ -17,9 +25,7 @@ import { AnimationsListApp } from './AnimationsListApp'
 import { VideoProjectsListApp } from './VideoProjectsListApp'
 import { PdfWriterApp } from './PdfWriterApp'
 import { FontProjectsApp } from './FontProjectsApp'
-import { format, formatDistanceToNow } from 'date-fns'
 import { useTranslation } from 'react-i18next'
-import { getDateLocale } from '@kubuno/sdk'
 
 // ── Page d'accueil de la suite Paintsharp ─────────────────────────────────────────
 function PaintsharpSuiteHome() {
@@ -31,6 +37,7 @@ function PaintsharpSuiteHome() {
       id:    'vertex',
       label: 'Vertex',
       desc:  t('paintsharp_vertex_desc'),
+      logo:  VertexLogo,
       icon:  Box,
       color: '#e8824a',
       path:  '/paintsharp/vertex',
@@ -40,6 +47,7 @@ function PaintsharpSuiteHome() {
       id:    'layer',
       label: 'Layer',
       desc:  t('paintsharp_layer_desc'),
+      logo:  LayerLogo,
       icon:  Image,
       color: '#4a90e8',
       path:  '/paintsharp/layer',
@@ -49,6 +57,7 @@ function PaintsharpSuiteHome() {
       id:    'apex',
       label: 'Apex',
       desc:  t('paintsharp_apex_desc'),
+      logo:  ApexLogo,
       icon:  PenTool,
       color: '#e84a90',
       path:  '/paintsharp/apex',
@@ -58,6 +67,7 @@ function PaintsharpSuiteHome() {
       id:    'motion',
       label: 'Motion',
       desc:  t('paintsharp_motion_desc'),
+      logo:  MotionLogo,
       icon:  Film,
       color: '#4ae84a',
       path:  '/paintsharp/motion',
@@ -67,6 +77,7 @@ function PaintsharpSuiteHome() {
       id:    'keyframe',
       label: 'Keyframe',
       desc:  t('paintsharp_keyframe_desc'),
+      logo:  KeyframeLogo,
       icon:  Clapperboard,
       color: '#e8e84a',
       path:  '/paintsharp/keyframe',
@@ -76,6 +87,7 @@ function PaintsharpSuiteHome() {
       id:    'pdfwriter',
       label: 'PdfWriter',
       desc:  t('paintsharp_pdfwriter_desc'),
+      logo:  PdfWriterLogo,
       icon:  FileEdit,
       color: '#e84a4a',
       path:  '/paintsharp/pdfwriter',
@@ -85,6 +97,7 @@ function PaintsharpSuiteHome() {
       id:    'fonteditor',
       label: 'FontEditor',
       desc:  t('paintsharp_fonteditor_desc'),
+      logo:  FontEditorLogo,
       icon:  Type,
       color: '#a04ae8',
       path:  '/paintsharp/fonteditor',
@@ -108,7 +121,7 @@ function PaintsharpSuiteHome() {
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {SUBMODULES.map(({ id, label, desc, icon: Icon, color, path, ready }) => (
+          {SUBMODULES.map(({ id, label, desc, icon: Icon, logo: Logo, color, path, ready }) => (
             <button
               key={id}
               onClick={() => ready && navigate(path)}
@@ -122,10 +135,14 @@ function PaintsharpSuiteHome() {
               style={{ background: 'var(--color-surface-0)', borderColor: 'var(--color-border)' }}
             >
               <div className="flex items-start justify-between mb-3">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center"
-                     style={{ background: color + '20' }}>
-                  <Icon size={20} style={{ color }} />
-                </div>
+                {Logo ? (
+                  <Logo size={40} />
+                ) : (
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center"
+                       style={{ background: color + '20' }}>
+                    <Icon size={20} style={{ color }} />
+                  </div>
+                )}
                 {ready
                   ? <ArrowRight size={16} className="text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity mt-2" />
                   : <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-surface-2 text-text-tertiary">
@@ -262,7 +279,7 @@ export function VertexScenesApp({
     const recentItems: StartPageRecentItem[] = scenes.slice(0, 12).map(s => ({
       id:       s.id,
       name:     s.title || t('common_untitled'),
-      subtitle: format(new Date(s.updated_at), 'd MMM', { locale: getDateLocale(i18n.language) }),
+      subtitle: formatDate(new Date(s.updated_at), 'date'),
       icon:     <Box size={18} className="text-text-tertiary" strokeWidth={1.5} />,
       onClick:  () => navigate(`/paintsharp/scene/${s.id}`),
       actions: [
@@ -400,7 +417,7 @@ function SceneCard({
         </div>
         <p className="text-xs text-text-tertiary mt-0.5">
           <Clock size={10} className="inline mr-1" />
-          {formatDistanceToNow(new Date(scene.updated_at), { addSuffix: true, locale: getDateLocale(i18n.language) })}
+          {formatRelative(new Date(scene.updated_at))}
         </p>
       </div>
     </div>

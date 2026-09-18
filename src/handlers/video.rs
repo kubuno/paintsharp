@@ -268,11 +268,16 @@ pub async fn delete_video_project(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    sqlx::query(
-        "DELETE FROM paintsharp.video_projects WHERE id = $1 AND owner_id = $2 AND is_trashed = TRUE",
+    // See scenes::delete — the Drive file must go with the row.
+    let deleted: Option<(Option<Uuid>,)> = sqlx::query_as(
+        "DELETE FROM paintsharp.video_projects WHERE id = $1 AND owner_id = $2 AND is_trashed = TRUE RETURNING file_id",
     )
     .bind(id).bind(user.id)
-    .execute(&state.db).await?;
+    .fetch_optional(&state.db).await?;
+
+    if let Some((file_id,)) = deleted {
+        cf::delete_entity_files(&state, user.id, file_id).await;
+    }
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -424,26 +429,14 @@ pub async fn import_media_from_file(
         return Err(PaintsharpError::NotFound("Projet vidéo introuvable".into()));
     }
 
-    // Récupère le fichier directement depuis le module Files (serveur à serveur).
-    let url = format!("{}/ipc/files/{}/{}/content", state.settings.core.files_url, user.id, dto.file_id);
-    let resp = reqwest::Client::new()
-        .get(&url)
-        .header("X-Internal-Secret", &state.settings.core.internal_secret)
-        .send()
+    // Fetch the file content server-to-server via the Files client, which now
+    // routes through the core relay (/internal/ipc/drive/...).
+    let (info, data) = state.files_client
+        .get_file_content(user.id, dto.file_id)
         .await
         .map_err(|e| PaintsharpError::Internal(anyhow!("Appel Files échoué: {e}")))?;
-    if !resp.status().is_success() {
-        return Err(PaintsharpError::Internal(anyhow!("Files a renvoyé {}", resp.status())));
-    }
-    let body: Value = resp.json().await
-        .map_err(|e| PaintsharpError::Internal(anyhow!("Réponse Files invalide: {e}")))?;
-    let file_name = body["file"]["name"].as_str().unwrap_or("untitled").to_string();
-    let content_type = body["file"]["mime_type"].as_str().unwrap_or("application/octet-stream").to_string();
-    let b64 = body["content"].as_str()
-        .ok_or_else(|| PaintsharpError::Internal(anyhow!("Contenu Files manquant")))?;
-    use base64::Engine as _;
-    let data = base64::engine::general_purpose::STANDARD.decode(b64)
-        .map_err(|e| PaintsharpError::Internal(anyhow!("Décodage base64 échoué: {e}")))?;
+    let file_name = info.name;
+    let content_type = info.mime_type;
 
     // Same ceiling as the multipart upload path above.
     let max_bytes = state.instance().max_media_bytes_or(state.settings.paintsharp.max_media_bytes);

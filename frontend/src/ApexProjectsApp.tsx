@@ -1,11 +1,10 @@
+import { formatDate, formatRelative } from '@kubuno/sdk'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, PenTool, Clock, Star, Trash2, MoreVertical, Pencil, RotateCcw, Copy, ExternalLink } from 'lucide-react'
 import { apexApi, type VectorProjectSummary } from './api'
-import { format, formatDistanceToNow } from 'date-fns'
 import { useTranslation } from 'react-i18next'
-import { getDateLocale } from '@kubuno/sdk'
 import { Button, MenuDropdown, type MenuItem, type MenuDropdownPos } from '@ui'
 import type { StartPageRecentItem } from '@ui'
 import { ModuleStartPage } from '@kubuno/drive'
@@ -119,7 +118,7 @@ export function ApexProjectsApp({
     const recentItems: StartPageRecentItem[] = projects.slice(0, 12).map(p => ({
       id:       p.id,
       name:     p.title || t('apexproj_default_title'),
-      subtitle: format(new Date(p.updated_at), 'd MMM', { locale: getDateLocale(i18n.language) }),
+      subtitle: formatDate(new Date(p.updated_at), 'date'),
       icon:     <PenTool size={18} className="text-text-tertiary" strokeWidth={1.5} />,
       onClick:  () => navigate(`/paintsharp/apex/${p.id}`),
       actions: [
@@ -257,7 +256,7 @@ function ProjectCard({
         </div>
         <p className="text-xs text-text-tertiary mt-0.5">
           <Clock size={10} className="inline mr-1" />
-          {formatDistanceToNow(new Date(project.updated_at), { addSuffix: true, locale: getDateLocale(i18n.language) })}
+          {formatRelative(new Date(project.updated_at))}
         </p>
       </div>
     </div>

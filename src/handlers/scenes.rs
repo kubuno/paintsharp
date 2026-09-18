@@ -238,15 +238,18 @@ pub async fn delete(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let rows = sqlx::query(
-        "DELETE FROM scenes WHERE id = $1 AND owner_id = $2 AND is_trashed = TRUE",
+    // Take the Drive file with the row: keeping it leaves an orphan the user can
+    // still see and click, but which no longer opens onto anything.
+    let deleted: Option<(Option<Uuid>,)> = sqlx::query_as(
+        "DELETE FROM scenes WHERE id = $1 AND owner_id = $2 AND is_trashed = TRUE RETURNING file_id",
     )
     .bind(id).bind(user.id)
-    .execute(&state.db).await?.rows_affected();
+    .fetch_optional(&state.db).await?;
 
-    if rows == 0 {
+    let Some((file_id,)) = deleted else {
         return Err(PaintsharpError::NotFound(id.to_string()));
-    }
+    };
+    cf::delete_entity_files(&state, user.id, file_id).await;
     Ok(Json(json!({ "ok": true })))
 }
 

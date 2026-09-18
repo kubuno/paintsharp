@@ -7700,7 +7700,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                 <span className="text-[11px]" style={{ color: C.textDim }}>{t('apex_trace_preset')}</span>
                 {(['bw', 'poster', 'photo'] as const).map(p => (
                   <button key={p} onClick={() => patchTrace(TRACE_PRESETS[p])}
-                    className="px-2.5 py-1 rounded-full text-[11px] hover:brightness-110"
+                    className="px-2.5 py-1 rounded-md text-[11px] hover:brightness-110"
                     style={{ background: C.toolbar, color: C.text, border: `1px solid ${C.border}` }}>
                     {t(`apex_trace_preset_${p}`)}
                   </button>

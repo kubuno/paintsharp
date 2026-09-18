@@ -361,13 +361,15 @@ pub async fn delete_animation(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let rows = sqlx::query(
-        "DELETE FROM paintsharp.animations WHERE id = $1 AND owner_id = $2 AND is_trashed = TRUE",
+    // See scenes::delete — the Drive file must go with the row.
+    let deleted: Option<(Option<Uuid>,)> = sqlx::query_as(
+        "DELETE FROM paintsharp.animations WHERE id = $1 AND owner_id = $2 AND is_trashed = TRUE RETURNING file_id",
     )
     .bind(id).bind(user.id)
-    .execute(&state.db).await?.rows_affected();
+    .fetch_optional(&state.db).await?;
 
-    if rows == 0 { return Err(PaintsharpError::NotFound(format!("Animation {id}"))); }
+    let Some((file_id,)) = deleted else { return Err(PaintsharpError::NotFound(format!("Animation {id}"))) };
+    cf::delete_entity_files(&state, user.id, file_id).await;
     Ok(Json(json!({ "ok": true })))
 }
 

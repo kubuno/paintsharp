@@ -11,7 +11,8 @@ name = "kubuno-paintsharp"
 path = "src/main.rs"
 
 [dependencies]
-kubuno-drive = { git = "https://github.com/kubuno/drive", tag = "drive-v0.1.4", package = "kubuno-drive", default-features = false }
+# TEMP TEST relais IPC — repointer sur tag drive-v0.1.5 pour la release cross-repo
+kubuno-drive = { path = "../drive", package = "kubuno-drive", default-features = false }
 tokio              = { workspace = true }
 axum               = { workspace = true }
 tower              = { workspace = true }
@@ -27,6 +28,7 @@ validator          = { workspace = true }
 tracing            = { workspace = true }
 tracing-subscriber = { workspace = true }
 kubuno-seccomp     = { workspace = true }
+kubuno-modauth     = { workspace = true }
 thiserror          = { workspace = true }
 anyhow             = { workspace = true }
 uuid               = { workspace = true }
@@ -102,6 +104,8 @@ tracing-appender   = "0.2"
 tokio-util         = { version = "0.7", features = ["io"] }
 kubuno-storage     = { git = "https://github.com/kubuno/core", tag = "storage-v0.1.1", package = "kubuno-storage" }
 kubuno-seccomp     = { git = "https://github.com/kubuno/core", tag = "seccomp-v0.1.1", package = "kubuno-seccomp" }
+# Verifies the signed identity token minted by the core (trust boundary).
+kubuno-modauth     = { git = "https://github.com/kubuno/core", tag = "modauth-v0.1.0", package = "kubuno-modauth" }
 
 # Erreurs
 thiserror = "1"

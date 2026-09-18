@@ -8,23 +8,18 @@
  * `sdkVersion` permet de rejeter une incompatibilité de contrat.
  */
 import { lazy } from 'react'
-import {
-  RouteRegistry,
-  CollapseSidebarRegistry,
-  WaffleAppRegistry,
-  FileTypeRegistry,
-  FaviconRegistry,
-  SlotRegistry,
-  ExtensionRegistry,
-  ModuleSettingsRegistry,
-  useSidebarStore,
-  useToolbarStore,
-  SDK_VERSION,
-} from '@kubuno/sdk'
+import { RouteRegistry, CollapseSidebarRegistry, WaffleAppRegistry, FileTypeRegistry, FaviconRegistry, SlotRegistry, ExtensionRegistry, ModuleSettingsRegistry, useSidebarStore, useToolbarStore, SDK_VERSION } from '@kubuno/sdk'
 import { Box, Image, PenTool, Clapperboard, Film, FileEdit, Type } from 'lucide-react'
 import './index.css'
 import './i18n'
 import { PaintsharpLogo } from './PaintsharpLogo'
+import ApexLogo from './ApexLogo'
+import LayerLogo from './LayerLogo'
+import MotionLogo from './MotionLogo'
+import VertexLogo from './VertexLogo'
+import KeyframeLogo from './KeyframeLogo'
+import PdfWriterLogo from './PdfWriterLogo'
+import FontEditorLogo from './FontEditorLogo'
 import { paintsharpNewActionItems } from './PaintsharpNewActions'
 import PaintsharpSidebarBody from './PaintsharpSidebarBody'
 import PaintsharpPdfOpenWithAction, { isPdfFile } from './PaintsharpPdfOpenWithAction'
@@ -109,20 +104,29 @@ export function register() {
   CollapseSidebarRegistry.add('/paintsharp')
 
   // Favicon de l'onglet quand on est dans PaintSharp (sinon favicon Kubuno).
-  FaviconRegistry.register('paintsharp', '/paintsharp-logo.svg')
+  // Apex, Layer and Motion have their own logos: the tab shows them under their paths.
+  FaviconRegistry.register('paintsharp-apex', '/paintsharp-apex-logo.png')
+  FaviconRegistry.register('paintsharp-layer', '/paintsharp-layer-logo.png')
+  FaviconRegistry.register('paintsharp-motion', '/paintsharp-motion-logo.png')
+  FaviconRegistry.register('paintsharp-vertex', '/paintsharp-vertex-logo.png')
+  FaviconRegistry.register('paintsharp-keyframe', '/paintsharp-keyframe-logo.png')
+  FaviconRegistry.register('paintsharp-pdfwriter', '/paintsharp-pdfwriter-logo.png')
+  FaviconRegistry.register('paintsharp-fonteditor', '/paintsharp-fonteditor-logo.png')
+
+  FaviconRegistry.register('paintsharp', '/paintsharp-logo.png')
 
   // The header gear button opens the per-user PaintSharp settings while in /paintsharp.
   ModuleSettingsRegistry.register('paintsharp')
 
   WaffleAppRegistry.register('paintsharp', 'PaintSharp', [
     { id: 'paintsharp',             label: 'PaintSharp',      Icon: PaintsharpLogo, path: '/paintsharp' },
-    { id: 'paintsharp-vertex',      label: 'Vertex',     Icon: Box,       path: '/paintsharp/vertex' },
-    { id: 'paintsharp-layer',       label: 'Layer',      Icon: Image,     path: '/paintsharp/layer' },
-    { id: 'paintsharp-apex',        label: 'Apex',       Icon: PenTool,   path: '/paintsharp/apex' },
-    { id: 'paintsharp-keyframe',    label: 'Keyframe',   Icon: Clapperboard, path: '/paintsharp/keyframe' },
-    { id: 'paintsharp-motion',      label: 'Motion',     Icon: Film,      path: '/paintsharp/motion' },
-    { id: 'paintsharp-pdfwriter',   label: 'PdfWriter',  Icon: FileEdit,  path: '/paintsharp/pdfwriter' },
-    { id: 'paintsharp-fonteditor',  label: 'FontEditor', Icon: Type,      path: '/paintsharp/fonteditor' },
+    { id: 'paintsharp-vertex',      label: 'Vertex',     Icon: VertexLogo,path: '/paintsharp/vertex' },
+    { id: 'paintsharp-layer',       label: 'Layer',      Icon: LayerLogo, path: '/paintsharp/layer' },
+    { id: 'paintsharp-apex',        label: 'Apex',       Icon: ApexLogo,  path: '/paintsharp/apex' },
+    { id: 'paintsharp-keyframe',    label: 'Keyframe',   Icon: KeyframeLogo, path: '/paintsharp/keyframe' },
+    { id: 'paintsharp-motion',      label: 'Motion',     Icon: MotionLogo,path: '/paintsharp/motion' },
+    { id: 'paintsharp-pdfwriter',   label: 'PdfWriter',  Icon: PdfWriterLogo, path: '/paintsharp/pdfwriter' },
+    { id: 'paintsharp-fonteditor',  label: 'FontEditor', Icon: FontEditorLogo, path: '/paintsharp/fonteditor' },
   ])
 
   useSidebarStore.getState().register({

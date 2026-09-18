@@ -1,11 +1,10 @@
+import { formatDate, formatRelative } from '@kubuno/sdk'
 import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Type, Clock, Star, Trash2, MoreVertical, Pencil, RotateCcw, Copy, ExternalLink, Upload } from 'lucide-react'
 import { fontApi, type FontProjectSummary } from './api'
-import { format, formatDistanceToNow } from 'date-fns'
 import { useTranslation } from 'react-i18next'
-import { getDateLocale } from '@kubuno/sdk'
 import { Button, MenuDropdown, type MenuItem, type MenuDropdownPos } from '@ui'
 import type { StartPageRecentItem } from '@ui'
 import { ModuleStartPage } from '@kubuno/drive'
@@ -126,7 +125,7 @@ export function FontProjectsApp({
     const recentItems: StartPageRecentItem[] = projects.slice(0, 12).map(p => ({
       id:       p.id,
       name:     p.title || t('fontproj_default_title'),
-      subtitle: format(new Date(p.updated_at), 'd MMM', { locale: getDateLocale(i18n.language) }),
+      subtitle: formatDate(new Date(p.updated_at), 'date'),
       icon:     <Type size={18} className="text-text-tertiary" strokeWidth={1.5} />,
       onClick:  () => navigate(`/paintsharp/fonteditor/${p.id}`),
       actions: [
@@ -265,7 +264,7 @@ function ProjectCard({
         </div>
         <p className="text-xs text-text-tertiary mt-0.5">
           <Clock size={10} className="inline mr-1" />
-          {formatDistanceToNow(new Date(project.updated_at), { addSuffix: true, locale: getDateLocale(i18n.language) })}
+          {formatRelative(new Date(project.updated_at))}
         </p>
       </div>
     </div>

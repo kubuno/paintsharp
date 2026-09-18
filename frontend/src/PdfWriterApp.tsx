@@ -1,3 +1,4 @@
+import { formatDate, formatRelative } from '@kubuno/sdk'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -10,9 +11,7 @@ import { Button, MenuDropdown, type MenuItem, type MenuDropdownPos } from '@ui'
 import type { StartPageRecentItem } from '@ui'
 import { ModuleStartPage } from '@kubuno/drive'
 import type { FileItem } from '@kubuno/drive'
-import { format, formatDistanceToNow } from 'date-fns'
 import { useTranslation } from 'react-i18next'
-import { getDateLocale } from '@kubuno/sdk'
 
 interface Props {
   starred?: boolean
@@ -153,7 +152,7 @@ export function PdfWriterApp({ starred, trashed }: Props = {}) {
     const recentItems: StartPageRecentItem[] = docs.slice(0, 12).map(d => ({
       id:       d.id,
       name:     d.title || t('pdfapp_title'),
-      subtitle: format(new Date(d.updated_at), 'd MMM', { locale: getDateLocale(i18n.language) }),
+      subtitle: formatDate(new Date(d.updated_at), 'date'),
       icon:     <FileEdit size={18} className="text-text-tertiary" strokeWidth={1.5} />,
       onClick:  () => navigate(`/paintsharp/pdfwriter/${d.id}`),
       actions: [
@@ -279,7 +278,7 @@ function DocCard({
         </div>
         <p className="text-xs text-text-tertiary mt-0.5">
           <Clock size={10} className="inline mr-1" />
-          {formatDistanceToNow(new Date(doc.updated_at), { addSuffix: true, locale: getDateLocale(i18n.language) })}
+          {formatRelative(new Date(doc.updated_at))}
         </p>
       </div>
     </div>

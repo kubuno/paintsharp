@@ -233,20 +233,24 @@ pub async fn delete_document(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let doc: Option<(Option<String>,)> = sqlx::query_as(
+    // `source_file_id` is deliberately NOT collected: that one is the PDF the user
+    // imported, which stays theirs. Only the editor's own file goes with the row —
+    // keeping it would leave an orphan that no longer opens onto anything.
+    let doc: Option<(Option<String>, Option<Uuid>)> = sqlx::query_as(
         "DELETE FROM paintsharp.pdf_documents WHERE id = $1 AND owner_id = $2 AND is_trashed = TRUE
-         RETURNING source_path",
+         RETURNING source_path, file_id",
     )
     .bind(id).bind(user.id)
     .fetch_optional(&state.db).await?;
 
-    if doc.is_none() {
+    let Some((source_path, file_id)) = doc else {
         return Err(PaintsharpError::NotFound(id.to_string()));
-    }
+    };
 
-    if let Some((Some(path),)) = doc {
+    if let Some(path) = source_path {
         let _ = tokio::fs::remove_file(&path).await;
     }
+    cf::delete_entity_files(&state, user.id, file_id).await;
 
     Ok(Json(json!({ "ok": true })))
 }

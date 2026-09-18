@@ -1,6 +1,5 @@
 use axum::{
     extract::DefaultBodyLimit,
-    middleware,
     routing::{delete, get, post, put},
     Router,
 };
@@ -106,7 +105,7 @@ pub fn build(state: AppState) -> Router {
         .route("/collab/pdf/:doc_id",                    get(collab_pdf::ws_handler))
         // Paramètres du module
         .route("/settings",                get(settings_handler))
-        .layer(middleware::from_fn(require_auth));
+        .layer(axum::middleware::from_fn_with_state(state.clone(), require_auth));
 
     Router::new()
         .route("/health", get(health::health))

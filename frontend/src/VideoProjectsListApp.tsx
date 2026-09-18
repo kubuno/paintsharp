@@ -1,11 +1,10 @@
+import { formatDate, formatRelative } from '@kubuno/sdk'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Film, Clock, Trash2, MoreVertical, RotateCcw, Copy, ExternalLink } from 'lucide-react'
 import { motionApi, type VideoProjectSummary } from './api'
-import { format, formatDistanceToNow } from 'date-fns'
 import { useTranslation } from 'react-i18next'
-import { getDateLocale } from '@kubuno/sdk'
 import { Button, MenuDropdown, type MenuItem, type MenuDropdownPos } from '@ui'
 import type { StartPageRecentItem } from '@ui'
 import { ModuleStartPage } from '@kubuno/drive'
@@ -149,7 +148,7 @@ export function VideoProjectsListApp({ trashed }: { trashed?: boolean }) {
     const recentItems: StartPageRecentItem[] = items.slice(0, 12).map(p => ({
       id:       p.id,
       name:     p.title || t('videolist_title'),
-      subtitle: format(new Date(p.updated_at), 'd MMM', { locale: getDateLocale(i18n.language) }),
+      subtitle: formatDate(new Date(p.updated_at), 'date'),
       icon:     <Film size={18} className="text-text-tertiary" strokeWidth={1.5} />,
       onClick:  () => navigate(`/paintsharp/motion/${p.id}`),
       actions: [
@@ -290,7 +289,7 @@ function VideoCard({
         </div>
         <p className="text-xs text-text-tertiary mt-0.5">
           <Clock size={10} className="inline mr-1" />
-          {formatDistanceToNow(new Date(proj.updated_at), { addSuffix: true, locale: getDateLocale(i18n.language) })}
+          {formatRelative(new Date(proj.updated_at))}
         </p>
       </div>
     </div>

@@ -306,6 +306,27 @@ pub async fn create_font_file(
     create_kubuno_file(state, user_id, "PaintSharp/FontEditor", title, "kbfnt", FONT_MIME, "font", content).await
 }
 
+/// Delete the Drive files an entity owned, once its row has been deleted.
+///
+/// An entity's file IS its face in Drive: keeping it once the entity is gone
+/// leaves an orphan the user can still see and click, but which opens onto
+/// nothing. Call this on PERMANENT deletion only — trashing keeps the row, so
+/// the file must stay too.
+///
+/// Best-effort: a Drive failure is logged, never fatal, since the row is already
+/// gone and returning an error would leave the caller unable to retry.
+pub async fn delete_entity_files(
+    state:    &AppState,
+    user_id:  Uuid,
+    file_ids: impl IntoIterator<Item = Uuid>,
+) {
+    for fid in file_ids {
+        if let Err(e) = state.files_client.delete_file(user_id, fid).await {
+            tracing::warn!(file_id = %fid, error = %e, "Drive: delete_file failed — file left orphaned");
+        }
+    }
+}
+
 // ── Noms de fichiers : DÉLÉGUÉS à la face client du module `files` ────────────
 pub fn strip_ext(name: &str) -> String { crate::files_client::strip_ext(name) }
 /// Nom complet du fichier .kb*** (best-effort).

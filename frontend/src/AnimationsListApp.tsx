@@ -1,11 +1,10 @@
+import { formatDate, formatRelative } from '@kubuno/sdk'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Clapperboard, Clock, Trash2, MoreVertical, RotateCcw, Copy, ExternalLink } from 'lucide-react'
 import { keyframeApi, type AnimationSummary } from './api'
-import { format, formatDistanceToNow } from 'date-fns'
 import { useTranslation } from 'react-i18next'
-import { getDateLocale } from '@kubuno/sdk'
 import { Button, MenuDropdown, type MenuItem, type MenuDropdownPos } from '@ui'
 import type { StartPageRecentItem } from '@ui'
 import { ModuleStartPage } from '@kubuno/drive'
@@ -147,7 +146,7 @@ export function AnimationsListApp({ trashed }: { trashed?: boolean }) {
     const recentItems: StartPageRecentItem[] = items.slice(0, 12).map(a => ({
       id:       a.id,
       name:     a.title || t('animlist_title'),
-      subtitle: format(new Date(a.updated_at), 'd MMM', { locale: getDateLocale(i18n.language) }),
+      subtitle: formatDate(new Date(a.updated_at), 'date'),
       icon:     <Clapperboard size={18} className="text-text-tertiary" strokeWidth={1.5} />,
       onClick:  () => navigate(`/paintsharp/keyframe/${a.id}`),
       actions: [
@@ -287,7 +286,7 @@ function AnimCard({
         </div>
         <p className="text-xs text-text-tertiary mt-0.5">
           <Clock size={10} className="inline mr-1" />
-          {formatDistanceToNow(new Date(anim.updated_at), { addSuffix: true, locale: getDateLocale(i18n.language) })}
+          {formatRelative(new Date(anim.updated_at))}
         </p>
       </div>
     </div>
