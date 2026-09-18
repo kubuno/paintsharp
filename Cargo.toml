@@ -11,8 +11,7 @@ name = "kubuno-paintsharp"
 path = "src/main.rs"
 
 [dependencies]
-# TEMP TEST relais IPC — repointer sur tag drive-v0.1.5 pour la release cross-repo
-kubuno-drive = { path = "../drive", package = "kubuno-drive", default-features = false }
+kubuno-drive = { git = "https://github.com/kubuno/drive", tag = "drive-v0.1.10", package = "kubuno-drive", default-features = false }
 tokio              = { workspace = true }
 axum               = { workspace = true }
 tower              = { workspace = true }
