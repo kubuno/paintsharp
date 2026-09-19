@@ -42,27 +42,34 @@ pub async fn list_projects(
     let trashed = q.trashed.unwrap_or(false);
     let starred = q.starred.unwrap_or(false);
 
-    const COLS: &str = "id, owner_id, title, thumbnail_path, glyph_count, is_starred, updated_at, created_at";
+    // Shared column list for the three listings. A macro rather than a `const`
+    // so `concat!` folds every query into a single `&'static str` literal: the
+    // compiler, not a manual audit, guarantees no run-time data reaches the SQL.
+    macro_rules! summary_cols {
+        () => {
+            "id, owner_id, title, thumbnail_path, glyph_count, is_starred, updated_at, created_at"
+        };
+    }
 
     let projects = if starred {
-        sqlx::query_as::<_, FontProjectSummary>(&format!(
-            "SELECT {COLS} FROM font_projects
+        sqlx::query_as::<_, FontProjectSummary>(concat!(
+            "SELECT ", summary_cols!(), " FROM font_projects
              WHERE owner_id = $1 AND is_starred = TRUE AND is_trashed = FALSE
              ORDER BY updated_at DESC LIMIT $2 OFFSET $3",
         ))
         .bind(user.id).bind(limit).bind(offset)
         .fetch_all(&state.db).await?
     } else if trashed {
-        sqlx::query_as::<_, FontProjectSummary>(&format!(
-            "SELECT {COLS} FROM font_projects
+        sqlx::query_as::<_, FontProjectSummary>(concat!(
+            "SELECT ", summary_cols!(), " FROM font_projects
              WHERE owner_id = $1 AND is_trashed = TRUE
              ORDER BY trashed_at DESC LIMIT $2 OFFSET $3",
         ))
         .bind(user.id).bind(limit).bind(offset)
         .fetch_all(&state.db).await?
     } else {
-        sqlx::query_as::<_, FontProjectSummary>(&format!(
-            "SELECT {COLS} FROM font_projects
+        sqlx::query_as::<_, FontProjectSummary>(concat!(
+            "SELECT ", summary_cols!(), " FROM font_projects
              WHERE owner_id = $1 AND is_trashed = FALSE
              ORDER BY updated_at DESC LIMIT $2 OFFSET $3",
         ))

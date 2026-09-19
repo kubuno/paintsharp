@@ -42,7 +42,7 @@ toml               = { workspace = true }
 clap               = { workspace = true }
 hex                = { workspace = true }
 tokio-util         = { workspace = true }
-lopdf              = "0.34"
+lopdf              = "0.42"
 # Raster → vector tracing (visioncortex engine — the VTracer pipeline is
 # vendored in services/vtrace.rs to avoid the vtracer crate's clap2/image0.23)
 visioncortex       = "0.8"
@@ -72,7 +72,7 @@ tower-http  = { version = "0.6",  features = ["cors", "compression-gzip", "trace
 async-trait = "0.1"
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "migrate", "tls-rustls", "bigdecimal"] }
+sqlx = { version = "0.9", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "migrate", "tls-rustls", "bigdecimal"] }
 
 # Sérialisation
 serde      = { version = "1", features = ["derive"] }
@@ -124,4 +124,4 @@ tokio-tungstenite   = { version = "0.24", features = ["native-tls"] }
 async-stream        = "0.3"
 totp-rs             = { version = "5", features = ["gen_secret", "otpauth"] }
 zip                 = "2"
-quick-xml           = { version = "0.37", features = ["serialize"] }
+quick-xml           = { version = "0.41", features = ["serialize"] }
