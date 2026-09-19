@@ -12,8 +12,8 @@
 //! Every field here is read by code that acts on it — a knob that changes
 //! nothing is worse than an absent one:
 //!   * `max_document_bytes`   → `services::content_files` (single write path of
-//!                              every editor: Vertex, Apex, Layer, Motion,
-//!                              Keyframe, PdfWriter, FontEditor);
+//!     every editor: Vertex, Apex, Layer, Motion, Keyframe, PdfWriter,
+//!     FontEditor);
 //!   * `enable_collaboration` → the six `handlers::collab_*` WebSocket handlers;
 //!   * `max_media_bytes`      → `handlers::video` (both media import paths).
 //!
