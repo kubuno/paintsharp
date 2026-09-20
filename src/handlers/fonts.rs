@@ -6,21 +6,11 @@ use uuid::Uuid;
 use crate::{
     errors::{PaintsharpError, Result},
     middleware::PaintsharpUser,
-    models::font::{CreateFontProjectDto, FontProject, FontProjectSummary, UpdateFontProjectDto},
+    models::font::{CreateFontProjectDto, UpdateFontProjectDto},
     services::content_files as cf,
+    services::store::fonts as store,
     state::AppState,
 };
-
-/// file_id of a project's content file (error when missing).
-async fn project_file_id(state: &AppState, project_id: Uuid, user_id: Uuid) -> Result<Uuid> {
-    let fid: Option<Uuid> = sqlx::query_scalar(
-        "SELECT file_id FROM font_projects WHERE id = $1 AND owner_id = $2 AND is_trashed = FALSE",
-    )
-    .bind(project_id).bind(user_id)
-    .fetch_optional(&state.db).await?
-    .ok_or_else(|| PaintsharpError::NotFound(project_id.to_string()))?;
-    fid.ok_or_else(|| PaintsharpError::Internal(anyhow::anyhow!("projet sans fichier de contenu")))
-}
 
 #[derive(Debug, Deserialize)]
 pub struct ListQuery {
@@ -39,44 +29,15 @@ pub async fn list_projects(
 ) -> Result<Json<Value>> {
     let limit   = q.limit.unwrap_or(50).min(200);
     let offset  = q.offset.unwrap_or(0);
-    let trashed = q.trashed.unwrap_or(false);
-    let starred = q.starred.unwrap_or(false);
-
-    // Shared column list for the three listings. A macro rather than a `const`
-    // so `concat!` folds every query into a single `&'static str` literal: the
-    // compiler, not a manual audit, guarantees no run-time data reaches the SQL.
-    macro_rules! summary_cols {
-        () => {
-            "id, owner_id, title, thumbnail_path, glyph_count, is_starred, updated_at, created_at"
-        };
-    }
-
-    let projects = if starred {
-        sqlx::query_as::<_, FontProjectSummary>(concat!(
-            "SELECT ", summary_cols!(), " FROM font_projects
-             WHERE owner_id = $1 AND is_starred = TRUE AND is_trashed = FALSE
-             ORDER BY updated_at DESC LIMIT $2 OFFSET $3",
-        ))
-        .bind(user.id).bind(limit).bind(offset)
-        .fetch_all(&state.db).await?
-    } else if trashed {
-        sqlx::query_as::<_, FontProjectSummary>(concat!(
-            "SELECT ", summary_cols!(), " FROM font_projects
-             WHERE owner_id = $1 AND is_trashed = TRUE
-             ORDER BY trashed_at DESC LIMIT $2 OFFSET $3",
-        ))
-        .bind(user.id).bind(limit).bind(offset)
-        .fetch_all(&state.db).await?
-    } else {
-        sqlx::query_as::<_, FontProjectSummary>(concat!(
-            "SELECT ", summary_cols!(), " FROM font_projects
-             WHERE owner_id = $1 AND is_trashed = FALSE
-             ORDER BY updated_at DESC LIMIT $2 OFFSET $3",
-        ))
-        .bind(user.id).bind(limit).bind(offset)
-        .fetch_all(&state.db).await?
-    };
-
+    let projects = store::list_projects(
+        &state.db,
+        user.id,
+        q.starred.unwrap_or(false),
+        q.trashed.unwrap_or(false),
+        limit,
+        offset,
+    )
+    .await?;
     Ok(Json(json!({ "projects": projects })))
 }
 
@@ -87,17 +48,12 @@ pub async fn create_project(
 ) -> Result<Json<Value>> {
     let title = body.title.unwrap_or_else(|| "Police sans titre".to_string());
 
-    let project_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO font_projects (owner_id, title) VALUES ($1, $2) RETURNING id",
-    )
-    .bind(user.id).bind(&title)
-    .fetch_one(&state.db).await?;
+    let project_id = store::create_project(&state.db, user.id, &title).await?;
 
     // Content (metrics/glyphs/kerning) → .kbfnt file in the files module.
     let content = cf::font_content_from(cf::empty_font_data(&title));
     let file_id = cf::create_font_file(&state, user.id, &title, &content).await?;
-    sqlx::query("UPDATE font_projects SET file_id = $1 WHERE id = $2")
-        .bind(file_id).bind(project_id).execute(&state.db).await?;
+    store::set_file_id(&state.db, project_id, file_id).await?;
 
     Ok(Json(json!({ "id": project_id, "title": title })))
 }
@@ -107,12 +63,9 @@ pub async fn get_project(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let project = sqlx::query_as::<_, FontProject>(
-        "SELECT * FROM font_projects WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user.id)
-    .fetch_optional(&state.db).await?
-    .ok_or_else(|| PaintsharpError::NotFound(id.to_string()))?;
+    let project = store::get_project(&state.db, id, user.id)
+        .await?
+        .ok_or_else(|| PaintsharpError::NotFound(id.to_string()))?;
 
     let mut val = serde_json::to_value(&project).unwrap_or_default();
 
@@ -128,8 +81,7 @@ pub async fn get_project(
         if let Some(fname) = cf::file_name(&state, user.id, fid).await {
             let stem = cf::strip_ext(&fname);
             if !stem.is_empty() && stem != project.title {
-                sqlx::query("UPDATE font_projects SET title = $2 WHERE id = $1")
-                    .bind(id).bind(&stem).execute(&state.db).await?;
+                store::rename_project(&state.db, id, &stem).await?;
                 val["title"] = Value::String(stem);
             }
         }
@@ -146,27 +98,13 @@ pub async fn update_project(
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateFontProjectDto>,
 ) -> Result<Json<Value>> {
-    let rows = sqlx::query(
-        "UPDATE font_projects SET
-            title          = COALESCE($3, title),
-            thumbnail_path = COALESCE($4, thumbnail_path),
-            is_starred     = COALESCE($5, is_starred),
-            last_edited_by = $2
-         WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user.id)
-    .bind(&body.title)
-    .bind(&body.thumbnail_path)
-    .bind(body.is_starred)
-    .execute(&state.db).await?.rows_affected();
-
-    if rows == 0 {
+    if store::update_project(&state.db, id, user.id, &body).await? == 0 {
         return Err(PaintsharpError::NotFound(id.to_string()));
     }
     // Title changed → rename the .kbfnt file (title = file name). Best-effort.
     if let Some(t) = body.title.as_ref() {
         if !t.trim().is_empty() {
-            if let Ok(fid) = project_file_id(&state, id, user.id).await {
+            if let Ok(fid) = store::project_file_id(&state.db, id, user.id).await {
                 cf::rename_content_file(&state, user.id, fid, t, "kbfnt").await;
             }
         }
@@ -191,16 +129,11 @@ pub async fn save_font_data(
     }
 
     // Write the whole font definition into the .kbfnt file.
-    let file_id = project_file_id(&state, id, user.id).await?;
+    let file_id = store::project_file_id(&state.db, id, user.id).await?;
     let content = cf::font_content_from(body.data);
     cf::write_content(&state, user.id, file_id, &content).await?;
 
-    sqlx::query(
-        "UPDATE font_projects SET glyph_count = COALESCE($3, glyph_count), last_edited_by = $2
-         WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user.id).bind(body.glyph_count)
-    .execute(&state.db).await?;
+    store::save_glyphs(&state.db, id, user.id, body.glyph_count).await?;
 
     Ok(Json(json!({ "ok": true })))
 }
@@ -210,14 +143,9 @@ pub async fn trash_project(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let rows = sqlx::query(
-        "UPDATE font_projects SET is_trashed = TRUE, trashed_at = NOW()
-         WHERE id = $1 AND owner_id = $2 AND is_trashed = FALSE",
-    )
-    .bind(id).bind(user.id)
-    .execute(&state.db).await?.rows_affected();
-
-    if rows == 0 { return Err(PaintsharpError::NotFound(id.to_string())); }
+    if store::trash_project(&state.db, id, user.id).await? == 0 {
+        return Err(PaintsharpError::NotFound(id.to_string()));
+    }
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -226,12 +154,7 @@ pub async fn restore_project(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    sqlx::query(
-        "UPDATE font_projects SET is_trashed = FALSE, trashed_at = NULL
-         WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user.id)
-    .execute(&state.db).await?;
+    store::restore_project(&state.db, id, user.id).await?;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -241,13 +164,13 @@ pub async fn delete_project(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
     // See scenes::delete — the Drive file must go with the row.
-    let deleted: Option<(Option<Uuid>,)> = sqlx::query_as(
-        "DELETE FROM font_projects WHERE id = $1 AND owner_id = $2 AND is_trashed = TRUE RETURNING file_id",
+    let Some(file_id) = crate::services::store::delete_trashed_returning_file_id(
+        &state.db, "paintsharp.font_projects", id, user.id,
     )
-    .bind(id).bind(user.id)
-    .fetch_optional(&state.db).await?;
-
-    let Some((file_id,)) = deleted else { return Err(PaintsharpError::NotFound(id.to_string())) };
+    .await?
+    else {
+        return Err(PaintsharpError::NotFound(id.to_string()));
+    };
     cf::delete_entity_files(&state, user.id, file_id).await;
     Ok(Json(json!({ "ok": true })))
 }
@@ -257,12 +180,9 @@ pub async fn duplicate_project(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let source: FontProject = sqlx::query_as::<_, FontProject>(
-        "SELECT * FROM font_projects WHERE id = $1 AND owner_id = $2 AND is_trashed = FALSE",
-    )
-    .bind(id).bind(user.id)
-    .fetch_optional(&state.db).await?
-    .ok_or_else(|| PaintsharpError::NotFound(id.to_string()))?;
+    let source = store::get_active_project(&state.db, id, user.id)
+        .await?
+        .ok_or_else(|| PaintsharpError::NotFound(id.to_string()))?;
 
     let source_content = match source.file_id {
         Some(fid) => cf::read_content(&state, user.id, fid).await
@@ -271,16 +191,17 @@ pub async fn duplicate_project(
     };
 
     let new_title = format!("{} (copie)", source.title);
-    let new_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO font_projects (owner_id, title, glyph_count, thumbnail_path)
-         VALUES ($1, $2, $3, $4) RETURNING id",
+    let new_id = store::create_project_full(
+        &state.db,
+        user.id,
+        &new_title,
+        source.glyph_count,
+        source.thumbnail_path.as_deref(),
     )
-    .bind(user.id).bind(&new_title).bind(source.glyph_count).bind(&source.thumbnail_path)
-    .fetch_one(&state.db).await?;
+    .await?;
 
     let new_file_id = cf::create_font_file(&state, user.id, &new_title, &source_content).await?;
-    sqlx::query("UPDATE font_projects SET file_id = $1 WHERE id = $2")
-        .bind(new_file_id).bind(new_id).execute(&state.db).await?;
+    store::set_file_id(&state.db, new_id, new_file_id).await?;
 
     Ok(Json(json!({ "id": new_id })))
 }
@@ -294,11 +215,8 @@ pub async fn open_by_file(
     Extension(user): Extension<PaintsharpUser>,
     Json(dto): Json<OpenByFileDto>,
 ) -> Result<Json<Value>> {
-    let id: Uuid = sqlx::query_scalar(
-        "SELECT id FROM paintsharp.font_projects WHERE file_id = $1 AND owner_id = $2 AND is_trashed = FALSE",
-    )
-    .bind(dto.file_id).bind(user.id)
-    .fetch_optional(&state.db).await?
-    .ok_or_else(|| PaintsharpError::NotFound(format!("Aucun projet lié au fichier {}", dto.file_id)))?;
+    let id = store::find_by_file(&state.db, dto.file_id, user.id)
+        .await?
+        .ok_or_else(|| PaintsharpError::NotFound(format!("Aucun projet lié au fichier {}", dto.file_id)))?;
     Ok(Json(json!({ "id": id })))
 }

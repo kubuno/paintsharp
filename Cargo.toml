@@ -28,6 +28,7 @@ tracing            = { workspace = true }
 tracing-subscriber = { workspace = true }
 kubuno-seccomp     = { workspace = true }
 kubuno-modauth     = { workspace = true }
+kubuno-db          = { workspace = true }
 thiserror          = { workspace = true }
 anyhow             = { workspace = true }
 uuid               = { workspace = true }
@@ -51,6 +52,9 @@ image              = { version = "0.25", default-features = false, features = ["
 
 # ─── Workspace mono-crate (deps tierces recopiées du monorepo kubuno/core ;
 #     crates partagées consommées via dépendances git taguées) ───
+[dev-dependencies]
+tempfile = "3"
+
 [workspace]
 
 [workspace.package]
@@ -72,7 +76,10 @@ tower-http  = { version = "0.6",  features = ["cors", "compression-gzip", "trace
 async-trait = "0.1"
 
 # Database
-sqlx = { version = "0.9", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "migrate", "tls-rustls", "bigdecimal"] }
+# All three drivers are compiled in; the engine is a run-time choice made by
+# kubuno-db. The FromRow derive on the module's structs resolves against the
+# three row types, so the three drivers must be present here too.
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "uuid", "chrono", "json", "migrate", "tls-rustls", "bigdecimal", "derive", "macros", "postgres", "mysql", "sqlite"] }
 
 # Sérialisation
 serde      = { version = "1", features = ["derive"] }
@@ -105,6 +112,11 @@ kubuno-storage     = { git = "https://github.com/kubuno/core", tag = "storage-v0
 kubuno-seccomp     = { git = "https://github.com/kubuno/core", tag = "seccomp-v0.1.1", package = "kubuno-seccomp" }
 # Verifies the signed identity token minted by the core (trust boundary).
 kubuno-modauth     = { git = "https://github.com/kubuno/core", tag = "modauth-v0.1.0", package = "kubuno-modauth" }
+# Database foundation: one binary over PostgreSQL / MySQL-MariaDB / SQLite, the
+# engine chosen at run time. Pointed at the local crate so this runtime-dispatch
+# rewrite is what builds; the released form is the tagged one below.
+#   kubuno-db = { git = "https://github.com/kubuno/core", tag = "db-v0.3.0", package = "kubuno-db" }
+kubuno-db          = { path = "../core/crates/kubuno-db" }
 
 # Erreurs
 thiserror = "1"

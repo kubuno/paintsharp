@@ -1,5 +1,5 @@
 use crate::{config::Settings, files_client::FilesClient};
-use sqlx::PgPool;
+use kubuno_db::DbPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
@@ -269,7 +269,7 @@ impl VideoHub {
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db:            PgPool,
+    pub db:            DbPool,
     pub settings:      Arc<Settings>,
     pub files_client:  Arc<FilesClient>,
     pub hub:           Arc<CollabHub>,

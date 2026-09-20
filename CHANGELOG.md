@@ -9,6 +9,25 @@ number at release time, and CI publishes that section as the GitHub Release note
 
 ## [Unreleased]
 
+### Changed
+
+- **The database engine is now chosen at run time, not fixed at build time.**
+  PaintSharp runs on **PostgreSQL**, **MySQL/MariaDB** or **SQLite** from a
+  single binary; the administrator names the engine in `[database] engine` and
+  the same install connects to whichever is configured. The `[database]` section
+  gains `engine` and, for SQLite, `path`. Existing PostgreSQL instances keep
+  working unchanged — their applied migrations are byte-identical, so nothing
+  re-runs. This is built on the shared `kubuno-db` foundation.
+- **All database access moved into pool-only service modules** (`services/store/*`),
+  so every create / list / update / delete path is covered by an engine-by-engine
+  portability test (`tests/db_portability.rs`, run against SQLite, MySQL/MariaDB
+  and PostgreSQL).
+
+### Added
+
+- **MySQL/MariaDB and SQLite schema migrations** alongside the existing
+  PostgreSQL ones, so a fresh install can be created on any of the three engines.
+
 ### Security
 
 - **Database driver updated past an unfixable advisory.** The previous line

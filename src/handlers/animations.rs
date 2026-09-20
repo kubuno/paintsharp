@@ -6,22 +6,11 @@ use uuid::Uuid;
 use crate::{
     errors::{PaintsharpError, Result},
     middleware::PaintsharpUser,
-    models::animation::{
-        Animation, AnimationSummary, CreateAnimationDto, UpdateAnimationDto,
-    },
+    models::animation::{CreateAnimationDto, UpdateAnimationDto},
     services::content_files as cf,
+    services::store::animations as store,
     state::AppState,
 };
-
-async fn anim_file_id(state: &AppState, id: Uuid, user_id: Uuid) -> Result<Uuid> {
-    let fid: Option<Uuid> = sqlx::query_scalar(
-        "SELECT file_id FROM paintsharp.animations WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user_id)
-    .fetch_optional(&state.db).await?
-    .ok_or_else(|| PaintsharpError::NotFound(id.to_string()))?;
-    fid.ok_or_else(|| PaintsharpError::Internal(anyhow::anyhow!("animation sans fichier de contenu")))
-}
 
 #[derive(Debug, Deserialize)]
 pub struct ListQuery {
@@ -39,28 +28,10 @@ pub async fn list_animations(
 ) -> Result<Json<Value>> {
     let limit   = q.limit.unwrap_or(50).min(200);
     let offset  = q.offset.unwrap_or(0);
-    let trashed = q.trashed.unwrap_or(false);
-
-    let animations = if trashed {
-        sqlx::query_as::<_, AnimationSummary>(
-            "SELECT id, owner_id, title, composition, thumbnail_path, thumbnail_dirty, updated_at, created_at
-             FROM paintsharp.animations
-             WHERE owner_id = $1 AND is_trashed = TRUE
-             ORDER BY trashed_at DESC LIMIT $2 OFFSET $3",
-        )
-        .bind(user.id).bind(limit).bind(offset)
-        .fetch_all(&state.db).await?
-    } else {
-        sqlx::query_as::<_, AnimationSummary>(
-            "SELECT id, owner_id, title, composition, thumbnail_path, thumbnail_dirty, updated_at, created_at
-             FROM paintsharp.animations
-             WHERE owner_id = $1 AND is_trashed = FALSE
-             ORDER BY updated_at DESC LIMIT $2 OFFSET $3",
-        )
-        .bind(user.id).bind(limit).bind(offset)
-        .fetch_all(&state.db).await?
-    };
-
+    let animations = store::list_animations(
+        &state.db, user.id, q.trashed.unwrap_or(false), limit, offset,
+    )
+    .await?;
     Ok(Json(json!({ "animations": animations })))
 }
 
@@ -187,21 +158,12 @@ pub async fn create_animation(
         "bones": []
     });
 
-    let id: Uuid = sqlx::query_scalar(
-        "INSERT INTO paintsharp.animations (owner_id, title, composition)
-         VALUES ($1, $2, $3) RETURNING id",
-    )
-    .bind(user.id)
-    .bind(&title)
-    .bind(&composition)
-    .fetch_one(&state.db)
-    .await?;
+    let id = store::create_animation(&state.db, user.id, &title, &composition).await?;
 
     // anim_data + assets → fichier .kbanm.
     let content = cf::anim_content_from(anim_data, json!([]));
     let file_id = cf::create_anim_file(&state, user.id, &title, &content).await?;
-    sqlx::query("UPDATE paintsharp.animations SET file_id = $1 WHERE id = $2")
-        .bind(file_id).bind(id).execute(&state.db).await?;
+    store::set_file_id(&state.db, id, file_id).await?;
 
     Ok(Json(json!({ "id": id, "title": title })))
 }
@@ -213,15 +175,9 @@ pub async fn get_animation(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let anim = sqlx::query_as::<_, Animation>(
-        "SELECT id, owner_id, title, composition, file_id, thumbnail_path,
-                thumbnail_dirty, is_trashed, trashed_at, last_edited_by, created_at, updated_at
-         FROM paintsharp.animations WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user.id)
-    .fetch_optional(&state.db)
-    .await?
-    .ok_or_else(|| PaintsharpError::NotFound(format!("Animation {id}")))?;
+    let anim = store::get_animation(&state.db, id, user.id)
+        .await?
+        .ok_or_else(|| PaintsharpError::NotFound(format!("Animation {id}")))?;
 
     // anim_data + assets lus depuis le fichier .kbanm.
     let mut val = serde_json::to_value(&anim).unwrap_or_default();
@@ -237,8 +193,7 @@ pub async fn get_animation(
         if let Some(fname) = cf::file_name(&state, user.id, fid).await {
             let stem = cf::strip_ext(&fname);
             if !stem.is_empty() && stem != anim.title {
-                let _ = sqlx::query("UPDATE paintsharp.animations SET title = $2 WHERE id = $1")
-                    .bind(id).bind(&stem).execute(&state.db).await;
+                let _ = store::rename_animation(&state.db, id, &stem).await;
                 val["title"] = Value::String(stem);
             }
         }
@@ -254,24 +209,12 @@ pub async fn save_animation_data(
     Path(id): Path<Uuid>,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>> {
-    let rows = sqlx::query(
-        "UPDATE paintsharp.animations
-         SET last_edited_by = $1, thumbnail_dirty = TRUE
-         WHERE id = $2 AND owner_id = $3",
-    )
-    .bind(user.id)
-    .bind(id)
-    .bind(user.id)
-    .execute(&state.db)
-    .await?
-    .rows_affected();
-
-    if rows == 0 {
+    if store::mark_edited(&state.db, id, user.id).await? == 0 {
         return Err(PaintsharpError::NotFound(format!("Animation {id}")));
     }
 
     // anim_data → fichier (en conservant les assets existants).
-    let file_id = anim_file_id(&state, id, user.id).await?;
+    let file_id = store::anim_file_id(&state.db, id, user.id).await?;
     let mut content = cf::read_content(&state, user.id, file_id).await
         .unwrap_or_else(|_| cf::anim_content_from(cf::empty_anim_data(), json!([])));
     content["anim_data"] = body;
@@ -288,32 +231,14 @@ pub async fn update_animation(
     Path(id): Path<Uuid>,
     Json(body): Json<UpdateAnimationDto>,
 ) -> Result<Json<Value>> {
-    let rows = sqlx::query(
-        "UPDATE paintsharp.animations
-         SET title           = COALESCE($1, title),
-             composition     = COALESCE($2, composition),
-             thumbnail_path  = COALESCE($3, thumbnail_path),
-             thumbnail_dirty = COALESCE($4, thumbnail_dirty)
-         WHERE id = $5 AND owner_id = $6",
-    )
-    .bind(&body.title)
-    .bind(&body.composition)
-    .bind(&body.thumbnail_path)
-    .bind(body.thumbnail_dirty)
-    .bind(id)
-    .bind(user.id)
-    .execute(&state.db)
-    .await?
-    .rows_affected();
-
-    if rows == 0 {
+    if store::update_animation(&state.db, id, user.id, &body).await? == 0 {
         return Err(PaintsharpError::NotFound(format!("Animation {id}")));
     }
 
     // Renomme le fichier .kbanm pour refléter le nouveau titre.
     if let Some(t) = body.title.as_ref() {
         if !t.trim().is_empty() {
-            if let Ok(fid) = anim_file_id(&state, id, user.id).await {
+            if let Ok(fid) = store::anim_file_id(&state.db, id, user.id).await {
                 cf::rename_content_file(&state, user.id, fid, t, "kbanm").await;
             }
         }
@@ -329,14 +254,9 @@ pub async fn trash_animation(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let rows = sqlx::query(
-        "UPDATE paintsharp.animations SET is_trashed = TRUE, trashed_at = NOW()
-         WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user.id)
-    .execute(&state.db).await?.rows_affected();
-
-    if rows == 0 { return Err(PaintsharpError::NotFound(format!("Animation {id}"))); }
+    if store::trash_animation(&state.db, id, user.id).await? == 0 {
+        return Err(PaintsharpError::NotFound(format!("Animation {id}")));
+    }
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -345,14 +265,9 @@ pub async fn restore_animation(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let rows = sqlx::query(
-        "UPDATE paintsharp.animations SET is_trashed = FALSE, trashed_at = NULL
-         WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user.id)
-    .execute(&state.db).await?.rows_affected();
-
-    if rows == 0 { return Err(PaintsharpError::NotFound(format!("Animation {id}"))); }
+    if store::restore_animation(&state.db, id, user.id).await? == 0 {
+        return Err(PaintsharpError::NotFound(format!("Animation {id}")));
+    }
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -362,13 +277,13 @@ pub async fn delete_animation(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
     // See scenes::delete — the Drive file must go with the row.
-    let deleted: Option<(Option<Uuid>,)> = sqlx::query_as(
-        "DELETE FROM paintsharp.animations WHERE id = $1 AND owner_id = $2 AND is_trashed = TRUE RETURNING file_id",
+    let Some(file_id) = crate::services::store::delete_trashed_returning_file_id(
+        &state.db, "paintsharp.animations", id, user.id,
     )
-    .bind(id).bind(user.id)
-    .fetch_optional(&state.db).await?;
-
-    let Some((file_id,)) = deleted else { return Err(PaintsharpError::NotFound(format!("Animation {id}"))) };
+    .await?
+    else {
+        return Err(PaintsharpError::NotFound(format!("Animation {id}")));
+    };
     cf::delete_entity_files(&state, user.id, file_id).await;
     Ok(Json(json!({ "ok": true })))
 }
@@ -378,24 +293,12 @@ pub async fn duplicate_animation(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let source: Animation = sqlx::query_as::<_, Animation>(
-        "SELECT id, owner_id, title, composition, file_id, thumbnail_path,
-                thumbnail_dirty, is_trashed, trashed_at, last_edited_by, created_at, updated_at
-         FROM paintsharp.animations WHERE id = $1 AND owner_id = $2 AND is_trashed = FALSE",
-    )
-    .bind(id).bind(user.id)
-    .fetch_optional(&state.db).await?
-    .ok_or_else(|| PaintsharpError::NotFound(format!("Animation {id}")))?;
+    let source = store::get_active_animation(&state.db, id, user.id)
+        .await?
+        .ok_or_else(|| PaintsharpError::NotFound(format!("Animation {id}")))?;
 
     let new_title = format!("{} (copie)", source.title);
-    let new_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO paintsharp.animations (owner_id, title, composition)
-         VALUES ($1, $2, $3) RETURNING id",
-    )
-    .bind(user.id)
-    .bind(&new_title)
-    .bind(&source.composition)
-    .fetch_one(&state.db).await?;
+    let new_id = store::create_animation(&state.db, user.id, &new_title, &source.composition).await?;
 
     // Copie le fichier de contenu.
     let content = match source.file_id {
@@ -404,8 +307,7 @@ pub async fn duplicate_animation(
         None => cf::anim_content_from(cf::empty_anim_data(), json!([])),
     };
     let new_file_id = cf::create_anim_file(&state, user.id, &new_title, &content).await?;
-    sqlx::query("UPDATE paintsharp.animations SET file_id = $1 WHERE id = $2")
-        .bind(new_file_id).bind(new_id).execute(&state.db).await?;
+    store::set_file_id(&state.db, new_id, new_file_id).await?;
 
     Ok(Json(json!({ "id": new_id })))
 }
@@ -420,14 +322,9 @@ pub async fn export_lottie(
     use axum::response::IntoResponse;
     use axum::http::header;
 
-    let anim = sqlx::query_as::<_, Animation>(
-        "SELECT id, owner_id, title, composition, file_id, thumbnail_path,
-                thumbnail_dirty, is_trashed, trashed_at, last_edited_by, created_at, updated_at
-         FROM paintsharp.animations WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user.id)
-    .fetch_optional(&state.db).await?
-    .ok_or_else(|| PaintsharpError::NotFound(format!("Animation {id}")))?;
+    let anim = store::get_animation(&state.db, id, user.id)
+        .await?
+        .ok_or_else(|| PaintsharpError::NotFound(format!("Animation {id}")))?;
 
     let fps  = anim.composition.get("fps").and_then(|v| v.as_f64()).unwrap_or(24.0);
     let w    = anim.composition.get("width").and_then(|v| v.as_i64()).unwrap_or(720);
@@ -498,15 +395,12 @@ pub struct OpenByFileDto { pub file_id: uuid::Uuid }
 
 /// Ouvre l'entité liée à un fichier (.kb*) — utilisé par StartPage / « ouvrir avec ».
 pub async fn open_by_file(
-    axum::extract::State(state): axum::extract::State<crate::state::AppState>,
-    axum::Extension(user): axum::Extension<crate::middleware::PaintsharpUser>,
-    axum::Json(dto): axum::Json<OpenByFileDto>,
-) -> crate::errors::Result<axum::Json<serde_json::Value>> {
-    let id: uuid::Uuid = sqlx::query_scalar(
-        "SELECT id FROM paintsharp.animations WHERE file_id = $1 AND owner_id = $2 AND is_trashed = FALSE",
-    )
-    .bind(dto.file_id).bind(user.id)
-    .fetch_optional(&state.db).await?
-    .ok_or_else(|| crate::errors::PaintsharpError::NotFound(format!("Aucun animation lié au fichier {}", dto.file_id)))?;
-    Ok(axum::Json(serde_json::json!({ "id": id })))
+    State(state): State<AppState>,
+    Extension(user): Extension<PaintsharpUser>,
+    Json(dto): Json<OpenByFileDto>,
+) -> Result<Json<Value>> {
+    let id = store::find_by_file(&state.db, dto.file_id, user.id)
+        .await?
+        .ok_or_else(|| PaintsharpError::NotFound(format!("Aucun animation lié au fichier {}", dto.file_id)))?;
+    Ok(Json(json!({ "id": id })))
 }

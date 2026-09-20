@@ -1,0 +1,2 @@
+-- 000013: the content-file split and the pdf source columns are folded
+-- into this engine's initial schema (fresh installs only), so this step is a no-op here.

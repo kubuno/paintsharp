@@ -1,0 +1,1 @@
+-- 000012: no-op counterpart (see the .up.sql).

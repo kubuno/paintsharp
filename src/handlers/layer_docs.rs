@@ -6,23 +6,11 @@ use uuid::Uuid;
 use crate::{
     errors::{PaintsharpError, Result},
     middleware::PaintsharpUser,
-    models::layer_doc::{
-        CreateLayerDocDto, LayerDocumentSummary, LayerDocument, UpdateLayerDocDto,
-    },
+    models::layer_doc::{CreateLayerDocDto, UpdateLayerDocDto},
     services::content_files as cf,
+    services::store::layers as store,
     state::AppState,
 };
-
-/// file_id du fichier de contenu d'un document Layer.
-async fn doc_file_id(state: &AppState, id: Uuid, user_id: Uuid) -> Result<Uuid> {
-    let fid: Option<Uuid> = sqlx::query_scalar(
-        "SELECT file_id FROM layer_documents WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user_id)
-    .fetch_optional(&state.db).await?
-    .ok_or_else(|| PaintsharpError::NotFound(id.to_string()))?;
-    fid.ok_or_else(|| PaintsharpError::Internal(anyhow::anyhow!("document sans fichier de contenu")))
-}
 
 #[derive(Debug, Deserialize)]
 pub struct ListQuery {
@@ -39,41 +27,15 @@ pub async fn list_docs(
 ) -> Result<Json<Value>> {
     let limit   = q.limit.unwrap_or(50).min(200);
     let offset  = q.offset.unwrap_or(0);
-    let trashed = q.trashed.unwrap_or(false);
-    let starred = q.starred.unwrap_or(false);
-
-    let docs = if starred {
-        sqlx::query_as::<_, LayerDocumentSummary>(
-            "SELECT id, owner_id, title, width, height, color_mode, thumbnail_path,
-                    is_starred, layer_count, updated_at, created_at
-             FROM layer_documents
-             WHERE owner_id = $1 AND is_starred = TRUE AND is_trashed = FALSE
-             ORDER BY updated_at DESC LIMIT $2 OFFSET $3",
-        )
-        .bind(user.id).bind(limit).bind(offset)
-        .fetch_all(&state.db).await?
-    } else if trashed {
-        sqlx::query_as::<_, LayerDocumentSummary>(
-            "SELECT id, owner_id, title, width, height, color_mode, thumbnail_path,
-                    is_starred, layer_count, updated_at, created_at
-             FROM layer_documents
-             WHERE owner_id = $1 AND is_trashed = TRUE
-             ORDER BY trashed_at DESC LIMIT $2 OFFSET $3",
-        )
-        .bind(user.id).bind(limit).bind(offset)
-        .fetch_all(&state.db).await?
-    } else {
-        sqlx::query_as::<_, LayerDocumentSummary>(
-            "SELECT id, owner_id, title, width, height, color_mode, thumbnail_path,
-                    is_starred, layer_count, updated_at, created_at
-             FROM layer_documents
-             WHERE owner_id = $1 AND is_trashed = FALSE
-             ORDER BY updated_at DESC LIMIT $2 OFFSET $3",
-        )
-        .bind(user.id).bind(limit).bind(offset)
-        .fetch_all(&state.db).await?
-    };
-
+    let docs = store::list_docs(
+        &state.db,
+        user.id,
+        q.starred.unwrap_or(false),
+        q.trashed.unwrap_or(false),
+        limit,
+        offset,
+    )
+    .await?;
     Ok(Json(json!({ "documents": docs })))
 }
 
@@ -104,22 +66,12 @@ pub async fn create_doc(
         "effects":  []
     }]);
 
-    let id: Uuid = sqlx::query_scalar(
-        "INSERT INTO layer_documents
-            (owner_id, title, width, height, color_mode, bit_depth, dpi)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id",
-    )
-    .bind(user.id).bind(&title)
-    .bind(width).bind(height)
-    .bind(&color_mode).bind(bit_depth).bind(dpi)
-    .fetch_one(&state.db).await?;
+    let id = store::create_doc(&state.db, user.id, &title, width, height, &color_mode, bit_depth, dpi).await?;
 
     // Structure des calques + réglages → fichier .kblay dans files.
     let content = cf::empty_layer_content(layers_structure);
     let file_id = cf::create_layer_file(&state, user.id, &title, &content).await?;
-    sqlx::query("UPDATE layer_documents SET file_id = $1 WHERE id = $2")
-        .bind(file_id).bind(id).execute(&state.db).await?;
+    store::set_file_id(&state.db, id, file_id).await?;
 
     Ok(Json(json!({ "id": id, "title": title })))
 }
@@ -129,15 +81,9 @@ pub async fn get_doc(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let doc = sqlx::query_as::<_, LayerDocument>(
-        "SELECT id, owner_id, title, width, height, color_mode, bit_depth, dpi,
-                file_id, thumbnail_path, layer_count,
-                is_starred, is_trashed, created_at, updated_at
-         FROM layer_documents WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user.id)
-    .fetch_optional(&state.db).await?
-    .ok_or_else(|| PaintsharpError::NotFound(id.to_string()))?;
+    let doc = store::get_doc(&state.db, id, user.id)
+        .await?
+        .ok_or_else(|| PaintsharpError::NotFound(id.to_string()))?;
 
     // Structure + réglages lus depuis le fichier .kblay.
     let mut val = serde_json::to_value(&doc).unwrap_or_default();
@@ -149,8 +95,7 @@ pub async fn get_doc(
         if let Some(fname) = cf::file_name(&state, user.id, fid).await {
             let stem = cf::strip_ext(&fname);
             if !stem.is_empty() && stem != doc.title {
-                sqlx::query("UPDATE layer_documents SET title = $2 WHERE id = $1")
-                    .bind(id).bind(&stem).execute(&state.db).await?;
+                store::rename_doc(&state.db, id, &stem).await?;
                 val["title"] = Value::String(stem);
             }
         }
@@ -172,33 +117,13 @@ pub async fn update_doc(
             )));
         }
     }
-    let rows = sqlx::query(
-        "UPDATE layer_documents SET
-            title            = COALESCE($3, title),
-            thumbnail_path   = COALESCE($4, thumbnail_path),
-            thumbnail_dirty  = COALESCE($5, thumbnail_dirty),
-            is_starred       = COALESCE($6, is_starred),
-            width            = COALESCE($7, width),
-            height           = COALESCE($8, height),
-            last_edited_by   = $2
-         WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user.id)
-    .bind(&body.title)
-    .bind(&body.thumbnail_path)
-    .bind(body.thumbnail_dirty)
-    .bind(body.is_starred)
-    .bind(body.width)
-    .bind(body.height)
-    .execute(&state.db).await?.rows_affected();
-
-    if rows == 0 {
+    if store::update_doc(&state.db, id, user.id, &body).await? == 0 {
         return Err(PaintsharpError::NotFound(id.to_string()));
     }
 
     // Contenu (structure / réglages de vue) → fichier.
     if body.layers_structure.is_some() || body.view_settings.is_some() {
-        let file_id = doc_file_id(&state, id, user.id).await?;
+        let file_id = store::doc_file_id(&state.db, id, user.id).await?;
         let mut content = cf::read_content(&state, user.id, file_id).await?;
         if let Some(ls) = &body.layers_structure { content["layers_structure"] = ls.clone(); }
         if let Some(vs) = &body.view_settings    { content["view_settings"]    = vs.clone(); }
@@ -207,7 +132,7 @@ pub async fn update_doc(
     // Titre modifié → renommer le fichier .kblay (titre = nom). Best-effort.
     if let Some(t) = body.title.as_ref() {
         if !t.trim().is_empty() {
-            if let Ok(fid) = doc_file_id(&state, id, user.id).await {
+            if let Ok(fid) = store::doc_file_id(&state.db, id, user.id).await {
                 cf::rename_content_file(&state, user.id, fid, t, "kblay").await;
             }
         }
@@ -220,14 +145,9 @@ pub async fn trash_doc(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let rows = sqlx::query(
-        "UPDATE layer_documents SET is_trashed = TRUE, trashed_at = NOW()
-         WHERE id = $1 AND owner_id = $2 AND is_trashed = FALSE",
-    )
-    .bind(id).bind(user.id)
-    .execute(&state.db).await?.rows_affected();
-
-    if rows == 0 { return Err(PaintsharpError::NotFound(id.to_string())); }
+    if store::trash_doc(&state.db, id, user.id).await? == 0 {
+        return Err(PaintsharpError::NotFound(id.to_string()));
+    }
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -236,12 +156,7 @@ pub async fn restore_doc(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    sqlx::query(
-        "UPDATE layer_documents SET is_trashed = FALSE, trashed_at = NULL
-         WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user.id)
-    .execute(&state.db).await?;
+    store::restore_doc(&state.db, id, user.id).await?;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -251,13 +166,13 @@ pub async fn delete_doc(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
     // See scenes::delete — the Drive file must go with the row.
-    let deleted: Option<(Option<Uuid>,)> = sqlx::query_as(
-        "DELETE FROM layer_documents WHERE id = $1 AND owner_id = $2 AND is_trashed = TRUE RETURNING file_id",
+    let Some(file_id) = crate::services::store::delete_trashed_returning_file_id(
+        &state.db, "paintsharp.layer_documents", id, user.id,
     )
-    .bind(id).bind(user.id)
-    .fetch_optional(&state.db).await?;
-
-    let Some((file_id,)) = deleted else { return Err(PaintsharpError::NotFound(id.to_string())) };
+    .await?
+    else {
+        return Err(PaintsharpError::NotFound(id.to_string()));
+    };
     cf::delete_entity_files(&state, user.id, file_id).await;
     Ok(Json(json!({ "ok": true })))
 }
@@ -267,26 +182,22 @@ pub async fn duplicate_doc(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    let source: LayerDocument = sqlx::query_as::<_, LayerDocument>(
-        "SELECT id, owner_id, title, width, height, color_mode, bit_depth, dpi,
-                file_id, thumbnail_path, layer_count,
-                is_starred, is_trashed, created_at, updated_at
-         FROM layer_documents WHERE id = $1 AND owner_id = $2 AND is_trashed = FALSE",
-    )
-    .bind(id).bind(user.id)
-    .fetch_optional(&state.db).await?
-    .ok_or_else(|| PaintsharpError::NotFound(id.to_string()))?;
+    let source = store::get_active_doc(&state.db, id, user.id)
+        .await?
+        .ok_or_else(|| PaintsharpError::NotFound(id.to_string()))?;
 
     let new_title = format!("{} (copie)", source.title);
-    let new_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO layer_documents
-           (owner_id, title, width, height, color_mode, bit_depth, dpi)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+    let new_id = store::create_doc(
+        &state.db,
+        user.id,
+        &new_title,
+        source.width,
+        source.height,
+        &source.color_mode,
+        source.bit_depth,
+        source.dpi,
     )
-    .bind(user.id).bind(&new_title)
-    .bind(source.width).bind(source.height)
-    .bind(&source.color_mode).bind(source.bit_depth).bind(source.dpi)
-    .fetch_one(&state.db).await?;
+    .await?;
 
     // Copie le fichier de contenu.
     let content = match source.file_id {
@@ -294,8 +205,7 @@ pub async fn duplicate_doc(
         None      => cf::empty_layer_content(json!([])),
     };
     let new_file_id = cf::create_layer_file(&state, user.id, &new_title, &content).await?;
-    sqlx::query("UPDATE layer_documents SET file_id = $1 WHERE id = $2")
-        .bind(new_file_id).bind(new_id).execute(&state.db).await?;
+    store::set_file_id(&state.db, new_id, new_file_id).await?;
 
     Ok(Json(json!({ "id": new_id })))
 }
@@ -318,21 +228,12 @@ pub async fn save_structure(
         body.layers_structure.as_array().map(|a| a.len() as i32).unwrap_or(1)
     });
 
-    let rows = sqlx::query(
-        "UPDATE layer_documents SET
-            layer_count      = $3,
-            thumbnail_dirty  = TRUE,
-            last_edited_by   = $2
-         WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(id).bind(user.id)
-    .bind(count)
-    .execute(&state.db).await?.rows_affected();
-
-    if rows == 0 { return Err(PaintsharpError::NotFound(id.to_string())); }
+    if store::save_structure(&state.db, id, user.id, count).await? == 0 {
+        return Err(PaintsharpError::NotFound(id.to_string()));
+    }
 
     // Structure des calques → fichier .kblay.
-    let file_id = doc_file_id(&state, id, user.id).await?;
+    let file_id = store::doc_file_id(&state.db, id, user.id).await?;
     let mut content = cf::read_content(&state, user.id, file_id).await?;
     content["layers_structure"] = body.layers_structure;
     cf::write_content(&state, user.id, file_id, &content).await?;
@@ -345,15 +246,12 @@ pub struct OpenByFileDto { pub file_id: uuid::Uuid }
 
 /// Ouvre l'entité liée à un fichier (.kb*) — utilisé par StartPage / « ouvrir avec ».
 pub async fn open_by_file(
-    axum::extract::State(state): axum::extract::State<crate::state::AppState>,
-    axum::Extension(user): axum::Extension<crate::middleware::PaintsharpUser>,
-    axum::Json(dto): axum::Json<OpenByFileDto>,
-) -> crate::errors::Result<axum::Json<serde_json::Value>> {
-    let id: uuid::Uuid = sqlx::query_scalar(
-        "SELECT id FROM paintsharp.layer_documents WHERE file_id = $1 AND owner_id = $2 AND is_trashed = FALSE",
-    )
-    .bind(dto.file_id).bind(user.id)
-    .fetch_optional(&state.db).await?
-    .ok_or_else(|| crate::errors::PaintsharpError::NotFound(format!("Aucun document lié au fichier {}", dto.file_id)))?;
-    Ok(axum::Json(serde_json::json!({ "id": id })))
+    State(state): State<AppState>,
+    Extension(user): Extension<PaintsharpUser>,
+    Json(dto): Json<OpenByFileDto>,
+) -> Result<Json<Value>> {
+    let id = store::find_by_file(&state.db, dto.file_id, user.id)
+        .await?
+        .ok_or_else(|| PaintsharpError::NotFound(format!("Aucun document lié au fichier {}", dto.file_id)))?;
+    Ok(Json(json!({ "id": id })))
 }
