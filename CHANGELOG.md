@@ -30,6 +30,10 @@ number at release time, and CI publishes that section as the GitHub Release note
 
 ### Security
 
+- **Security fixes from the shared database layer (kubuno-db 0.9.0).** The
+  database password can no longer appear in a log through the debug output of
+  the database settings.
+
 - **Database driver updated past an unfixable advisory.** The previous line
   pulled in an RSA implementation vulnerable to a timing side-channel
   (RUSTSEC-2023-0071) for which no fix will ever exist. The new line does not
