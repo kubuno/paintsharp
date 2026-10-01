@@ -50,6 +50,14 @@ number at release time, and CI publishes that section as the GitHub Release note
   labels that decode to plain ASCII — a mismatch an attacker can use to make two
   different names look like one.
 
+### Fixed
+
+- **Database migrations keep the same checksum on every OS.** The repository now
+  pins line endings to LF (`.gitattributes`), so a checkout on Windows no longer
+  turns SQL migrations, scripts, manifests or sources into CRLF. A database
+  migrated by a Linux build is therefore no longer refused by a Windows or macOS
+  build of the same version because its migration checksums differ.
+
 ## [0.1.7] - 2026-09-18
 
 ### Changed
