@@ -32,6 +32,7 @@ function rasterizeSvg(svg: string, w: number, h: number): Promise<string> {
   })
 }
 import { Dropdown } from '@ui'
+import { signedUrl, downloadSignedUrl } from '@kubuno/sdk'
 import { useFilesDialogStore } from '@kubuno/drive'
 import { C as SHELL_C, EditorShell, DockArea, paintsharpMenus, useContextMenu, type CtxItem } from './ui'
 import { useDebouncedAutosave } from './useAutosave'
@@ -241,7 +242,8 @@ class SceneRenderer {
       if (!img) {
         img = new Image()
         img.onload = () => this.imgCache.set(src, img!)
-        img.src = src
+        const el = img
+        void signedUrl(src).then(u => { el.src = u }).catch(() => { /* image stays unloaded */ })
         this.imgCache.set(src, img)
       }
       if (img.complete && img.naturalWidth > 0) ctx.drawImage(img, 0, 0, d.width, d.height)
@@ -251,7 +253,8 @@ class SceneRenderer {
       let img = this.imgCache.get(src)
       if (!img) {
         img = new Image()
-        img.src = src
+        const el = img
+        void signedUrl(src).then(u => { el.src = u }).catch(() => { /* image stays unloaded */ })
         img.onload = () => this.imgCache.set(src, img!)
         this.imgCache.set(src, img)
       }
@@ -1257,7 +1260,8 @@ export default function KeyframeEditorPage() {
       updateAnimData(d => ({ ...d, layers: [newLayer, ...d.layers] }))
       setSelectedLayerId(layerId)
     }
-    img.src = imgUrl
+    // Persisted storagePath stays the bare URL; only the load is signed.
+    void signedUrl(imgUrl).then(u => { img.src = u }).catch(() => { img.src = imgUrl })
   }, [updateAnimData, comp, t])
 
   const handleToggleVisible = useCallback((layerId: string) => {
@@ -1475,7 +1479,7 @@ export default function KeyframeEditorPage() {
   }, [saveMut])
 
   const handleExportLottie = () => {
-    if (id) window.open(keyframeApi.exportLottie(id), '_blank')
+    if (id) void downloadSignedUrl(keyframeApi.exportLottie(id), 'animation.json')
   }
 
   // ── Video export (frame-by-frame → MP4, deterministic) ──────────────────────
@@ -1492,7 +1496,7 @@ export default function KeyframeEditorPage() {
         else if (l.data.type === 'image' || l.data.type === 'vector') { const s = (l.data as { storagePath?: string }).storagePath; if (s) srcs.add(s) }
       }
       const imgs = new Map<string, HTMLImageElement>()
-      await Promise.all([...srcs].map(async s => { const img = new Image(); img.src = s; try { await img.decode() } catch { /* */ } imgs.set(s, img) }))
+      await Promise.all([...srcs].map(async s => { const img = new Image(); img.src = await signedUrl(s); try { await img.decode() } catch { /* */ } imgs.set(s, img) }))
       const w = comp.width, h = comp.height
       const c = document.createElement('canvas')
       const renderer = new SceneRenderer(c, w, h, 1)

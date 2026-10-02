@@ -7,6 +7,7 @@
  *    (écrase le .svg source si le projet en provient, sinon crée un nouveau .svg).
  */
 import { filesApi, type FileItem } from '@kubuno/drive'
+import { signedUrl } from '@kubuno/sdk'
 import { apexApi, type VectorPageData } from './api'
 import { pageDataToSvg, svgToPageData } from './apexSvg'
 
@@ -26,7 +27,7 @@ function setSvgSource(projectId: string, src: SvgSource) {
 }
 
 async function fetchText(url: string): Promise<string> {
-  const r = await fetch(url, { credentials: 'include' })
+  const r = await fetch(await signedUrl(url))
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
   return r.text()
 }

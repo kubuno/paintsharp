@@ -15,6 +15,7 @@
 // Every heavy decoder sits behind a dynamic import, so opening a plain JPEG
 // never pays for the PSD or XCF code.
 import { filesApi } from '@kubuno/drive'
+import { signedUrl } from '@kubuno/sdk'
 import { layerApi, type LayerStructureItem } from './api'
 import type { ImportedNode } from './layer/io/exotic/types'
 import { uid } from './uid'
@@ -266,7 +267,7 @@ async function decodeAny(blob: Blob, name: string): Promise<ImportedForLayer> {
 
 /** Opens a drive picture in Layer. Returns the new document id. */
 export async function openImageAsLayer(file: { id: string; name: string }): Promise<string> {
-  const resp = await fetch(`${filesApi.downloadUrl(file.id)}?inline=1`, { credentials: 'include' })
+  const resp = await fetch(await signedUrl(`${filesApi.downloadUrl(file.id)}?inline=1`))
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   const blob = await resp.blob()
 

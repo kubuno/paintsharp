@@ -15,7 +15,7 @@ import {
   motionApi,
   type VideoProject, type VideoMedia, type VideoTrack, type VideoClip, type TimelineData,
 } from './api'
-import { api } from '@kubuno/sdk'
+import { api, signedUrl } from '@kubuno/sdk'
 import { useFilesDialogStore } from '@kubuno/drive'
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer'
 import { Button, RangeSlider } from '@ui'
@@ -45,7 +45,8 @@ class VideoElementDecoder implements FrameDecoder {
 
   constructor(src: string) {
     this.video = document.createElement('video')
-    this.video.src = src
+    // The stream route is authenticated; the element cannot send a bearer, so sign the URL first.
+    void signedUrl(src, { purpose: 'stream' }).then(u => { this.video.src = u }).catch(() => { /* video stays empty */ })
     this.video.preload = 'auto'
     this.video.crossOrigin = 'anonymous'
   }
@@ -405,7 +406,8 @@ async function exportTimeline(
     let v = vids.get(mid)
     if (!v) {
       v = document.createElement('video')
-      v.src = motionApi.getMediaStreamUrl(project.id, mid)
+      const el = v
+      void signedUrl(motionApi.getMediaStreamUrl(project.id, mid), { purpose: 'stream' }).then(u => { el.src = u }).catch(() => { /* video stays empty */ })
       v.crossOrigin = 'anonymous'; v.preload = 'auto'
       vids.set(mid, v)
       try {
@@ -512,7 +514,7 @@ async function renderAudioMix(project: VideoProject, timeline: TimelineData, med
   for (const tr of timeline.tracks) for (const c of tr.clips) if (c.mediaId && media.find(m => m.id === c.mediaId)) used.add(c.mediaId)
   await Promise.all([...used].map(async mid => {
     try {
-      const buf = await fetch(motionApi.getMediaStreamUrl(project.id, mid)).then(r => r.arrayBuffer())
+      const buf = await fetch(await signedUrl(motionApi.getMediaStreamUrl(project.id, mid), { purpose: 'stream' })).then(r => r.arrayBuffer())
       decoded.set(mid, await oac.decodeAudioData(buf))
     } catch { /* no audio track / undecodable */ }
   }))
@@ -569,7 +571,7 @@ async function exportTimelineMp4(
   const vids = new Map<string, HTMLVideoElement>()
   const ensureVid = (mid: string): HTMLVideoElement => {
     let v = vids.get(mid)
-    if (!v) { v = document.createElement('video'); v.src = motionApi.getMediaStreamUrl(project.id, mid); v.crossOrigin = 'anonymous'; v.muted = true; v.preload = 'auto'; vids.set(mid, v) }
+    if (!v) { v = document.createElement('video'); const el = v; void signedUrl(motionApi.getMediaStreamUrl(project.id, mid), { purpose: 'stream' }).then(u => { el.src = u }).catch(() => { /* video stays empty */ }); v.crossOrigin = 'anonymous'; v.muted = true; v.preload = 'auto'; vids.set(mid, v) }
     return v
   }
   // Preload video media.

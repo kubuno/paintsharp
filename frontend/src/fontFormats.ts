@@ -7,6 +7,7 @@
 // fonteditor-core (and its WOFF2 wasm) is only loaded on demand.
 import { parse as parseOpentype, type Font as OtFont } from 'opentype.js'
 import { filesApi } from '@kubuno/drive'
+import { signedUrl } from '@kubuno/sdk'
 import { fontApi, type FontContour, type FontData, type FontGlyphPoint } from './api'
 import { buildOtfFont } from './fontExport'
 import { buildTtf } from './fontTtf'
@@ -194,7 +195,7 @@ export async function exportFont(data: FontData, format: FontFileFormat, fallbac
 export async function openFontFileAsProject(file: { id: string; name: string }): Promise<string> {
   const format = formatOfFileName(file.name)
   if (!format) throw new Error(`format inconnu: ${file.name}`)
-  const res = await fetch(filesApi.downloadUrl(file.id), { credentials: 'include' })
+  const res = await fetch(await signedUrl(filesApi.downloadUrl(file.id)))
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await bufferToFontData(await res.arrayBuffer(), format)
   const title = file.name.replace(/\.[^.]+$/, '')
