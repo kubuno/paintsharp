@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "Paintsharp (Kubuno Core + browser)",
+    "Projects": [
+      {
+        "Path": "Kubuno.Paintsharp.Server.rsproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "frontend\\Kubuno.Paintsharp.Web.esproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Kubuno paintsharp (Chrome)",
+      "url": "http://localhost:8080/paintsharp",
+      "webRoot": "${workspaceFolder}",
+      "sourceMapPathOverrides": { "http://localhost:8080/modules/paintsharp/*": "${workspaceFolder}/dist/*" }
+    }
+    {
+      "type": "edge",
+      "request": "launch",
+      "name": "Kubuno paintsharp (Edge)",
+      "url": "http://localhost:8080/paintsharp",
+      "webRoot": "${workspaceFolder}",
+      "sourceMapPathOverrides": { "http://localhost:8080/modules/paintsharp/*": "${workspaceFolder}/dist/*" }
+    },
+  ]
+}
