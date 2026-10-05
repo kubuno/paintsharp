@@ -20,7 +20,21 @@ pub struct ServerSettings {
 pub struct CoreSettings {
     pub url:             String,
     pub internal_secret: String,
-    pub files_url:       String,
+}
+
+impl CoreSettings {
+    /// The client of the `drive` module, which stores this module's files.
+    ///
+    /// It is given the **core's** URL: the module never talks to `drive`
+    /// directly. Every call goes to the core's IPC relay
+    /// (`/internal/ipc/drive/...`), which authenticates this module's internal
+    /// secret, swaps in `drive`'s own and forwards the request, so `drive` may
+    /// live on any port, or not be installed at all, without this module
+    /// knowing. Handing the client `drive`'s own URL sent every call to a route
+    /// that does not exist there (404).
+    pub fn files_client(&self) -> crate::files_client::FilesClient {
+        crate::files_client::FilesClient::new(self.url.clone(), self.internal_secret.clone())
+    }
 }
 
 /// The `[database]` section is owned by kubuno-db: which of its fields matter
@@ -65,7 +79,6 @@ impl Settings {
             .set_default("server.port", 3106i64)?
             .set_default("core.url", "http://127.0.0.1:8080")?
             .set_default("core.internal_secret", "")?
-            .set_default("core.files_url", "http://127.0.0.1:8080")?
             // The `[database]` section is deserialised into kubuno_db::DbSettings.
             // The discrete connection fields are supplied by the supervisor's
             // KUBUNO_DB_* variables (or a config file); only the engine-agnostic
@@ -89,12 +102,7 @@ impl Settings {
                     .try_parsing(true),
             );
 
-        if let Ok(v) = std::env::var("KUBUNO_CORE_URL") {
-            // FilesClient reaches the drive THROUGH the core relay now, so
-            // files_url must point at the core, not the drive port.
-            builder = builder.set_override("core.url",       v.clone())?;
-            builder = builder.set_override("core.files_url", v)?;
-        }
+        if let Ok(v) = std::env::var("KUBUNO_CORE_URL") { builder = builder.set_override("core.url", v)?; }
         if let Ok(v) = std::env::var("KUBUNO_INTERNAL_SECRET") { builder = builder.set_override("core.internal_secret", v)?; }
         if let Ok(v) = std::env::var("KUBUNO_DB_HOST")         { builder = builder.set_override("database.host",     v)?; }
         if let Ok(v) = std::env::var("KUBUNO_DB_PORT")         { builder = builder.set_override("database.port",     v.parse::<i64>().unwrap_or(5432))?; }

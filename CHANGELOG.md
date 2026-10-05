@@ -9,6 +9,14 @@ number at release time, and CI publishes that section as the GitHub Release note
 
 ## [Unreleased]
 
+### Fixed
+
+- **A stale file-store address can no longer break file access.** PaintSharp
+  already followed the core's address when started by the platform, but kept a
+  second, separate `core.files_url` setting that a configuration file could point
+  at the file store's own address, where requests fail with a "not found" error.
+  The setting is removed: files are always reached through the core (`core.url`).
+
 ## [0.1.8] - 2026-10-05
 
 ### Changed
