@@ -403,8 +403,8 @@ function catmullTangent(p: Path, i: number): Vec {
 }
 
 /**
- * Recompute every tangent so the path passes smoothly through all its anchors
- * - the behaviour of the curvature pen. Anchors explicitly marked `corner`
+ * Recompute every tangent so the path passes smoothly through all its anchors -
+ * the behaviour of the curvature pen. Anchors explicitly marked `corner`
  * keep their handles.
  */
 export function smoothTangents(p: Path): void {

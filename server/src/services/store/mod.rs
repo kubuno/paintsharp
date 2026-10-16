@@ -35,8 +35,8 @@ use crate::errors::Result;
 ///
 /// The guard (`is_trashed = TRUE`) is applied to the re-select as well as the
 /// delete, so the MySQL path (which re-reads before deleting, having no
-/// `RETURNING`) cannot report a live row as deleted. `table` is a `&'static str`
-/// - an identifier, never user data.
+/// `RETURNING`) cannot report a live row as deleted. `table` is a `&'static str` -
+/// an identifier, never user data.
 pub async fn delete_trashed_returning_file_id(
     db: &DbPool,
     table: &'static str,

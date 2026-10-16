@@ -103,8 +103,8 @@ export interface PassContext {
   /** RGBA8 fallback: dither at store time (spec 09 §4.5). */
   dither: boolean
   /**
-   * Space in which B(Cb, Cs) is evaluated. Composition stays linear either way
-   * - see the arbitration note at the top of `graph/shaders.ts`.
+   * Space in which B(Cb, Cs) is evaluated. Composition stays linear either way -
+   * see the arbitration note at the top of `graph/shaders.ts`.
    */
   blendSpace: BlendSpace
   /**

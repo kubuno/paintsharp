@@ -1263,8 +1263,8 @@ function elBBox(el: VectorElement): { x: number; y: number; w: number; h: number
 // two edges meeting there. Angles are rotation-invariant, so they are measured on the
 // local outline; only the vertex position is rotated into world space. Used by the
 // hover angle-readout (inspect whether e.g. a "rectangle" still has 90° corners).
-// `a1`/`a2` are the WORLD-space directions (radians) of the two edges leaving the vertex
-// - used to draw the angle's arms plus its arc / right-angle marker.
+// `a1`/`a2` are the WORLD-space directions (radians) of the two edges leaving the vertex -
+// used to draw the angle's arms plus its arc / right-angle marker.
 // `ptIndex` = index of the vertex in a PATH's `points` array (or -1 for the corners of a
 // parametric rect/image/text, whose 90° corners are not point-editable). Enables the
 // double-click / context-menu "edit angle" flow.
