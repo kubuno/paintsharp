@@ -23,7 +23,7 @@ export type RefItem =
 
 export type DescriptorValue =
   | { t: 'ref'; items: RefItem[] }
-  /** `Objc` / `GlbO` — `os` keeps the original tag for a bit-exact rewrite. */
+  /** `Objc` / `GlbO` - `os` keeps the original tag for a bit-exact rewrite. */
   | { t: 'desc'; os: 'Objc' | 'GlbO'; value: Descriptor }
   | { t: 'list'; items: DescriptorValue[] }
   | { t: 'double'; value: number }
@@ -37,7 +37,7 @@ export type DescriptorValue =
   /** `type` / `GlbC`. */
   | { t: 'class'; os: 'type' | 'GlbC'; name: string; classId: string }
   | { t: 'alias'; data: Uint8Array }
-  /** `tdta` — often EngineData or XML; kept opaque. */
+  /** `tdta` - often EngineData or XML; kept opaque. */
   | { t: 'raw'; data: Uint8Array }
   | { t: 'objArr'; version: number; name: string; classId: string; items: Map<string, DescriptorValue> }
 
@@ -48,7 +48,7 @@ export interface Descriptor {
   readonly items: Map<string, DescriptorValue>
 }
 
-/** Convenience accessors — descriptors are deeply nested by nature. */
+/** Convenience accessors - descriptors are deeply nested by nature. */
 export function descGet(d: Descriptor | null, key: string): DescriptorValue | undefined {
   return d?.items.get(key)
 }

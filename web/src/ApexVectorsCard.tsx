@@ -28,7 +28,7 @@ export function vectorsEnvelope(elements: VectorElement[], bbox: { x: number; y:
     type: 'paintsharp.vectors',
     module: 'paintsharp',
     title,
-    text: `${title} — Apex (${Math.round(bbox.w)}×${Math.round(bbox.h)})`,
+    text: `${title} - Apex (${Math.round(bbox.w)}×${Math.round(bbox.h)})`,
     data: { elements, bbox } satisfies VectorsData,
   }
 }

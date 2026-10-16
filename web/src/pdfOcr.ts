@@ -119,7 +119,7 @@ function groupWordsIntoLines(words: OcrWord[]): OcrWord[] {
   })
 }
 
-/** Libère le worker (et le cœur WASM) — à appeler au démontage de l'éditeur. */
+/** Libère le worker (et le cœur WASM) - à appeler au démontage de l'éditeur. */
 export async function disposeOcr(): Promise<void> {
   if (!workerPromise) return
   const p = workerPromise

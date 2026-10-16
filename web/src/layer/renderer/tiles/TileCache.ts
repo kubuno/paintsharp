@@ -10,7 +10,7 @@
 // Eviction is strict LRU with two protections, per spec 3.4:
 //   (a) tiles pinned for the current frame are never evicted;
 //   (b) coarse LOD tiles are expensive to rebuild and cheap to keep, so their
-//       effective age is divided by 4^level — they leave the cache last.
+//       effective age is divided by 4^level - they leave the cache last.
 //
 // No WebGL here: textures come from a `GLDeviceLike`.
 
@@ -41,7 +41,7 @@ export interface CompositedTile {
   generation: number
   /** Chunk-aligned dirty rect inside this tile, in document pixels; null = valid. */
   dirty: Rect | null
-  /** Clock value of last use — LRU eviction. */
+  /** Clock value of last use - LRU eviction. */
   lastUsed: number
   /** True while an async build is in flight (prevents duplicate scheduling). */
   pending: boolean
@@ -56,7 +56,7 @@ export interface TileCacheOptions {
   budgetBytes?: number
   /** Overrides the device's bytesPerTexel (RGBA16F = 8, RGBA8 = 4). */
   bytesPerTexel?: number
-  /** Tile edge in texels. Kept configurable — spec 15.3 wants 256 confirmed by measurement. */
+  /** Tile edge in texels. Kept configurable - spec 15.3 wants 256 confirmed by measurement. */
   tileSize?: number
   /** How many freed textures to keep for recycling before really deleting them. */
   recyclePoolSize?: number
@@ -78,7 +78,7 @@ export interface TileCacheStats {
   liveBytes: number
   /** Bytes held by the recycle pool (allocated but unused). */
   pooledBytes: number
-  /** liveBytes + pooledBytes — what the GPU actually holds. */
+  /** liveBytes + pooledBytes - what the GPU actually holds. */
   residentBytes: number
   budgetBytes: number
   /** residentBytes / budgetBytes. */
@@ -91,7 +91,7 @@ const DEFAULT_BUDGET = 512 * 1024 * 1024
 export class TileCache {
   private readonly device: GLDeviceLike
   private readonly tiles = new Map<TileId, CompositedTile>()
-  /** Live tile ids indexed by LOD level — makes cascade invalidation O(touched). */
+  /** Live tile ids indexed by LOD level - makes cascade invalidation O(touched). */
   private readonly byLevel = new Map<number, Set<TileId>>()
   private readonly pool: DeviceTexture[] = []
   private readonly clock: Clock
@@ -223,7 +223,7 @@ export class TileCache {
     return tile
   }
 
-  /** Mark used this frame — protects from eviction until endFrame(). */
+  /** Mark used this frame - protects from eviction until endFrame(). */
   touch(key: TileKey): void {
     const t = this.tiles.get(keyId(key))
     if (t) t.lastUsed = this.clock()
@@ -268,7 +268,7 @@ export class TileCache {
 
   /**
    * Mark every cached tile overlapping `rect` (document space) dirty, at every
-   * LOD level held by the cache — the cascade of spec 3.6: invalidating at
+   * LOD level held by the cache - the cascade of spec 3.6: invalidating at
    * level 0 must also invalidate the ancestors that were reduced from it.
    *
    * Cost is O(tiles actually touched), not O(cache size): tile ranges are

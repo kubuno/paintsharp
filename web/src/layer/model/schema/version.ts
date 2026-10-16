@@ -71,7 +71,7 @@ export const KIND_NODE_KEYS: Readonly<Record<string, readonly string[]>> = {
   artboard: ['frame', 'children', 'expanded', 'background', 'presetName'],
 }
 
-/** Union of the above — the full inventory, for documentation and tests. */
+/** Union of the above - the full inventory, for documentation and tests. */
 export const KNOWN_KEYS: ReadonlySet<string> = new Set([
   ...BASE_NODE_KEYS,
   ...Object.values(KIND_NODE_KEYS).flat(),

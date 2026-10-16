@@ -3,7 +3,7 @@
 // This file deliberately declares its OWN interface instead of importing the
 // engine's `renderer/gl/` device: the filter stage is developed and tested in
 // isolation, against a test double (see `testDevice.ts`). When the real
-// `GLDevice` lands it only has to satisfy `GLDeviceLike` — no filter code
+// `GLDevice` lands it only has to satisfy `GLDeviceLike` - no filter code
 // changes. Four capabilities are needed and no more:
 //   1. allocate a texture (and read it back),
 //   2. compile/cache a fragment program,
@@ -83,7 +83,7 @@ export interface GLDeviceLike {
 
   /**
    * Compile (or fetch from cache) a fragment program. `key` identifies the
-   * source for caching — two calls with the same key must return the same
+   * source for caching - two calls with the same key must return the same
    * program, so callers must fold every `#define` permutation into the key.
    */
   getProgram(key: string, fragmentSource: string): GpuProgram

@@ -23,7 +23,7 @@ export function reverseBits(data: Uint8Array): void {
 /**
  * Expands sub-byte samples (1, 2 or 4 bits, MSB-first) to one byte each.
  *
- * Rows are padded to a whole byte in TIFF — never to 4 bytes, that is BMP's rule — so
+ * Rows are padded to a whole byte in TIFF - never to 4 bytes, that is BMP's rule - so
  * the row start is recomputed for every row instead of walking the stream linearly.
  *
  * @param scale when true the value is stretched to 0..255 (grayscale/RGB); when false the

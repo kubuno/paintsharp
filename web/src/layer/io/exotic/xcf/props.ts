@@ -102,7 +102,7 @@ const MAX_PROPS_PER_LIST = 4096
  *
  * The one documented exception is `PROP_USER_UNIT` (24), whose `prop_size` is wrong in
  * files affected by GIMP issue #16129. GIMP reads its fields rather than trusting the
- * size, and so do we — skipping by a wrong size would land mid-structure.
+ * size, and so do we - skipping by a wrong size would land mid-structure.
  */
 export function readPropList(
   r: XcfReader,

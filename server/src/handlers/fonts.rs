@@ -163,7 +163,7 @@ pub async fn delete_project(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    // See scenes::delete — the Drive file must go with the row.
+    // See scenes::delete - the Drive file must go with the row.
     let Some(file_id) = crate::services::store::delete_trashed_returning_file_id(
         &state.db, "paintsharp.font_projects", id, user.id,
     )
@@ -209,7 +209,7 @@ pub async fn duplicate_project(
 #[derive(Debug, Deserialize)]
 pub struct OpenByFileDto { pub file_id: Uuid }
 
-/// Opens the entity linked to a .kbfnt file — used by StartPage / "open with".
+/// Opens the entity linked to a .kbfnt file - used by StartPage / "open with".
 pub async fn open_by_file(
     State(state): State<AppState>,
     Extension(user): Extension<PaintsharpUser>,

@@ -383,7 +383,7 @@ function pickExportMime(): string {
 // Render the whole timeline to a real video file, entirely in the browser. The
 // composition is drawn frame-by-frame onto a full-resolution offscreen canvas
 // (`captureStream` feeds the browser's hardware-accelerated encoder) while every
-// clip's audio is mixed through WebAudio — so the export carries picture AND sound.
+// clip's audio is mixed through WebAudio - so the export carries picture AND sound.
 async function exportTimeline(
   project: VideoProject, timeline: TimelineData, media: VideoMedia[],
   onProgress: (p: number) => void,
@@ -757,7 +757,7 @@ export default function MotionEditorPage() {
     enabled:  !!id,
   })
 
-  // ── Titre éditable (standard WorkspaceShell) — synchronisé depuis le projet ────
+  // ── Titre éditable (standard WorkspaceShell) - synchronisé depuis le projet ────
   // NB : les projets vidéo n'ont pas de champ `is_starred` (modèle/API sans favoris)
   // → pas d'étoile pour Motion (contrairement à Layer/Apex/Vertex).
   const [titleDraft, setTitleDraft] = useState('')
@@ -882,7 +882,7 @@ export default function MotionEditorPage() {
         vid.playbackRate = clip.speed && clip.speed > 0 ? clip.speed : 1
         if (playing) {
           if (Math.abs(vid.currentTime - srcTime) > 0.35) { try { vid.currentTime = srcTime } catch { /* not seekable yet */ } }
-          if (vid.paused) vid.play().catch(() => { /* autoplay refusée — geste utilisateur requis */ })
+          if (vid.paused) vid.play().catch(() => { /* autoplay refusée - geste utilisateur requis */ })
         } else {
           if (!vid.paused) vid.pause()
           if (Math.abs(vid.currentTime - srcTime) > 1 / fps) { try { vid.currentTime = srcTime } catch { /* */ } }

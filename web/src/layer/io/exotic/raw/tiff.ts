@@ -92,7 +92,7 @@ export interface IfdSweep {
   readonly makerNoteLength: number
 }
 
-/** IFDs a single sweep may visit — the classic TIFF denial-of-service bound. */
+/** IFDs a single sweep may visit - the classic TIFF denial-of-service bound. */
 const MAX_SWEPT_IFDS = 64
 
 /**

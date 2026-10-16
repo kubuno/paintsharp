@@ -30,7 +30,7 @@ export const sdkVersion = SDK_VERSION
 
 export function register() {
   // `paintsharp.vectors` JSON envelopes (Apex "Copier pour Kubuno"): consumer
-  // modules (chat, office…) resolve this renderer through `core.data-card` —
+  // modules (chat, office…) resolve this renderer through `core.data-card` -
   // live React card + on-demand static SVG/PNG render of the original JSON.
   registerDataCardRenderer('paintsharp', {
     types: ['paintsharp.vectors'],
@@ -38,7 +38,7 @@ export function register() {
     renderStatic: renderVectorsStatic,
   })
 
-  // Kubuno file types owned by each Paintsharp sub-module (declared to `files` —
+  // Kubuno file types owned by each Paintsharp sub-module (declared to `files` -
   // the basis for StartPage filtering, icons and "open with").
   // `open`: resolves the entity via openByFile (returns { id }) then navigates to the editor.
   FileTypeRegistry.register({ moduleId: 'paintsharp-apex', label: 'Apex', icon: 'PenTool',

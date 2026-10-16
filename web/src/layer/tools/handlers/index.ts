@@ -2,7 +2,7 @@
 //
 // Importing this module is what pulls every tool file in and runs its
 // `registerTool` call. It is the ONLY file that knows the full list, which keeps
-// each tool file free of cross-references — add a tool by adding one line here.
+// each tool file free of cross-references - add a tool by adding one line here.
 //
 // Owned by the integrator: tool files must not edit it.
 

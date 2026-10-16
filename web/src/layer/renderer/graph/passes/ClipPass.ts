@@ -1,4 +1,4 @@
-// Clipping — capture the clip base's own alpha into a register.
+// Clipping - capture the clip base's own alpha into a register.
 //
 // The current renderer clips to `clipBase = layerTex`, the RAW texture of the
 // layer below (defect F14). Three things break:

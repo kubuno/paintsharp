@@ -2,7 +2,7 @@
 //
 // PNG decoder and encoder (spec 05 §3.3).
 //
-// Decoding is in-house whenever the browser would lose something — which is exactly the
+// Decoding is in-house whenever the browser would lose something - which is exactly the
 // 16-bit case: Chrome decodes 16-bit PNG internally but the canvas truncates it to 8
 // (measured, spec 05 §2.4), and scanners, medical imaging and 3D renders produce 16-bit
 // PNG routinely. It is also needed unconditionally by the ICO decoder, whose Vista-era
@@ -435,7 +435,7 @@ function writeRow(out: SampleArray, row: Uint8Array, dst: number, samples: numbe
   }
   // 1/2/4 bits: MSB-first, rows padded to a byte. Sub-byte greyscale is scaled to 0..255;
   // palette indices must stay raw, and PNG palettes are always colour type 3, whose
-  // samples this function receives untouched — hence no scaling here, the caller decides.
+  // samples this function receives untouched - hence no scaling here, the caller decides.
   const max = (1 << bitDepth) - 1
   for (let i = 0; i < samples; i++) {
     const bitPos = i * bitDepth
@@ -479,7 +479,7 @@ export interface PngEncodeOptions {
 }
 
 /**
- * Writes a PNG. `image` must already be in the target colour model — the encoder only
+ * Writes a PNG. `image` must already be in the target colour model - the encoder only
  * does binary formatting, never colour maths (spec 05 §5.2).
  */
 export async function encodePng(image: RasterImage, opts: PngEncodeOptions = {}): Promise<Uint8Array> {

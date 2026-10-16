@@ -3,7 +3,7 @@
 // Written in full rather than delegating to the platform, for two reasons that
 // are not negotiable: no browser exposes APNG frames to JavaScript reliably,
 // and even one that did would not report `dispose_op`, `blend_op` or the frame
-// offsets — precisely the metadata a faithful re-export needs.
+// offsets - precisely the metadata a faithful re-export needs.
 //
 // A useful side effect: this is also a complete PNG decoder (1/2/4/8/16 bits,
 // grey, RGB, palette, grey+alpha, RGBA, Adam7), so callers can learn what a PNG

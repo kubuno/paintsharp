@@ -3,7 +3,7 @@
  *
  * The PSD key table was derived from the GIMP PSD plug-in (file-psd),
  * Copyright 2007 John Marshall, licensed under the GNU General Public License
- * v3 or later — `layer_mode_map[]` and `descriptor_mode_map[]` in psd-util.c —
+ * v3 or later - `layer_mode_map[]` and `descriptor_mode_map[]` in psd-util.c -
  * and from Adobe's public "Photoshop File Formats Specification".
  *
  * This is an independent TypeScript re-implementation; no GIMP source code was

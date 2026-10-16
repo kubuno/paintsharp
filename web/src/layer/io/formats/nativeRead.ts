@@ -1,7 +1,7 @@
 // Native decode path wrapped as a `DecodedFile` (spec 05 §3.2, §3.3).
 //
 // The pixels come from the platform codec; the CONTAINER is always walked in-house so
-// EXIF, XMP and ICC survive — the browser exposes none of them. Orientation is read here
+// EXIF, XMP and ICC survive - the browser exposes none of them. Orientation is read here
 // and recorded, never applied: `createImageBitmap` is called with
 // `imageOrientation: 'none'` and the rotation is baked in by `metadata/orientation.ts`.
 
@@ -71,7 +71,7 @@ export async function readNativeImage(
   return { formatId, pages: [{ image, role: 'main', index: 0 }], metadata, warnings: sink.warnings }
 }
 
-/** Walks the JPEG marker segments — pixels are never touched here. */
+/** Walks the JPEG marker segments - pixels are never touched here. */
 export function readJpegMetadata(bytes: Uint8Array, sink: WarningSink): ImageMetadata {
   const m: MutableImageMetadata = {}
   const iccChunks: Uint8Array[] = []

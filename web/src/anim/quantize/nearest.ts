@@ -2,10 +2,10 @@
 //
 // Two implementations, deliberately:
 //
-//  * ExactMapper — a hash of the real 24-bit colours. Used on the "exact
+//  * ExactMapper - a hash of the real 24-bit colours. Used on the "exact
 //    palette" fast path (<= 256 distinct colours), where any approximation
 //    would break the lossless GIF -> Layer -> GIF round-trip.
-//  * NearestCache — a 5-5-5 lookup table filled lazily by exhaustive search
+//  * NearestCache - a 5-5-5 lookup table filled lazily by exhaustive search
 //    over <= 256 entries. 64 kB fits in L2, there is no pointer chasing and the
 //    256-comparison loop vectorises well: in practice faster than a k-d tree at
 //    this palette size.

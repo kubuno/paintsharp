@@ -16,7 +16,7 @@ export interface Histogram {
   sumR: Float64Array
   sumG: Float64Array
   sumB: Float64Array
-  /** Indices of the non-empty bins, ascending — deterministic by construction. */
+  /** Indices of the non-empty bins, ascending - deterministic by construction. */
   used: Int32Array
   usedCount: number
   /** Number of sampled opaque pixels. */
@@ -81,7 +81,7 @@ export function buildHistogram(frames: readonly RgbaImage[], budget = DEFAULT_SA
  *
  * When it succeeds we can use the exact palette: zero loss, zero dithering, and
  * the only way to guarantee that GIF -> Layer -> GIF leaves colours untouched.
- * Covers pixel art, screenshots, logos, line art — i.e. most real GIFs.
+ * Covers pixel art, screenshots, logos, line art - i.e. most real GIFs.
  * Returns null as soon as the limit is exceeded.
  */
 export function exactColors(frames: readonly RgbaImage[], limit: number): Uint32Array | null {

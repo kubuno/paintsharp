@@ -7,7 +7,7 @@
 //
 // The `precision` header field has THREE incompatible encodings depending on the file
 // version (spec 07 §4.8). The classic third-party bug is to use one table for all of
-// them: 400/450 mean "half" in v5/v6 but nothing in v>=7, where 500/550 mean "half" —
+// them: 400/450 mean "half" in v5/v6 but nothing in v>=7, where 500/550 mean "half" -
 // and 500/550 meant "float" in v5/v6. A single table silently mislabels every 16-bit
 // float file ever written by GIMP 2.9.
 

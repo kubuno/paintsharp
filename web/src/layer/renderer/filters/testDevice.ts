@@ -1,7 +1,7 @@
 // A `GLDeviceLike` test double.
 //
 // It compiles nothing and draws nothing: it RECORDS. That is enough to assert
-// the things that break silently on a real GPU and are painful to debug there —
+// the things that break silently on a real GPU and are painful to debug there -
 // pass count and order, program cache keys, render-target sizes, which texture
 // each sampler was bound to, and whether every intermediate was returned to the
 // pool. It also runs in Node, with no WebGL context, so the filter graph can be

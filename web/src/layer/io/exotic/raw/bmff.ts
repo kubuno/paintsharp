@@ -38,7 +38,7 @@ export interface BoxWalkState {
 
 /**
  * Iterates the boxes directly inside `[start, end)`. Nested boxes are reached by calling
- * again on a parent's payload — the caller decides how deep to go, which keeps a
+ * again on a parent's payload - the caller decides how deep to go, which keeps a
  * pathological file from being fully expanded.
  */
 export function* iterBoxes(

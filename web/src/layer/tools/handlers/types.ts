@@ -21,7 +21,7 @@ export interface ToolPointer {
   /** Position in document pixels. */
   x: number
   y: number
-  /** 0..1 — 0.5 for devices without pressure. */
+  /** 0..1 - 0.5 for devices without pressure. */
   pressure: number
   altKey: boolean
   shiftKey: boolean
@@ -33,7 +33,7 @@ export interface ToolPointer {
 
 /**
  * Everything a tool is allowed to do. Deliberately narrow: no React, no GL, no
- * direct access to the editor's refs — so a tool stays testable and cannot break
+ * direct access to the editor's refs - so a tool stays testable and cannot break
  * invariants it does not know about.
  */
 export interface ToolContext {
@@ -59,7 +59,7 @@ export interface ToolContext {
    * Cheaper: snapshot only the rectangle a gesture touched.
    *
    * `snapshot` is a FULL-DOCUMENT buffer captured before the change; the editor
-   * crops `bbox` out of it. Bounds are half-open — `x1`/`y1` are EXCLUSIVE, so
+   * crops `bbox` out of it. Bounds are half-open - `x1`/`y1` are EXCLUSIVE, so
    * the rectangle is `w = x1 - x0` wide. They are clamped to the document.
    */
   pushUndoRect(layerId: string, snapshot: Uint8Array, bbox: { x0: number; y0: number; x1: number; y1: number }): void
@@ -107,7 +107,7 @@ export interface ToolHandler {
   onDown?(ctx: ToolContext, p: ToolPointer): void
   onMove?(ctx: ToolContext, p: ToolPointer): void
   onUp?(ctx: ToolContext, p: ToolPointer): void
-  /** Escape or a tool switch aborted the gesture — drop any transient state. */
+  /** Escape or a tool switch aborted the gesture - drop any transient state. */
   onCancel?(ctx: ToolContext): void
   /** Enter committed the gesture (polygonal lasso, pen path…). */
   onCommit?(ctx: ToolContext): void

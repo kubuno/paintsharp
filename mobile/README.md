@@ -1,4 +1,4 @@
-# Kubuno Paintsharp — mobile apps
+# Kubuno Paintsharp - mobile apps
 
 Reserved for the mobile clients of the Paintsharp module, organised like the other platforms of this repository:
 

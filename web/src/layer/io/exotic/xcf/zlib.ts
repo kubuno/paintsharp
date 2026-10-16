@@ -6,7 +6,7 @@
 //
 // No npm dependency is needed: the Compression Streams API's `'deflate'` algorithm IS
 // the zlib container of RFC 1950 (`'deflate-raw'` would be the bare RFC 1951 stream, and
-// XCF stores the former). Available since Chrome 80, Firefox 113 and Safari 16.4 — below
+// XCF stores the former). Available since Chrome 80, Firefox 113 and Safari 16.4 - below
 // every target of this project.
 
 /** Cap on one inflated tile: 64×64 pixels × 8 bytes/pixel, with generous headroom. */

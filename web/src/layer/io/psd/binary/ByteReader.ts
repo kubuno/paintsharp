@@ -147,7 +147,7 @@ export class ByteReader {
   }
 
   /**
-   * A cursor clamped to `[pos, pos + length]`. Does NOT advance this reader —
+   * A cursor clamped to `[pos, pos + length]`. Does NOT advance this reader -
    * callers must `seekTo()` the declared end afterwards, which is what makes
    * mis-declared block lengths harmless.
    */

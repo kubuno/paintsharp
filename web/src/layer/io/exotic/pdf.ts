@@ -10,7 +10,7 @@
 // `pdfjs-dist` is reached only through `shared/pdfRender.ts`, which imports it with a
 // dynamic `import()`. This module itself is only ever reached through the descriptor's
 // lazy loader, so the pdf.js chunk is fetched the first time a PDF is opened, never
-// before — a bundle-budget constraint, not an architectural one (spec 07 §7.1).
+// before - a bundle-budget constraint, not an architectural one (spec 07 §7.1).
 
 import { loadPdf, renderPdfPage } from '../../../shared/pdfRender'
 import { bitmapToRgba, singleLayerDocument, stripExtension } from './bitmap'
@@ -46,7 +46,7 @@ const MAX_LAYERS_PER_DOC = 60
  *
  * Returns ONE document when every selected page has the same size (planches, storyboards
  * and mock-ups are meant to be stacked and compared), and one document PER page when the
- * sizes differ — stacking an A4 and an A3 in a single canvas would invent arbitrary
+ * sizes differ - stacking an A4 and an A3 in a single canvas would invent arbitrary
  * margins. Page 1 ends up at index 0, i.e. on top, per the stacking convention.
  */
 export async function decodePdf(
@@ -96,7 +96,7 @@ export async function decodePdf(
         if (!uniform && rendered.length > 1) warn.warn(importWarn('pdf.mixed-page-sizes'))
         return rendered.map((r, i) =>
           singleLayerDocument(r.image, {
-            title: rendered.length > 1 ? `${title} — ${r.name}` : title,
+            title: rendered.length > 1 ? `${title} - ${r.name}` : title,
             layerName: r.name,
             warnings: warn.list(),
             provenance: `PDF · page ${wanted[i] + 1}/${total} · ${opts.dpi ?? DEFAULT_DPI} dpi · ${r.image.width}×${r.image.height}`,

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// PNM family: PBM/PGM/PPM (P1-P6), PAM (P7) and PFM (Pf/PF) — spec 05 §3.3.
+// PNM family: PBM/PGM/PPM (P1-P6), PAM (P7) and PFM (Pf/PF) - spec 05 §3.3.
 //
 // The header is a whitespace-separated token stream where `#` starts a comment that runs
 // to the end of the line, and `maxval > 255` switches the samples to 16-bit BIG-ENDIAN.

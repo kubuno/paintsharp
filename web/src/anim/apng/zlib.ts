@@ -1,6 +1,6 @@
 // zlib streams through the platform's own CompressionStream/DecompressionStream.
 //
-// THE TRAP: 'deflate' is RFC 1950 — the zlib wrapper, with its 2-byte header
+// THE TRAP: 'deflate' is RFC 1950 - the zlib wrapper, with its 2-byte header
 // and trailing Adler-32. 'deflate-raw' is RFC 1951, the bare deflate stream.
 // PNG IDAT/fdAT payloads are RFC 1950, so 'deflate' is the correct name here;
 // picking 'deflate-raw' fails with an unhelpful error. This is the single most

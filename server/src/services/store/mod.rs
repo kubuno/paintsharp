@@ -28,15 +28,15 @@ use crate::errors::Result;
 /// Deletes a **trashed** row identified by `(id, owner_id)` and returns its
 /// `file_id` (which is itself nullable).
 ///
-/// * `Ok(Some(file_id))` — a trashed row was deleted; `file_id` is its content
+/// * `Ok(Some(file_id))` - a trashed row was deleted; `file_id` is its content
 ///   file (or `None` when the row had none).
-/// * `Ok(None)` — no trashed row matched, so nothing was deleted and the caller
+/// * `Ok(None)` - no trashed row matched, so nothing was deleted and the caller
 ///   should raise `NotFound`.
 ///
 /// The guard (`is_trashed = TRUE`) is applied to the re-select as well as the
 /// delete, so the MySQL path (which re-reads before deleting, having no
 /// `RETURNING`) cannot report a live row as deleted. `table` is a `&'static str`
-/// — an identifier, never user data.
+/// - an identifier, never user data.
 pub async fn delete_trashed_returning_file_id(
     db: &DbPool,
     table: &'static str,

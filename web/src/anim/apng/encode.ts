@@ -2,7 +2,7 @@
 //
 // APNG is a plain PNG plus three ancillary chunks (`acTL`, `fcTL`, `fdAT`);
 // their lowercase first letter means a PNG decoder that does not know them
-// ignores them and shows the IDAT — i.e. the first frame — with no error at
+// ignores them and shows the IDAT - i.e. the first frame - with no error at
 // all. That fallback is APNG's whole point, so we always write the variant
 // where the first `fcTL` precedes the IDAT and the IDAT IS frame 0.
 //
@@ -10,7 +10,7 @@
 //  1. The sequence number is ONE counter shared by fcTL and fdAT, starting at 0
 //     and incremented for each chunk of either kind, in file order. It is not a
 //     frame index and it is not two counters. Firefox and Chrome reject the
-//     whole file when it is wrong, with no usable message — so it is produced
+//     whole file when it is wrong, with no usable message - so it is produced
 //     by a single writeSeq(), never recomputed.
 //  2. Whether the IDAT belongs to the animation depends on where the first fcTL
 //     sits. Ours always precedes it, which imposes width/height equal to IHDR's
@@ -198,7 +198,7 @@ function fctl(sequence: number, plan: FramePlan): Uint8Array {
   writeU32(b, 8, plan.rect.h)
   writeU32(b, 12, plan.rect.x)
   writeU32(b, 16, plan.rect.y)
-  // A fraction, so 1/30 s or 1/60 s are exact — impossible in GIF. We use
+  // A fraction, so 1/30 s or 1/60 s are exact - impossible in GIF. We use
   // den = 1000 and num = milliseconds: exact for our model and readable in a
   // hex dump. This is also why GIF -> APNG is faithful while the reverse rounds.
   const ms = Math.max(0, Math.min(0xffff, Math.round(plan.delayMs)))

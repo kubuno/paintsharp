@@ -181,7 +181,7 @@ type Ring = [number, number][]
  */
 function contourSetToMultiPoly(contours: FontContour[]): Ring[][] {
   const rings = contours.filter(c => c.length >= 3).map(c => flattenContour(c, 16))
-  // FULL containment only — a partial overlap is a sibling shape, not a hole.
+  // FULL containment only - a partial overlap is a sibling shape, not a hole.
   const inside = (r: Ring, o: Ring) => r.every(pt => pointInPolygon(pt, o))
   const depth = rings.map((r, i) =>
     rings.reduce((d, o, j) => (j !== i && inside(r, o) ? d + 1 : d), 0))
@@ -257,7 +257,7 @@ function polygonalPathfinder(a: FontContour[], b: FontContour[], op: PathfinderO
   try {
     switch (op) {
       case 'union': {
-        // Each polygon must be its own geometry — a single MultiPolygon argument
+        // Each polygon must be its own geometry - a single MultiPolygon argument
         // is treated as already-disjoint and would not self-merge.
         const all = [...A, ...B].map(p => [p])
         if (!all.length) return null
@@ -477,7 +477,7 @@ function classifyPieces(
 /**
  * Chains pieces into closed contours by endpoint matching. At a junction with
  * several candidates (tangency points) the smoothest continuation wins. Open
- * chains are DROPPED — their total length is reported so the caller can decide
+ * chains are DROPPED - their total length is reported so the caller can decide
  * whether the result is still trustworthy.
  */
 function chainSegs(pieces: Seg[]): { contours: FontContour[]; droppedLen: number } {
@@ -490,7 +490,7 @@ function chainSegs(pieces: Seg[]): { contours: FontContour[]; droppedLen: number
     if (arr) arr.push(i)
     else starts.set(k, [i])
   })
-  // Endpoint buckets can split two nearby points — search the 3×3 neighborhood.
+  // Endpoint buckets can split two nearby points - search the 3×3 neighborhood.
   const candidatesNear = (p: Pt, used: boolean[]): number[] => {
     const cx = Math.round(p[0] / CELL), cy = Math.round(p[1] / CELL)
     const cands: number[] = []
@@ -586,7 +586,7 @@ function booleanContours(a: FontContour[], b: FontContour[], op: PathfinderOp): 
     }
   }
 
-  // 2. Split at the cuts. Uncut segments stay whole — exact control points.
+  // 2. Split at the cuts. Uncut segments stay whole - exact control points.
   const split = (segs: Seg[], cuts: number[][]): Seg[] => {
     const out: Seg[] = []
     segs.forEach((s, i) => {
@@ -670,7 +670,7 @@ export function smoothContour(contour: FontContour): FontContour {
 }
 
 /**
- * Offsets every contour along its outward normal — positive `d` fattens the
+ * Offsets every contour along its outward normal - positive `d` fattens the
  * shape (outer contours grow, holes shrink), negative thins it. Polygonal
  * result (Apex-style vertex-normal offset with miter compensation).
  */

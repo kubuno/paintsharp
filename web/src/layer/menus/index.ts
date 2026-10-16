@@ -1,4 +1,4 @@
-// Layer editor menu model — public surface.
+// Layer editor menu model - public surface.
 //
 // Wiring recipe for `LayerEditorPage`:
 //

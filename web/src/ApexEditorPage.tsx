@@ -65,7 +65,7 @@ function TrapezoidIcon({ size = 16 }: { size?: number }) {
   )
 }
 
-// "No fill" glyph — circle crossed by a red diagonal (universal none/transparent).
+// "No fill" glyph - circle crossed by a red diagonal (universal none/transparent).
 function NoFillIcon({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -81,7 +81,7 @@ function noneTool(label: string, active: boolean, onClick: () => void): PickerTo
   return { id: 'none', title: label, active, icon: <NoFillIcon />, onClick }
 }
 
-// "None" swatch face — a white disc crossed by a red diagonal (Illustrator-style),
+// "None" swatch face - a white disc crossed by a red diagonal (Illustrator-style),
 // shown in a tool-rail circle when its fill/stroke is set to none, replacing the
 // colour. Purely visual (pointer-events: none) so the ColorField beneath stays clickable.
 function NoneSwatchFace({ style }: { style?: React.CSSProperties }) {
@@ -190,7 +190,7 @@ function buildPathInto(sink: PathSink, pts: PathPoint[], closed: boolean) {
   if (pts.length === 0) return
   sink.moveTo(pts[0].x, pts[0].y)
   // Sous-chemins (chemin composé) : un point `move` ferme le sous-chemin courant
-  // (si fermé) et en démarre un nouveau — permet la fusion de plusieurs objets.
+  // (si fermé) et en démarre un nouveau - permet la fusion de plusieurs objets.
   let subStart = 0
   const closeSub = (end: number) => {
     if (closed && end - subStart >= 1) { bezierToSink(sink, pts[end], pts[subStart]); sink.closePath() }
@@ -313,7 +313,7 @@ function paintElement(ctx: CanvasRenderingContext2D, el: VectorElement, eff: num
   if (!p2d) return
 
   if (outline) {
-    // Wireframe: geometry only, uniform hairline — invaluable to inspect stacking.
+    // Wireframe: geometry only, uniform hairline - invaluable to inspect stacking.
     ctx.strokeStyle = '#8a8a8a'
     ctx.lineWidth = 1 / zoom
     ctx.setLineDash([])
@@ -456,7 +456,7 @@ function renderCanvas(
     ctx.restore()
   }
 
-  // Elements — depth-first tree order, with cascaded (parent×child) opacity.
+  // Elements - depth-first tree order, with cascaded (parent×child) opacity.
   // Clip scopes (clipping-mask groups) translate to save/clip/restore pairs.
   for (const entry of renderOrder(pageData.elements)) {
     if ('clipEnter' in entry) { ctx.save(); ctx.clip(worldClipPath(entry.clipEnter), 'nonzero'); continue }
@@ -511,7 +511,7 @@ function renderCanvas(
     ctx.strokeRect(bx - 1 / cs.zoom, by - 1 / cs.zoom, bw + 2 / cs.zoom, bh + 2 / cs.zoom)
 
     const hSz = 6 / cs.zoom
-    // All 8 handles (corners + edge midpoints) — containers resize their whole subtree.
+    // All 8 handles (corners + edge midpoints) - containers resize their whole subtree.
     const handles = [
       [bx, by], [bx + bw / 2, by], [bx + bw, by],
       [bx, by + bh / 2],             [bx + bw, by + bh / 2],
@@ -710,7 +710,7 @@ function renderCanvas(
     // arc spanning the interior angle otherwise. Every stroke gets a white CASING drawn
     // underneath so the coloured core stays visible over same-hue backgrounds (the white
     // separates it from a coloured fill; the coloured core stands out over white). Fully
-    // automatic — no need to sample the background colour.
+    // automatic - no need to sample the background colour.
     const vx = hoverAngle.x, vy = hoverAngle.y, a1 = hoverAngle.a1, a2 = hoverAngle.a2
     const arm = 34 / z, rad = 18 / z
     const d1x = Math.cos(a1), d1y = Math.sin(a1), d2x = Math.cos(a2), d2y = Math.sin(a2)
@@ -762,7 +762,7 @@ function renderCanvas(
 
   ctx.restore()
 
-  // Rulers — screen-space strips with adaptive world-unit ticks. Drawn last so
+  // Rulers - screen-space strips with adaptive world-unit ticks. Drawn last so
   // they overlay the content. Skipped while the view is rotated (ticks would lie).
   if (drawOv && view?.rulers && !cs.rot) {
     const R = RULER_PX
@@ -1170,7 +1170,7 @@ function toElementLocal(el: VectorElement, px: number, py: number): { x: number;
 }
 
 // Precise, rotation-aware hit-testing: point-in-fill / point-on-stroke against
-// the cached Path2D (was a plain bounding-box test — impossible to click through
+// the cached Path2D (was a plain bounding-box test - impossible to click through
 // the empty inside of a ring, or select overlapping shapes reliably).
 let _hitCtx: CanvasRenderingContext2D | null = null
 function hitTest(el: VectorElement, px: number, py: number, zoom = 1): boolean {
@@ -1185,11 +1185,11 @@ function hitTest(el: VectorElement, px: number, py: number, zoom = 1): boolean {
   if (!_hitCtx) _hitCtx = document.createElement('canvas').getContext('2d')
   const hctx = _hitCtx
   if (!hctx) return false
-  // Fill region counts whenever the shape carries a fill — a filled OPEN path is
+  // Fill region counts whenever the shape carries a fill - a filled OPEN path is
   // rendered by implicitly closing it (ctx.fill), so its visible (non-transparent)
   // area is clickable too, exactly matching what the user sees.
   if (el.fill.type !== 'none' && hctx.isPointInPath(p2d, lp.x, lp.y, fillRule(el))) return true
-  // Stroke band — with a comfortable minimum grab width at any zoom.
+  // Stroke band - with a comfortable minimum grab width at any zoom.
   const grab = 8 / zoom
   const sw = el.stroke && el.stroke.width > 0 ? el.stroke.width : 0
   hctx.lineWidth = Math.max(sw, grab)
@@ -1197,7 +1197,7 @@ function hitTest(el: VectorElement, px: number, py: number, zoom = 1): boolean {
 }
 
 // ── Geometry helpers ───────────────────────────────────────────────────────────
-// True bounding box of a bezier path INCLUDING curve extrema — a curve can bulge
+// True bounding box of a bezier path INCLUDING curve extrema - a curve can bulge
 // well past its anchors, so an anchors-only box clips the selection frame.
 function pathBounds(pts: PathPoint[], closed: boolean): { x: number; y: number; w: number; h: number } {
   if (!pts.length) return { x: 0, y: 0, w: 0, h: 0 }
@@ -1264,7 +1264,7 @@ function elBBox(el: VectorElement): { x: number; y: number; w: number; h: number
 // local outline; only the vertex position is rotated into world space. Used by the
 // hover angle-readout (inspect whether e.g. a "rectangle" still has 90° corners).
 // `a1`/`a2` are the WORLD-space directions (radians) of the two edges leaving the vertex
-// — used to draw the angle's arms plus its arc / right-angle marker.
+// - used to draw the angle's arms plus its arc / right-angle marker.
 // `ptIndex` = index of the vertex in a PATH's `points` array (or -1 for the corners of a
 // parametric rect/image/text, whose 90° corners are not point-editable). Enables the
 // double-click / context-menu "edit angle" flow.
@@ -1456,7 +1456,7 @@ function genSymClones(container: SymmetryElement, src: VectorElement): VectorEle
   }
   return out
 }
-// Inverse of the transform genSymClones applies to make clone `symIdx` — maps a
+// Inverse of the transform genSymClones applies to make clone `symIdx` - maps a
 // canvas point from the clone's frame back to the source's, so edits on a clone can
 // be redirected onto its source (all isometries → simple inverses).
 function symCloneInverse(container: SymmetryElement, symIdx: number): ((x: number, y: number) => { x: number; y: number }) | null {
@@ -1484,7 +1484,7 @@ function symCloneInverse(container: SymmetryElement, symIdx: number): ((x: numbe
 }
 // Apply, to a canvas context, the FORWARD isometry genSymClones used to place clone
 // `symIdx`. Reflected clones bake their rotation into points (no `rotation` field), so
-// their selection box can't be re-derived from a bbox+angle — instead we draw the
+// their selection box can't be re-derived from a bbox+angle - instead we draw the
 // SOURCE's (correct) box under this transform, landing it exactly on the clone.
 function applySymCloneForward(ctx: CanvasRenderingContext2D, container: SymmetryElement, symIdx: number): boolean {
   const { symMode: mode, cx, cy } = container
@@ -1514,7 +1514,7 @@ function scaleElementInFrame(el: VectorElement, px: number, py: number, ang: num
   const L = (vx: number, vy: number): [number, number] => { const llx = c * vx + s * vy, lly = -s * vx + c * vy; const X = llx * sx, Y = lly * sy; return [c * X - s * Y, s * X + c * Y] }
   const axisAligned = ang % 360 === 0
   if (el.type === 'symmetry') { const [ncx, ncy] = M((el as SymmetryElement).cx, (el as SymmetryElement).cy); return { ...el, cx: ncx, cy: ncy } as VectorElement }
-  if (el.type === 'group') return el   // no geometry — its leaves scale individually
+  if (el.type === 'group') return el   // no geometry - its leaves scale individually
   if (el.type === 'path') {
     const pe = el as PathElement
     const pts = pe.points.map(p => {
@@ -1578,7 +1578,7 @@ function descendantLeaves(els: VectorElement[], groupId: string): VectorElement[
   return [...descendantIds(els, groupId)].map(id => els.find(e => e.id === id)!).filter(e => e && !isContainer(e))
 }
 // Expand a selection for a unit MOVE/ROTATE: any selected container also drags its
-// whole subtree — source leaves AND sub-containers (nested groups/symmetries carry
+// whole subtree - source leaves AND sub-containers (nested groups/symmetries carry
 // x/y or cx/cy + rotation that must transform too). Clones are regenerated, excluded.
 function expandUnitForMove(els: VectorElement[], ids: string[]): string[] {
   const out = new Set(ids)
@@ -1667,7 +1667,7 @@ function renderOrder(els: VectorElement[]): RenderEntry[] {
   walk(ROOT, true, 1)
   return out
 }
-// Only the paintable leaves, in paint order — for hit-testing and export flows
+// Only the paintable leaves, in paint order - for hit-testing and export flows
 // that don't care about clip scopes.
 function renderLeaves(els: VectorElement[]): { el: VectorElement; alpha: number }[] {
   return renderOrder(els).filter((e): e is { el: VectorElement; alpha: number } => 'el' in e)
@@ -1736,7 +1736,7 @@ function pruneEmptyGroups(els: VectorElement[]): VectorElement[] {
 function moveElement(els: VectorElement[], dragId: string, targetId: string, zone: 'before' | 'after' | 'inside'): VectorElement[] {
   const drag = els.find(e => e.id === dragId), target = els.find(e => e.id === targetId)
   if (!drag || !target || dragId === targetId) return els
-  // Symmetry clones are managed by the reconciler — never move them by hand.
+  // Symmetry clones are managed by the reconciler - never move them by hand.
   if (drag.symOf) return els
   const newParent: string | null = zone === 'inside' && isContainer(target) ? target.id : (target.parentId ?? null)
   // Guard against dropping a container into itself or a descendant.
@@ -1783,10 +1783,10 @@ const SNAP_PX = 6   // snap threshold in screen pixels
 type SnapBox = { x: number; y: number; w: number; h: number }
 type SnapCand = { coord: number; box: SnapBox | null }   // box=null for guides (no distance)
 // A live snap line: the aligned axis coordinate, plus (when known) the dragged box
-// `a` and the neighbour `b` it aligned with — used to draw the distance indicator.
+// `a` and the neighbour `b` it aligned with - used to draw the distance indicator.
 type SnapGuide = { coord: number; a?: SnapBox; b?: SnapBox }
 // Candidate snap coordinates: every other element's edges/centre, the artboards,
-// and the user guides — each carries its source bbox so we can measure distances.
+// and the user guides - each carries its source bbox so we can measure distances.
 function snapTargets(pd: VectorPageData, exclude: Set<string>): { xs: SnapCand[]; ys: SnapCand[] } {
   const xs: SnapCand[] = [], ys: SnapCand[] = []
   for (const ab of pd.artboards) {
@@ -1890,7 +1890,7 @@ function snapGuideFor(axis: 'x' | 'y', coord: number, moved: SnapBox, cands: Sna
 }
 
 // ── Gradient on-canvas editing ───────────────────────────────────────────────
-// Endpoints of the gradient line in world coords — mirrors the renderer's extent
+// Endpoints of the gradient line in world coords - mirrors the renderer's extent
 // so the handles sit exactly where the gradient is painted.
 function gradientLine(el: VectorElement): { sx: number; sy: number; ex: number; ey: number; cx: number; cy: number } | null {
   const f = el.fill
@@ -2027,7 +2027,7 @@ function genGear(cx: number, cy: number, rx: number, ry: number, teeth: number, 
   const out: PathPoint[] = []
   const n = Math.max(4, Math.round(teeth))
   const pitch = (Math.PI * 2) / n
-  // Per tooth: 4 vertices — tooth top (2, at outer radius) then valley (2, at inner).
+  // Per tooth: 4 vertices - tooth top (2, at outer radius) then valley (2, at inner).
   for (let i = 0; i < n; i++) {
     const a = -Math.PI / 2 + i * pitch
     const angles = [a - pitch * 0.18, a + pitch * 0.18, a + pitch * 0.30, a + pitch * 0.70]
@@ -2109,7 +2109,7 @@ function genBubble(x: number, y: number, w: number, h: number, round: number, ta
   return pts
 }
 
-// Give a closed polygon smooth Catmull-Rom handles (puffy outline) — used by
+// Give a closed polygon smooth Catmull-Rom handles (puffy outline) - used by
 // the flower and cloud shapes on top of the star skeleton.
 function smoothClosed(pts: PathPoint[], amount = 0.25): PathPoint[] {
   const n = pts.length
@@ -2192,7 +2192,7 @@ function regenShapePoints(el: PathElement): PathPoint[] {
   if (el.shape === 'heart')  return genHeart(el.x, el.y, el.w, el.h)
   if (el.shape === 'cross')  return genCross(cx, cy, rx, ry, shapeParam(el, 'shaft'))
   if (el.shape === 'gear')   return genGear(cx, cy, rx, ry, shapeParam(el, 'teeth'), shapeParam(el, 'depth'), shapeParam(el, 'hole'))
-  // A partial pie doesn't fill its generation circle — refit so the stored
+  // A partial pie doesn't fill its generation circle - refit so the stored
   // bbox and the geometry always agree (keeps regeneration idempotent).
   if (el.shape === 'pie')    return fitPointsToBox(genPie(cx, cy, rx, ry, shapeParam(el, 'start'), shapeParam(el, 'sweep'), shapeParam(el, 'hole')), el.x, el.y, el.w, el.h)
   if (el.shape === 'bubble') return genBubble(el.x, el.y, el.w, el.h, shapeParam(el, 'round'), shapeParam(el, 'tail'))
@@ -2226,7 +2226,7 @@ function cloneEl(el: VectorElement, dx = 0, dy = 0): VectorElement {
   if (c.type === 'path') (c as PathElement).points = (c as PathElement).points.map(p => ({ ...p, x: p.x + dx, y: p.y + dy }))
   return c
 }
-// Translate an element by (dx,dy), keeping its id — moves path points too.
+// Translate an element by (dx,dy), keeping its id - moves path points too.
 function translateEl(el: VectorElement, dx: number, dy: number): VectorElement {
   const c = structuredClone(el)
   c.x += dx; c.y += dy
@@ -2329,7 +2329,7 @@ function nearestOnPath(path: PathElement, px: number, py: number) {
   }
   return best
 }
-// Split the segment after anchor `seg` at parameter t (de Casteljau) — inserts a
+// Split the segment after anchor `seg` at parameter t (de Casteljau) - inserts a
 // new anchor while preserving the curve exactly.
 function insertAnchor(path: PathElement, seg: number, t: number): PathElement {
   const pts = path.points.map(p => ({ ...p }))
@@ -2360,7 +2360,7 @@ function toggleAnchorSmooth(path: PathElement, idx: number): PathElement {
   return { ...path, points: pts }
 }
 
-// ── Node (anchor) type conversion — direct-selection contextual toolbar ─────────
+// ── Node (anchor) type conversion - direct-selection contextual toolbar ─────────
 // Affinity-style node kinds: sharp (cusp, no handles), smooth (colinear handles),
 // symmetric (mirrored equal-length handles), smart (auto tangent from neighbours).
 type AnchorType = 'sharp' | 'smooth' | 'symmetric' | 'smart'
@@ -2482,12 +2482,12 @@ function rotateHandlePos(bb: { x: number; y: number; w: number; h: number }, zoo
 // ── Pathfinder & path geometry (boolean ops, simplify, smooth, outline, offset) ──
 // Vectors are flattened to polygons (rings of [x,y]), processed with the robust
 // `polygon-clipping` library, then rebuilt as a PathElement. Bézier curvature is
-// approximated by line sampling — the result is an editable polygonal path.
+// approximated by line sampling - the result is an editable polygonal path.
 type PCRing = [number, number][]
 type PCPoly = PCRing[]
 type PCMulti = PCPoly[]
 
-// Apply an element's own rotation (around its bbox centre) to a world point —
+// Apply an element's own rotation (around its bbox centre) to a world point -
 // matches the transform used by the renderer/fill, so geometry is baked true.
 function bakeRotation(el: VectorElement, x: number, y: number): [number, number] {
   if (!el.rotation) return [x, y]
@@ -2500,7 +2500,7 @@ function bakeRotation(el: VectorElement, x: number, y: number): [number, number]
 // Sample the cubic from anchor `a` to anchor `b` (excludes a, includes b).
 function sampleCubic(a: PathPoint, b: PathPoint, steps: number): [number, number][] {
   const out: [number, number][] = []
-  // Straight segment when neither side carries a handle — keep it crisp (1 step).
+  // Straight segment when neither side carries a handle - keep it crisp (1 step).
   const curved = a.hOut || b.hIn
   const n = curved ? Math.max(2, steps) : 1
   for (let s = 1; s <= n; s++) {
@@ -2517,11 +2517,11 @@ function ringTagKey(x: number, y: number): string { return x.toFixed(6) + ',' + 
 // Per-vertex tag recorded while flattening for the boolean pipeline: role of the
 // vertex (0 curve-interior sample, 1 smooth anchor, 2 corner anchor) plus, for
 // anchors, the EXACT unit tangents (incoming travel direction `i`, outgoing `o`)
-// derived from the Bézier handles — letting the refit reproduce the original
+// derived from the Bézier handles - letting the refit reproduce the original
 // cubics with zero error instead of estimating tangents from the polygon.
 type VertexTag = { f: 0 | 1 | 2; ix?: number; iy?: number; ox?: number; oy?: number }
 // Analytic tangents at anchor `sub[i]`: incoming/outgoing directions of travel and
-// whether they diverge (a genuine CORNER) — tightly-curved-but-smooth anchors
+// whether they diverge (a genuine CORNER) - tightly-curved-but-smooth anchors
 // (star tips, blob lobes) are NOT corners.
 function anchorTangents(sub: PathPoint[], i: number): { corner: boolean; din: [number, number] | null; dout: [number, number] | null } {
   const n = sub.length
@@ -2544,7 +2544,7 @@ function anchorTangents(sub: PathPoint[], i: number): { corner: boolean; din: [n
 // sample), 1 (smooth anchor) or 2 (corner anchor). The boolean pipeline uses this
 // to rebuild results with the ORIGINAL node structure: intersection points
 // (unmatched vertices) and corner anchors are sharp breaks, smooth anchors are
-// smooth fit boundaries — so untouched outline portions keep exactly their source
+// smooth fit boundaries - so untouched outline portions keep exactly their source
 // anchors (minimal, mirror-symmetric node count), no angle guessing involved.
 function elementToRings(el: VectorElement, steps = 20, tags?: Map<string, VertexTag>): PCRing[] {
   if (el.type === 'text' || el.type === 'group' || el.type === 'symmetry' || el.type === 'image') return []
@@ -2647,7 +2647,7 @@ function fitOneCubic(pts: FPt[], u: number[], t1: FPt, t2: FPt): FPt[] {
   let a2len = det !== 0 ? (c00 * x1 - c01 * x0) / det : 0
   const seg = fDist(p0, p3)
   // Degenerate systems (thin/looping runs, bad tangents) can solve to negative or
-  // ENORMOUS handle lengths — the classic "spikes shooting across the canvas".
+  // ENORMOUS handle lengths - the classic "spikes shooting across the canvas".
   // Clamp to the Wu/Schneider fallback; the error check then splits the run.
   const maxA = seg * 1.5
   if (!isFinite(a1len) || !isFinite(a2len) ||
@@ -2712,7 +2712,7 @@ function fitRun(pts: FPt[], t1: FPt, t2: FPt, tol: number, out: FPt[][], depth =
 }
 // Convert an ordered, closed list of cubics (each P3 == next P0, last P3 == first
 // P0) into closed PathPoints: each anchor carries hOut from its cubic and hIn from
-// the previous cubic — colinear where the fit is smooth, a cusp at real corners.
+// the previous cubic - colinear where the fit is smooth, a cusp at real corners.
 function cubicsToPathPoints(cubics: FPt[][], startMove: boolean): PathPoint[] {
   const out: PathPoint[] = []
   const m = cubics.length
@@ -2761,9 +2761,9 @@ function refitCurves(points: PathPoint[], tags?: Map<string, VertexTag>, cornerD
     // Vertices matched in `tags` come straight from an input outline: 2 = corner
     // anchor (sharp break), 1 = smooth anchor (smooth fit boundary), 0 = curve-
     // interior sample. UNMATCHED vertices are intersection points computed by the
-    // clipper — the exact spots where the result jumps from one shape's boundary
+    // clipper - the exact spots where the result jumps from one shape's boundary
     // to the other's, i.e. true corners. Fitting each run BETWEEN original anchors
-    // reproduces the source node structure on untouched outline portions — the
+    // reproduces the source node structure on untouched outline portions - the
     // minimal node count, mirror-symmetric, no arbitrary recursive-split nodes.
     type Break = { i: number; sharp: boolean; tin?: FPt; tout?: FPt }
     let breaks: Break[] = []
@@ -2777,7 +2777,7 @@ function refitCurves(points: PathPoint[], tags?: Map<string, VertexTag>, cornerD
           const f = flags[i]
           if (f === undefined) { breaks.push({ i, sharp: true }); continue }  // intersection point
           if (f.f === 0) continue                                             // curve-interior sample
-          // Original anchor (sharp or smooth) with its EXACT tangents — the fit
+          // Original anchor (sharp or smooth) with its EXACT tangents - the fit
           // reproduces the source cubics with ~zero error, so untouched outline
           // portions keep exactly their original node structure.
           breaks.push({
@@ -2808,7 +2808,7 @@ function refitCurves(points: PathPoint[], tags?: Map<string, VertexTag>, cornerD
       for (const { i } of flagged) if (corners.every(c => Math.min(arcGap(c, i), arcGap(i, c)) > win)) corners.push(i)
       breaks = corners.sort((a, b) => a - b).map(i => ({ i, sharp: true }))
     }
-    // Windowed direction of travel THROUGH vertex i (spans both sides) — shared by
+    // Windowed direction of travel THROUGH vertex i (spans both sides) - shared by
     // the two runs meeting at a smooth anchor, guaranteeing G1 continuity there.
     const jointDir = (i: number): FPt => {
       let j = i, acc = 0
@@ -2890,7 +2890,7 @@ function traceOptsToPayload(o: TraceOpts): Omit<import('./api').TracePayload, 'i
   }
 }
 // Rasterise the source to a PNG payload, capped so the upload and the trace stay
-// fast — detail beyond ~1600px is invisible once the result is scaled back into
+// fast - detail beyond ~1600px is invisible once the result is scaled back into
 // the placed element's box.
 function rasterForTrace(src: TraceSource): { url: string; w: number; h: number } {
   const nat = traceSrcSize(src)
@@ -2905,7 +2905,7 @@ function rasterForTrace(src: TraceSource): { url: string; w: number; h: number }
 // Recognize text lines in the bitmap (self-hosted tesseract WASM), turn each
 // confident line into a REAL TextElement (position, size, colour sampled from the
 // glyph pixels), and inpaint the text boxes away so the shape tracer never sees
-// them — text stays editable text instead of becoming traced blobs.
+// them - text stays editable text instead of becoming traced blobs.
 type OcrText = { text: string; x: number; y: number; w: number; h: number; fontSize: number; color: string; bold: boolean }
 async function ocrPrepare(bmp: HTMLImageElement, elX: number, elY: number, elW: number, elH: number):
     Promise<{ src: TraceSource; texts: OcrText[] }> {
@@ -3013,11 +3013,11 @@ function booleanCombine(els: VectorElement[], op: BoolOp, tags?: Map<string, Ver
 
 // Illustrator "Pathfinder" effects that yield SEVERAL faces (grouped), unlike the
 // four shape-mode booleans above. `chosen` is ordered bottom→top.
-//  • divide    — every atomic region of the arrangement (2^N subset algebra)
-//  • trim      — each shape minus the shapes ABOVE it (colours kept, no merge)
-//  • merge     — trim, then union faces that share the same fill colour
-//  • crop      — everything clipped to the TOP shape, top removed
-//  • minusback — front shape minus every shape behind it
+//  • divide    - every atomic region of the arrangement (2^N subset algebra)
+//  • trim      - each shape minus the shapes ABOVE it (colours kept, no merge)
+//  • merge     - trim, then union faces that share the same fill colour
+//  • crop      - everything clipped to the TOP shape, top removed
+//  • minusback - front shape minus every shape behind it
 type PathfinderOp = 'divide' | 'trim' | 'merge' | 'crop' | 'minusback'
 function pathfinderMulti(chosen: VectorElement[], op: PathfinderOp): { multi: PCMulti; base: VectorElement }[] {
   const N = chosen.length
@@ -3034,7 +3034,7 @@ function pathfinderMulti(chosen: VectorElement[], op: PathfinderOp): { multi: PC
     for (let i = 1; i < N - 1; i++) below = U(below, geoms[i])
     add(N >= 2 ? D(geoms[N - 1], below) : geoms[N - 1], chosen[N - 1])
   } else if (op === 'divide') {
-    if (N > 7) return []   // 2^N subsets — capped so the arrangement stays fast
+    if (N > 7) return []   // 2^N subsets - capped so the arrangement stays fast
     for (let mask = 1; mask < (1 << N); mask++) {
       const inT: number[] = [], outT: number[] = []
       for (let i = 0; i < N; i++) (mask & (1 << i) ? inT : outT).push(i)
@@ -3258,8 +3258,8 @@ function offsetPath(el: VectorElement, d: number, steps = 20): PCMulti | null {
 
 // ── Main editor component ──────────────────────────────────────────────────────
 // Embedded mode: the SAME editor mounted inside another app (e.g. Keyframe draws a
-// cel with the real Apex engine). Server loading/saving is bypassed — the scene is
-// seeded from memory and every edit is reported through onCommit — so any feature
+// cel with the real Apex engine). Server loading/saving is bypassed - the scene is
+// seeded from memory and every edit is reported through onCommit - so any feature
 // added to Apex is instantly available here too.
 export interface ApexEmbed {
   width:       number
@@ -3284,7 +3284,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
     enabled:  !!projectId,
   })
 
-  // ── Titre éditable (standard WorkspaceShell) — synchronisé depuis le projet ────
+  // ── Titre éditable (standard WorkspaceShell) - synchronisé depuis le projet ────
   const [titleDraft, setTitleDraft] = useState('')
   useEffect(() => { if (project?.title != null) setTitleDraft(project.title) }, [project?.title])
   const renameMut = useMutation({
@@ -3449,7 +3449,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
   useEffect(() => { curShapeRef.current = curShape }, [curShape])
   const [shapeMenuPos, setShapeMenuPos] = useState<MenuDropdownPos | null>(null)
 
-  // Active fill/stroke paint — the default colours new shapes inherit (Illustrator
+  // Active fill/stroke paint - the default colours new shapes inherit (Illustrator
   // style), driven by the tool-rail swatches and persisted across sessions.
   const [curFill, setCurFill]     = useState<string>(() => localStorage.getItem('apex:fill')   ?? '#4a90d9')
   const [curStroke, setCurStroke] = useState<string>(() => localStorage.getItem('apex:stroke') ?? '#1a1a1a')
@@ -3458,7 +3458,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
   useEffect(() => { curFillRef.current = curFill; try { localStorage.setItem('apex:fill', curFill) } catch { /* quota */ } }, [curFill])
   useEffect(() => { curStrokeRef.current = curStroke; try { localStorage.setItem('apex:stroke', curStroke) } catch { /* quota */ } }, [curStroke])
 
-  // Pen tool state — use ref for non-stale access in event handlers
+  // Pen tool state - use ref for non-stale access in event handlers
   const penRef = useRef<PenProgress | null>(null)
   const [penProgress, setPenProgress_] = useState<PenProgress | null>(null)
   const setPenProgress = (p: PenProgress | null) => {
@@ -3561,7 +3561,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
 
   // ── Undo / redo history (reference snapshots of pageData) ───────────────────
   // Every mutation goes through `setPageData(prev => ({ ...prev, … }))` and
-  // builds fresh element objects — the same immutability contract the WeakMap
+  // builds fresh element objects - the same immutability contract the WeakMap
   // render caches rely on. Snapshots can therefore share structure: storing the
   // reference is enough, no structuredClone of the whole document (which used to
   // copy every embedded image data-URL on EVERY undoable action).
@@ -3896,7 +3896,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
     }) }))
   }, [pushHistory])
   // Reconciliation: derived clones are a pure function of their container + source
-  // children — rebuild whenever the document changes (moves, node edits, restyles,
+  // children - rebuild whenever the document changes (moves, node edits, restyles,
   // undo…) and drop orphans. Idempotent: no state update when already in sync.
   useEffect(() => {
     const els = pageData.elements
@@ -3958,7 +3958,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
     if (!bbox) return
     copyKubunoData(vectorsEnvelope(picked, bbox)).catch(() => {})
   }, [])
-  // Paste without the cascade offset — clones land exactly on the originals.
+  // Paste without the cascade offset - clones land exactly on the originals.
   const pasteInPlace = useCallback(() => {
     if (!clipboard.current.length) return
     pushHistory()
@@ -4124,7 +4124,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
     setSelectedIds([gid])
   }, [pushHistory, t])
   // Release: dissolve the clipped group(s), children (mask included) come back
-  // as ordinary siblings — mirrors ungroupSel but only touches clipped groups.
+  // as ordinary siblings - mirrors ungroupSel but only touches clipped groups.
   const releaseClipMask = useCallback(() => {
     const sel = selectedIdsRef.current
     if (!sel.length) return
@@ -4179,7 +4179,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
     })
   }, [pushHistory, t, groupSel])
   // Select from the layers panel. A leaf selects itself. A container toggles: first
-  // click selects its CONTENTS (source leaves — you can edit them); clicking it again
+  // click selects its CONTENTS (source leaves - you can edit them); clicking it again
   // (contents already selected) collapses to the container as a single UNIT object
   // whose selection box covers everything (move/rotate the whole thing).
   const selectFromPanel = useCallback((id: string, additive: boolean) => {
@@ -4224,7 +4224,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
 
   // ── Fusionner les objets sélectionnés en un seul chemin composé ─────────────
   // Convertit chaque objet en chemin, puis concatène les sous-chemins (marqueur
-  // `move`) en un unique PathElement libre — pleinement éditable à la plume.
+  // `move`) en un unique PathElement libre - pleinement éditable à la plume.
   const mergeSel = useCallback(() => {
     const sel = selectedIdsRef.current
     const els = pageDataRef.current.elements
@@ -4544,8 +4544,8 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
   }, [importImageFiles, importSvgFiles, t])
 
   // ── Pasting images from the system clipboard ─────────────────────────────────
-  // Whatever the user copied elsewhere — a screenshot, a browser image, SVG markup
-  // from a design tool — lands as real content at the centre of the view: SVG as
+  // Whatever the user copied elsewhere - a screenshot, a browser image, SVG markup
+  // from a design tool - lands as real content at the centre of the view: SVG as
   // editable shapes, bitmaps as a placed image.
   const viewCentre = useCallback(() => {
     const canvas = canvasRef.current
@@ -4610,7 +4610,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
     return () => document.removeEventListener('paste', onPaste)
   }, [pasteImagePayload, pasteInPlace, pasteSel])
 
-  // ── Export dialog (format / scope / preview) — see ApexExportDialog below ────
+  // ── Export dialog (format / scope / preview) - see ApexExportDialog below ────
   const [exportDlg, setExportDlg] = useState(false)
 
   // "Image trace" dialog on the visioncortex/VTracer engine (server-side): the
@@ -4675,7 +4675,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
   useEffect(() => {
     if (!traceDlg) { tracePayloadRef.current = null; setTracePrev(null); return }
     // Rasterise the source once per dialog opening (preview traces WITHOUT the
-    // OCR pass — it is slow, and erased text zones barely change the tuning).
+    // OCR pass - it is slow, and erased text zones barely change the tuning).
     const el = pageDataRef.current.elements.find(e => e.id === traceDlg)
     if (!el || el.type !== 'image') return
     const bmp = imageBitmapCache.get((el as import('./api').ImageElement).src)
@@ -4724,8 +4724,8 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
       if (traceOcr) {
         try { ({ src, texts } = await ocrPrepare(bmp, el.x, el.y, el.w, el.h)) } catch { /* trace without OCR */ }
       }
-      // Without OCR the source is the raw bitmap — exactly what the live preview
-      // traced — so reuse its (already simplified) result instead of a second
+      // Without OCR the source is the raw bitmap - exactly what the live preview
+      // traced - so reuse its (already simplified) result instead of a second
       // server round-trip.
       let svg: string, cw: number, ch: number
       const cached = tracePayloadRef.current
@@ -4826,7 +4826,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
   }, [pushHistory])
 
   // ── Node-type conversion (direct-selection contextual toolbar) ───────────────
-  // Applies to exactly the SELECTED anchor(s) — never the whole path. Handles
+  // Applies to exactly the SELECTED anchor(s) - never the whole path. Handles
   // change the true curve extent → rebase the bbox.
   const setAnchorType = useCallback((type: AnchorType) => {
     const sel = selectedIdsRef.current
@@ -4844,7 +4844,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
     }) }))
   }, [pushHistory])
 
-  // Live node type shared by ALL selected anchors (for toolbar highlighting) —
+  // Live node type shared by ALL selected anchors (for toolbar highlighting) -
   // null when the selection mixes types or nothing is selected.
   const activeAnchorType: AnchorType | null = (() => {
     if (tool !== 'node' || selectedIds.length !== 1 || !nodeSel.length) return null
@@ -4926,8 +4926,8 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
       return
     }
     // Double-clicking a symmetry clone enters node editing on its SOURCE (clones are
-    // locked, so the plain hit-test above skips them); the source's mesh — and every
-    // clone's mesh — then becomes editable.
+    // locked, so the plain hit-test above skips them); the source's mesh - and every
+    // clone's mesh - then becomes editable.
     const cloneHit = sorted.find(el => el.symOf && el.type === 'path' && el.visible && hitTest(el, pt.x, pt.y, csRef.current.zoom))
     if (cloneHit && cloneHit.symOf) {
       const src = pd.elements.find(x => x.id === cloneHit.symOf)
@@ -5082,8 +5082,8 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
       })(), snapTouch }
     // Cached scene layer: the artwork (bg + artboards + grid + elements) is rasterised
     // to an offscreen bitmap and rebuilt ONLY when a scene input changes (pageData, cs,
-    // size, grid, outline). Overlay-only frames — hover, marquee, selection, guides,
-    // snap — just blit the bitmap and repaint overlays, skipping vector rasterisation.
+    // size, grid, outline). Overlay-only frames - hover, marquee, selection, guides,
+    // snap - just blit the bitmap and repaint overlays, skipping vector rasterisation.
     const dw = Math.round(w * dpr), dh = Math.round(h * dpr)
     const key: unknown[] = [pageData, cs, dw, dh, gridOn, gridSize, outlineMode]
     let cache = sceneCacheRef.current
@@ -5430,7 +5430,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
       const hitP = sorted.find(el => el.type === 'path' && el.visible && !el.locked && hitTest(el, pt.x, pt.y, cs_.zoom))
       if (hitP) { setSelectedIds([hitP.id]); setNodeSel([]); return }
       // Empty space: drag a marquee to select several nodes at once. Works with a
-      // path already in node-edit, or with none — the marquee then picks the
+      // path already in node-edit, or with none - the marquee then picks the
       // topmost path whose nodes fall inside it. A plain click still deselects.
       if (!e.shiftKey) { setNodeSel([]); if (!pathEl) setSelectedIds([]) }
       marqueeRef.current = { x: pt.x, y: pt.y }
@@ -5566,7 +5566,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
               }
             }
           } else if (!isCont) {
-          // Corner-radius handle (rect + roundable shapes) — priority over resize handles.
+          // Corner-radius handle (rect + roundable shapes) - priority over resize handles.
           if (el.type === 'rect' || (el.type === 'path' && isRoundableShape((el as PathElement).shape))) {
             const rh = radiusHandleLocal(el, cs_.zoom)
             if (rh) {
@@ -5582,7 +5582,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
           if (hi >= 0) {
             pushHistory()
             // Paths: resize relative to the TRUE curve bbox (where the handles
-            // are drawn) — stored x/y/w/h can be stale anchors-only on old docs.
+            // are drawn) - stored x/y/w/h can be stale anchors-only on old docs.
             const snapBox = el.type === 'path' ? { ...el, ...elBBox(el) } : { ...el }
             dragRef.current = { type: 'resize', startX: e.clientX, startY: e.clientY, canvasX: pt.x, canvasY: pt.y, handleIdx: hi, snapshot: snapBox,
               snapTg: snapTargets(pd, new Set([el.id])), moved: false, symPtInv: cloneInv }
@@ -5591,7 +5591,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
           }
         }
       }
-      // Grab an existing guide (unless locked) — takes priority over elements.
+      // Grab an existing guide (unless locked) - takes priority over elements.
       if (guidesOnRef.current && !guidesLockedRef.current && pd.guides?.length) {
         const thr = 5 / cs_.zoom
         const g = [...pd.guides].reverse().find(g =>
@@ -5604,7 +5604,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
       }
       const sorted = renderLeaves(pd.elements).map(o => o.el).reverse()   // top-most first
       // Symmetry clones are locked but still grab their container (whole pattern is
-      // one transformable object) — so they're hittable for selection.
+      // one transformable object) - so they're hittable for selection.
       const hit = sorted.find(el => (!effLocked(pd.elements, el) || !!el.symOf) && hitTest(el, pt.x, pt.y, cs_.zoom))
       // Clicking an object inside a container selects ONLY that object (not the whole
       // container). A symmetry clone grabs its editable source instead (the pattern
@@ -5772,7 +5772,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
         let best = thr
         const pd = pageDataRef.current
         // Inspect the selected objects AND their symmetry clones (selecting a clone puts
-        // its SOURCE in `sel`, so hovering a clone also reads out — angles are isometry-
+        // its SOURCE in `sel`, so hovering a clone also reads out - angles are isometry-
         // invariant, only the vertex positions differ).
         const targets: VectorElement[] = []
         for (const id of sel) {
@@ -5819,7 +5819,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
       return
     }
 
-    // Freehand capture — stabilize + min-distance filter, repaint via tick.
+    // Freehand capture - stabilize + min-distance filter, repaint via tick.
     // Coalesced pointer events give the full high-frequency stylus trail
     // (a tablet reports 200+ Hz; React only delivers one event per frame).
     if (drag.type === 'freehand') {
@@ -5961,7 +5961,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
           const oppSnap = sp[oppKey]
           // Keep the tangent colinear ONLY while the node is a smooth node (its two
           // handles were already colinear) and Alt is not held. We mirror the
-          // DIRECTION but preserve the opposite handle's OWN length — so the two
+          // DIRECTION but preserve the opposite handle's OWN length - so the two
           // sides can differ (asymmetric smooth). Alt, or an already-broken (cusp)
           // node, leaves the opposite handle fully independent.
           if (oppSnap && !drag.breakSym && handlesColinear(sp.hIn, sp.hOut)) {
@@ -6014,7 +6014,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
     if (drag.type === 'move' && drag.moves) {
       const moves = drag.moves
       // Grabbed a symmetry clone: map the canvas delta into the source's frame so the
-      // source moves by the inverse rotation/reflection — the grabbed clone then tracks
+      // source moves by the inverse rotation/reflection - the grabbed clone then tracks
       // the cursor exactly while every sibling clone follows symmetrically.
       if (drag.symPtInv) {
         const o = drag.symPtInv(0, 0), p = drag.symPtInv(dx, dy)
@@ -6032,7 +6032,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
       if (base && !e.altKey && !snapSuspended) {
         if (snapOnRef.current) {
           // Snap targets were computed once at drag start (they don't change
-          // while dragging) — recomputing per mousemove was O(n) wasted work.
+          // while dragging) - recomputing per mousemove was O(n) wasted work.
           snapTg = drag.snapTg ?? snapTargets(pageDataRef.current, new Set(moves.map(m => m.id)))
           const thr = SNAP_PX / cs_.zoom
           const mx = base.x + mdx, my = base.y + mdy
@@ -6153,7 +6153,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
       if (Math.abs(nlw) < 1) nlw = nlw < 0 ? -1 : 1
       if (Math.abs(nlh) < 1) nlh = nlh < 0 ? -1 : 1
       let sx = nlw / R.lw, sy = nlh / R.lh
-      // Shift locks the aspect ratio on corner handles — uniform scale about the
+      // Shift locks the aspect ratio on corner handles - uniform scale about the
       // fixed corner, exactly like plain objects (largest axis wins, flip preserved).
       if (e.shiftKey && [0, 2, 5, 7].includes(H)) {
         const m = Math.max(Math.abs(sx), Math.abs(sy))
@@ -6256,7 +6256,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
     // pointercancel / pointerleave, and a background re-render can fire a spurious
     // `pointerleave` (with stale coords) that would wipe a still-valid readout. Instead
     // the hover handler clears it the moment the cursor moves off the corner, and
-    // onMouseDown clears it when a gesture begins — which is all the UX needs.
+    // onMouseDown clears it when a gesture begins - which is all the UX needs.
     setMidPan(false)   // end of a middle-button pan → restore the tool cursor
     const pen = penRef.current
     if (pen?.dragging) setPenProgress({ ...pen, dragging: false })
@@ -6381,7 +6381,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
         const inside = (b: { x:number;y:number;w:number;h:number }) =>
           b.x < m.x + m.w && b.x + b.w > m.x && b.y < m.y + m.h && b.y + b.h > m.y
         const els = pageDataRef.current.elements
-        // Marquee selects the individual leaves it touches (clones excluded — they're
+        // Marquee selects the individual leaves it touches (clones excluded - they're
         // derived; select their container from the panel to move the pattern).
         const hits = els
           .filter(el => !isContainer(el) && !el.symOf && !effHidden(els, el) && !effLocked(els, el) && inside(elBBox(el)))
@@ -6425,7 +6425,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
         if (k === 'c') { e.preventDefault(); copySel(); return }
         // Not preventDefault'ed on purpose: the browser's `paste` event is the only
         // way to reach clipboard images. The timeout covers the case where no such
-        // event reaches us (no focused document) — then paste elements internally.
+        // event reaches us (no focused document) - then paste elements internally.
         if (k === 'v') {
           pasteInPlaceRef.current = e.shiftKey
           pasteHandledRef.current = false
@@ -6592,7 +6592,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
     </div>
   )
 
-  // Options des outils à main levée (crayon / pinceau) — visibles quand l'outil est actif.
+  // Options des outils à main levée (crayon / pinceau) - visibles quand l'outil est actif.
   // ── Contextual controls surfaced in the options bar (below the menu bar) ────────
   // These used to live in the right-hand Properties panel; they now appear in the
   // contextual toolbar depending on the active tool / selection.
@@ -6668,7 +6668,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
           set: v => { const params = { ...(shapePe.params ?? {}), [d.key]: v }; updateSelected({ params, points: regenShapePoints({ ...shapePe, params }) } as Partial<VectorElement>) } })
       }
     }
-    // Corner rounding — for the sharp-cornered shapes (polygon/star/trapezoid).
+    // Corner rounding - for the sharp-cornered shapes (polygon/star/trapezoid).
     if (isRoundableShape(shapePe.shape)) {
       const maxR = Math.round(radiusHandleGeom(shapePe)?.maxR ?? Math.min(shapePe.w, shapePe.h) / 2)
       rows.push({ label: t('apex_corner_radius'), min: 0, max: Math.max(1, maxR), step: 1,
@@ -6920,7 +6920,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                           style={{ background: '#2c2c2c', border: `1px solid ${C.border}`, color: C.text }}
                         />
                       </div>
-                      {/* Fill opacity — independent from the border opacity. */}
+                      {/* Fill opacity - independent from the border opacity. */}
                       <label className="flex items-center gap-2">
                         <span className="text-[10px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_opacity')}</span>
                         <RangeSlider
@@ -6976,7 +6976,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                           placeholder={t('apex_stroke_width')}
                         />
                       </div>
-                      {/* Border opacity — independent from the fill opacity. */}
+                      {/* Border opacity - independent from the fill opacity. */}
                       <label className="flex items-center gap-2">
                         <span className="text-[10px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_opacity')}</span>
                         <RangeSlider
@@ -7003,7 +7003,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                           { value: 'dashed', label: t('apex_dash_dashed') },
                           { value: 'dotted', label: t('apex_dash_dotted') },
                         ]} />
-                      {/* Extrémités (cap) — segmented control, each icon rendered with
+                      {/* Extrémités (cap) - segmented control, each icon rendered with
                           its own stroke-linecap so it previews the actual result. */}
                       <label className="flex items-center gap-2">
                         <span className="text-[10px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_stroke_cap')}</span>
@@ -7021,7 +7021,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                           })}
                         </div>
                       </label>
-                      {/* Jointures (join) — segmented control; each chevron icon uses
+                      {/* Jointures (join) - segmented control; each chevron icon uses
                           its own stroke-linejoin (miter/round/bevel = its real shape). */}
                       <label className="flex items-center gap-2">
                         <span className="text-[10px] uppercase flex-shrink-0" style={{ color: C.textDim, width: 54 }}>{t('apex_stroke_join')}</span>
@@ -7039,7 +7039,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
                           })}
                         </div>
                       </label>
-                      {/* Miter limit — only relevant for a miter join (past this
+                      {/* Miter limit - only relevant for a miter join (past this
                           ratio the point is cut to a bevel). */}
                       {(selectedEl.stroke!.join ?? 'miter') === 'miter' && (
                         <label className="flex items-center gap-2">
@@ -7241,7 +7241,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
           { label: t('apex_import_image'), onClick: () => { void importImageFromPicker() } },
           {
             // Writes the SVG back into the Drive (overwriting the source .svg
-            // when the project was opened from one) — distinct from Export.
+            // when the project was opened from one) - distinct from Export.
             label: t('apex_export_svg', { defaultValue: 'Enregistrer en SVG' }),
             onClick: () => {
               if (!projectId) return
@@ -7377,7 +7377,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
             const CurIcon = curShape.icon
             return (
               <button
-                title={`${t(curShape.nameKey)} — ${t('apex_shapes_group')}`}
+                title={`${t(curShape.nameKey)} - ${t('apex_shapes_group')}`}
                 onClick={e => { if (shapeToolActive) openMenu(e.currentTarget) ; else pickShape(curShape) }}
                 onContextMenu={e => { e.preventDefault(); openMenu(e.currentTarget as HTMLElement) }}
                 className="w-8 h-8 rounded flex items-center justify-center transition-colors relative"
@@ -7512,7 +7512,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
               style={{ background: rulersOn ? C.accent + '30' : 'transparent', color: rulersOn ? C.accent : C.textDim }}>
               <Ruler size={14} />
             </button>
-            {/* Live symmetry (drawing mode + attach to selection) — full dialog. */}
+            {/* Live symmetry (drawing mode + attach to selection) - full dialog. */}
             <button title={t('apex_symmetry')}
               onClick={() => setSymDlg(true)}
               className="w-8 h-7 rounded flex items-center justify-center transition-colors"
@@ -7603,7 +7603,7 @@ export default function ApexEditorPage({ embed }: { embed?: ApexEmbed } = {}) {
         defaultArrangement={{ left: [['layers']], right: [['properties']] }}
         panels={apexPanels}>
         {/* Pointer events (NOT mouse events, which would double-fire): full
-            stylus support — pressure, pointer capture, palm rejection.
+            stylus support - pressure, pointer capture, palm rejection.
             touchAction none stops the browser panning/zooming mid-stroke. */}
         <canvas ref={canvasRef} className="block w-full h-full" style={{ cursor, touchAction: 'none' }}
                 onPointerDown={onMouseDown} onPointerMove={onMouseMove} onPointerUp={onMouseUp}
@@ -8096,7 +8096,7 @@ function NodeTypeIcon({ type, size = 16 }: { type: AnchorType; size?: number }) 
 
 // Stroke-JOIN icon that literally demonstrates the join: a chevron drawn with the
 // matching `stroke-linejoin`, so miter shows a sharp apex, round a curved one, bevel
-// a cut one — exactly what the setting does to the artwork.
+// a cut one - exactly what the setting does to the artwork.
 function JoinIcon({ join, size = 17 }: { join: 'miter' | 'round' | 'bevel'; size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth={3.4} strokeLinejoin={join} strokeLinecap="butt">
@@ -8178,7 +8178,7 @@ function ApexOptionsBar(props: {
           {([['sharp', t('apex_node_sharp')], ['smooth', t('apex_node_smooth')], ['symmetric', t('apex_node_symmetric')], ['smart', t('apex_node_smart')]] as [AnchorType, string][]).map(([type, label]) => {
             const active = activeAnchorType === type, off = nodeSelCount === 0
             return (
-              <button key={type} title={off ? `${label} — ${t('apex_node_pick_hint')}` : label} disabled={off}
+              <button key={type} title={off ? `${label} - ${t('apex_node_pick_hint')}` : label} disabled={off}
                 onClick={() => setAnchorType(type)}
                 className="h-7 px-2 rounded flex items-center gap-1.5 text-[11px] transition-colors flex-shrink-0"
                 style={{ background: active ? C.accent : C.toolbar, color: active ? '#fff' : (off ? C.textDim : C.text), opacity: off ? 0.5 : 1, cursor: off ? 'default' : 'pointer' }}
@@ -8526,7 +8526,7 @@ function ApexExportDialog(props: {
     const cv = await rasterOne(idx, scale)
     if (!cv) return null
     if (opts.format === 'pdf') {
-      // Single-page preview only — the real export assembles ONE multi-page PDF.
+      // Single-page preview only - the real export assembles ONE multi-page PDF.
       const blob = await new Promise<Blob | null>(res => cv.toBlob(res, 'image/png'))
       return blob ? { blob, w: cv.width, h: cv.height } : null
     }

@@ -25,7 +25,7 @@ export interface JpegCandidate {
  * Reads the frame header of a JPEG to get its real dimensions.
  *
  * Walks the marker chain rather than guessing an offset, and accepts every SOF flavour
- * (baseline, progressive, and the lossless SOF3 that CR2 uses for its sensor data — which
+ * (baseline, progressive, and the lossless SOF3 that CR2 uses for its sensor data - which
  * is precisely why the caller must not treat every hit as displayable).
  */
 export function readJpegSize(

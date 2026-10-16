@@ -23,7 +23,7 @@ const MAX_PARASITES = 512
  * Reads the parasite sequence packed inside one `PROP_PARASITES` payload.
  *
  * A nameless parasite means the block is corrupt: the list stops there, silently, which
- * is what GIMP does — losing metadata must never lose the image.
+ * is what GIMP does - losing metadata must never lose the image.
  */
 export function readParasites(r: XcfReader, at: number, size: number): XcfParasite[] {
   const end = at + size
@@ -54,7 +54,7 @@ export function readParasites(r: XcfReader, at: number, size: number): XcfParasi
 }
 
 export interface KnownParasites {
-  /** `icc-profile` — carried into `ImportedDocument.iccProfile`, never applied in v1. */
+  /** `icc-profile` - carried into `ImportedDocument.iccProfile`, never applied in v1. */
   readonly iccProfile?: Uint8Array
   /** `gimp-comment`. */
   readonly comment?: string

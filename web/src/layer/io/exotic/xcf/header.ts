@@ -9,7 +9,7 @@ import { ImportError } from '../errors'
 import { decodePrecision, type XcfPrecision } from './precision'
 import { XcfReader } from './reader'
 
-/** `"gimp xcf "` — the 9 bytes shared by every version, old and new. */
+/** `"gimp xcf "` - the 9 bytes shared by every version, old and new. */
 export const XCF_MAGIC = 'gimp xcf '
 
 /** Tiles are always 64×64 (XCF_TILE_WIDTH / XCF_TILE_HEIGHT). */
@@ -28,7 +28,7 @@ export interface XcfHeader {
   readonly precision: XcfPrecision
   /** Whether the `precision` value was recognised for this version. */
   readonly precisionKnown: boolean
-  /** 4 up to version 10, 8 from version 11 — this conditions EVERY pointer in the file. */
+  /** 4 up to version 10, 8 from version 11 - this conditions EVERY pointer in the file. */
   readonly bytesPerOffset: 4 | 8
   /**
    * From version 12 on, multi-byte tile components are explicitly big-endian. Before

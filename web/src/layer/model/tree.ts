@@ -1,7 +1,7 @@
 // Layer-tree helpers (immutable; the layer list is a tree via `children`).
 //
 // These operate directly on the wire type `LayerStructureItem` shared with the
-// backend. Extracted verbatim from LayerEditorPage during the layer/ refactor —
+// backend. Extracted verbatim from LayerEditorPage during the layer/ refactor -
 // no behavioural change.
 import type { LayerStructureItem } from '../../api'
 
@@ -35,7 +35,7 @@ export function removeFromTree(nodes: LayerStructureItem[], id: string): { tree:
   return { tree: walk(nodes), removed }
 }
 
-/** Raster leaves (depth-first) — used for texture management & flat queries. */
+/** Raster leaves (depth-first) - used for texture management & flat queries. */
 export function leaves(nodes: LayerStructureItem[]): LayerStructureItem[] {
   const out: LayerStructureItem[] = []
   const walk = (list: LayerStructureItem[]) => list.forEach(n => n.children ? walk(n.children) : out.push(n))

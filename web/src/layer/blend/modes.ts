@@ -1,4 +1,4 @@
-// Blend-mode registry — the single source of truth for the Layer sub-module.
+// Blend-mode registry - the single source of truth for the Layer sub-module.
 //
 // Attribution
 // -----------
@@ -58,13 +58,13 @@ export const BLEND_CATEGORY_ORDER: readonly BlendCategory[] = [
 
 /** Alpha-composition operator (GIMP `gimpoperationlayermode-composite.c`). */
 export type CompositeOp =
-  /** `ar = as + ab(1 - as)` — the only operator Photoshop exposes. */
+  /** `ar = as + ab(1 - as)` - the only operator Photoshop exposes. */
   | 'union'
-  /** `ar = ab` — adjustment layers and clipping: cannot add nor remove opacity. */
+  /** `ar = ab` - adjustment layers and clipping: cannot add nor remove opacity. */
   | 'clip-to-backdrop'
-  /** `ar = as` — rarely used; inverted layer masks. */
+  /** `ar = as` - rarely used; inverted layer masks. */
   | 'clip-to-layer'
-  /** `ar = ab * as` — reserved. */
+  /** `ar = ab * as` - reserved. */
   | 'intersection'
 
 /** Integer the composite fragment shader switches on (`uMode`). */
@@ -108,7 +108,7 @@ export const ERASER_MODE_INT = 10
 
 /**
  * Shader integers. Values 0..23 are inherited verbatim from
- * `layer/model/blend.ts` (`BLEND_INT`) and MUST NOT change — they are baked
+ * `layer/model/blend.ts` (`BLEND_INT`) and MUST NOT change - they are baked
  * into existing shader sources. New modes extend the range from 24 upwards.
  */
 const U_MODE: Record<BlendMode, number> = {

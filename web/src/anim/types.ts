@@ -49,7 +49,7 @@ export interface RgbaImage {
 export interface AnimFrame {
   /** Sub-rectangle this frame actually carries; may be the whole canvas. */
   rect: Rect
-  /** RGBA8 for `rect` only — length is exactly rect.w * rect.h * 4. */
+  /** RGBA8 for `rect` only - length is exactly rect.w * rect.h * 4. */
   pixels: Uint8ClampedArray
   /** Authored delay in ms, never clamped. Playback clamping is playbackDelayMs(). */
   delayMs: number
@@ -199,7 +199,7 @@ export interface DecodeOptions {
 // ── Small helpers on the model ──────────────────────────────────────────────
 
 /**
- * Delay to use for PLAYBACK only — never for storage, never for re-encoding.
+ * Delay to use for PLAYBACK only - never for storage, never for re-encoding.
  * Browsers clamp GIF delays of 0 and 10 ms up to 100 ms, and every player has
  * followed suit for twenty-five years. The authored value stays untouched in
  * `AnimFrame.delayMs` so a round-trip does not silently retime the animation.

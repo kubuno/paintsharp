@@ -774,7 +774,7 @@ function copyIndexed(
 
 /**
  * JPEG-in-TIFF (compression 7): rebuild a self-contained JPEG from `JPEGTables` plus the
- * strip payload and let the browser decode it — no DCT to write (spec 05 §4.4). The
+ * strip payload and let the browser decode it - no DCT to write (spec 05 §4.4). The
  * browser always returns RGBA, so the block is written back as RGB(A) samples.
  */
 async function writeJpegBlock(

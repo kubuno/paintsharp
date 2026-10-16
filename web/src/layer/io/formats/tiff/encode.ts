@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// TIFF writer (spec 05 §4.9). The browser cannot write TIFF at all — asking
-// `convertToBlob` for `image/tiff` silently returns a PNG (measured, §2.1) — so this is
+// TIFF writer (spec 05 §4.9). The browser cannot write TIFF at all - asking
+// `convertToBlob` for `image/tiff` silently returns a PNG (measured, §2.1) - so this is
 // the only path.
 //
 // Write order is DATA FIRST, IFD AFTERWARDS: the compressed size of a strip is unknown

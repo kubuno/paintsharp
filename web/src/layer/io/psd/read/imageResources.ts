@@ -2,9 +2,9 @@
  * PSD/PSB Image Resources section (spec §1.4).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * licensed under the GNU General Public License v3 or later —
+ * licensed under the GNU General Public License v3 or later -
  * `get_image_resource_header()` / `load_image_resource()` in
- * psd-image-res-load.c — and from Adobe's public "Photoshop File Formats
+ * psd-image-res-load.c - and from Adobe's public "Photoshop File Formats
  * Specification". Independent TypeScript re-implementation; no GIMP source code
  * was copied. Kubuno is AGPLv3.
  */
@@ -15,7 +15,7 @@ import type { PsdImageResource, PsdResolution, WarningSink } from '../types.ts'
 
 /**
  * Reads every resource block. Unknown ids are kept verbatim so the export can
- * re-emit them unchanged — that is what makes a round trip non-destructive.
+ * re-emit them unchanged - that is what makes a round trip non-destructive.
  *
  * A block with an unrecognised signature ends the section cleanly instead of
  * failing the import.

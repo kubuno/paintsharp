@@ -2,7 +2,7 @@
 //
 // Offscreen PDF page rendering, shared between the Paintsharp sub-modules (spec 07 §7.3).
 //
-// `pdfjs-dist` (Apache-2.0) is already a dependency of this package — PdfWriter uses it —
+// `pdfjs-dist` (Apache-2.0) is already a dependency of this package - PdfWriter uses it -
 // so nothing new is installed. It is imported DYNAMICALLY on purpose: a static import
 // from Layer would make rolldown merge the ~340 KiB gz pdf.js chunk into Layer's, and
 // someone who never opens a PDF would pay for it on every load.
@@ -16,7 +16,7 @@ import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
 
 /**
  * An open document plus the way to release it. `destroy()` lives on the LOADING TASK in
- * pdf.js v6, not on the document proxy — forgetting that leaks the worker for the rest of
+ * pdf.js v6, not on the document proxy - forgetting that leaks the worker for the rest of
  * the session, which on a multi-page import is measurable.
  */
 export interface PdfHandle {
@@ -29,7 +29,7 @@ export interface PdfRenderOptions {
   readonly dpi: number
   /** Hard ceiling per page; the dpi is reduced to fit. */
   readonly maxPixels: number
-  /** Transparent when omitted — a PDF has no background of its own. */
+  /** Transparent when omitted - a PDF has no background of its own. */
   readonly background?: string
 }
 

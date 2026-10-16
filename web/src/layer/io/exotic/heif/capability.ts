@@ -3,7 +3,7 @@
 // HEIC/HEIF decoding-capability detection (spec 07 §6.2).
 //
 // NO WebAssembly decoder is shipped, by deliberate decision: libheif and libde265 are
-// licence-compatible, but HEVC is covered by the MPEG-LA / Access Advance patent pools —
+// licence-compatible, but HEVC is covered by the MPEG-LA / Access Advance patent pools -
 // which is exactly why Chrome refuses to decode HEIC in the first place. Shipping an
 // HEVC decoder in a self-hosted platform is a patent exposure, not a copyright one, and
 // no licence text makes it go away.
@@ -58,7 +58,7 @@ export async function detectHeifPath(sample?: Uint8Array): Promise<HeifPath> {
 }
 
 async function probe(sample?: Uint8Array): Promise<HeifPath> {
-  // 1. WebCodecs — the clean path, when it exists.
+  // 1. WebCodecs - the clean path, when it exists.
   const ID = (globalThis as { ImageDecoder?: ImageDecoderLike }).ImageDecoder
   if (ID && typeof ID.isTypeSupported === 'function') {
     const ok = await ID.isTypeSupported('image/heic').catch(() => false)

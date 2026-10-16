@@ -2,8 +2,8 @@
 //
 // The tiling stage (stage 2) must never talk to WebGL directly: stage 4
 // (`renderer/gl/GLDevice`) owns every `gl.*` call. This file therefore declares
-// only the four things tiles actually need — allocate a texture, free it, write
-// a rect of pixels into it, bind it as a render target — plus a scissor hook so
+// only the four things tiles actually need - allocate a texture, free it, write
+// a rect of pixels into it, bind it as a render target - plus a scissor hook so
 // a tile rebuild can be restricted to its dirty chunks.
 //
 // Two consequences, both intentional:

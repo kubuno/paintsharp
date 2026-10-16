@@ -1,9 +1,9 @@
 // Foreground / background colour swatches for the Layer tool rail.
 //
 // Same visual language as Apex's fill/stroke pair, so the two editors read alike:
-// two overlapping discs — the foreground solid at top-left with a white
+// two overlapping discs - the foreground solid at top-left with a white
 // inner ring, the background rendered as a DONUT at bottom-right (its hole is
-// punched with the rail colour) — and a swap control underneath.
+// punched with the rail colour) - and a swap control underneath.
 //
 // Both discs are `ColorField` from `@ui`, which brings the shared picker and the
 // recent-colour history with it.
@@ -37,7 +37,7 @@ export function ColorSwatches({
   return (
     <div className="flex flex-col items-center mb-1">
       <div className="relative" style={{ width: BOX, height: BOX }}>
-        {/* Background — behind and below-right, drawn as a ring. */}
+        {/* Background - behind and below-right, drawn as a ring. */}
         <ColorField
           t={t} C={C} width={DISC} height={DISC} className="absolute"
           style={{ right: 0, bottom: 0, borderRadius: '50%', overflow: 'hidden' }}
@@ -51,7 +51,7 @@ export function ColorSwatches({
              style={{ right: 6.5, bottom: 6.5, width: 10, height: 10, borderRadius: '50%',
                       background: railBg, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.3)' }} />
 
-        {/* Foreground — in front, solid, ringed in white like Apex's fill. */}
+        {/* Foreground - in front, solid, ringed in white like Apex's fill. */}
         <ColorField
           t={t} C={C} width={DISC} height={DISC} className="absolute"
           style={{ left: 0, top: 0, borderRadius: '50%', overflow: 'hidden' }}
@@ -63,7 +63,7 @@ export function ColorSwatches({
       </div>
 
       <div className="flex gap-0.5 mt-0.5">
-        {/* Swap (X) — same curved arrow as Apex. */}
+        {/* Swap (X) - same curved arrow as Apex. */}
         <button type="button" onClick={onSwap} title={`${t('layer_color_swap')} (X)`}
                 aria-label={t('layer_color_swap')}
                 className="flex items-center justify-center hover:bg-white/10"

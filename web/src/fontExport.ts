@@ -1,5 +1,5 @@
 // OTF (CFF) build for FontEditor projects, built on opentype.js. The editor's
-// cubic Bézier contours map 1:1 onto CFF charstrings — no quadratic conversion
+// cubic Bézier contours map 1:1 onto CFF charstrings - no quadratic conversion
 // needed. Upload/download orchestration lives in fontFormats.ts.
 import { Font, Glyph, Path } from 'opentype.js'
 import type { FontContour, FontData } from './api'

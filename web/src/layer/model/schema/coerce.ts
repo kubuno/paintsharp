@@ -185,7 +185,7 @@ export function colorLabelToHex(label: LayerColorLabel): string | undefined {
 
 // ── Opacity units ────────────────────────────────────────────────────────────
 //
-// On disk `opacity` and `fill` stay 0..100 (v1 semantics, never changed — an old
+// On disk `opacity` and `fill` stay 0..100 (v1 semantics, never changed - an old
 // client reading `opacity: 255` would display "255 %"). In memory they are
 // 0..255 like the PSD format. The exact 0..255 value also travels, under the new
 // name `opacity255`, so a round trip is lossless.

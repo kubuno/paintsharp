@@ -22,7 +22,7 @@
 //     NOT the BT.709 linear-light coefficients GIMP pulls from babl.
 //
 // Colour-space contract: all functions operate on sRGB-*encoded* (non-linear)
-// values. See spec §4.8 — this is what Photoshop does by default and what makes
+// values. See spec §4.8 - this is what Photoshop does by default and what makes
 // imported PSDs render identically.
 
 import type { BlendMode, CompositeOp } from './modes.ts'
@@ -41,7 +41,7 @@ export const SAFE_DIV_MAX = 1 / EPSILON
 /**
  * GIMP's `safe_div`: `a / b` clamped to ±SAFE_DIV_MAX, and exactly 0 when
  * |a| <= EPSILON. This is what makes burn / dodge / divide well-defined at
- * b = 0 without producing Inf or NaN — and a single NaN pixel contaminates the
+ * b = 0 without producing Inf or NaN - and a single NaN pixel contaminates the
  * whole composite chain (mipmaps, blurs, PNG encoding).
  */
 export function safeDiv(a: number, b: number): number {
@@ -81,7 +81,7 @@ export const sLinearDodge = (cb: number, cs: number): number => cb + cs
 /**
  * GIMP branches on `Cs <= 0.5` with `Cb + 2Cs - 1` / `Cb + 2(Cs - 0.5)`. The two
  * branches are algebraically identical, so a single branch-free expression is
- * used — it also removes a `step()` from the shader.
+ * used - it also removes a `step()` from the shader.
  */
 export const sLinearLight = (cb: number, cs: number): number => cb + 2 * cs - 1
 export const sDifference = (cb: number, cs: number): number => Math.abs(cb - cs)
@@ -106,8 +106,8 @@ export const sOverlay = (cb: number, cs: number): number =>
 export const sHardLight = (cb: number, cs: number): number => sOverlay(cs, cb)
 
 /**
- * PDF 1.7 §11.3.5.2 auxiliary D(Cb). Using `sqrt(Cb)` everywhere — as the
- * current renderer does — is wrong below 0.25 (up to ~0.06 of channel error in
+ * PDF 1.7 §11.3.5.2 auxiliary D(Cb). Using `sqrt(Cb)` everywhere - as the
+ * current renderer does - is wrong below 0.25 (up to ~0.06 of channel error in
  * the shadows).
  */
 export const softLightD = (cb: number): number =>
@@ -131,7 +131,7 @@ export const sPinLight = (cb: number, cs: number): number =>
   cs > 0.5 ? Math.max(cb, 2 * (cs - 0.5)) : Math.min(cb, 2 * cs)
 
 // ---------------------------------------------------------------------------
-// Non-separable modes — HSY primitives, PDF 1.7 §11.3.5.3
+// Non-separable modes - HSY primitives, PDF 1.7 §11.3.5.3
 // ---------------------------------------------------------------------------
 
 /**
@@ -149,7 +149,7 @@ export const lum = (c: RGB): number => LUM_R * c[0] + LUM_G * c[1] + LUM_B * c[2
  * PDF `ClipColor`: pulls an out-of-gamut triple back into [0,1] while keeping
  * its luminance. Both denominators are strictly positive inside their guard
  * (n < 0 <= L, and x > 1 >= L), but they are still floored at EPSILON so the
- * GLSL twin — which cannot branch as cheaply — stays bit-comparable.
+ * GLSL twin - which cannot branch as cheaply - stays bit-comparable.
  */
 export function clipColor(c: RGB): RGB {
   const l = lum(c)
@@ -200,7 +200,7 @@ export const nColor = (cb: RGB, cs: RGB): RGB => setLum(cs, lum(cb))
 export const nLuminosity = (cb: RGB, cs: RGB): RGB => setLum(cb, lum(cs))
 
 /**
- * Returns the whole darker/lighter triple — that is what distinguishes these
+ * Returns the whole darker/lighter triple - that is what distinguishes these
  * from `darken`/`lighten`, which work channel-wise and can synthesise a colour
  * present in neither input.
  */
@@ -257,7 +257,7 @@ export const BLEND_FN: Record<BlendMode, BlendFn> = {
   luminosity: nLuminosity,
 }
 
-/** `B(Cb, Cs)` — non-premultiplied, unclamped. */
+/** `B(Cb, Cs)` - non-premultiplied, unclamped. */
 export function blendRGB(mode: BlendMode, cb: RGB, cs: RGB): RGB {
   return BLEND_FN[mode](cb, cs)
 }
@@ -296,14 +296,14 @@ export interface StraightPixel {
 }
 
 /**
- * Premultiplied composition — the normative form for the shader (spec §4.6.2).
+ * Premultiplied composition - the normative form for the shader (spec §4.6.2).
  *
  *   ar = as + ab·(1 - as)
  *   cr = (1 - as)·cb + (1 - ab)·cs + ab·as·B(Cb, Cs)
  *
  * Three terms, no division, no branch; `ab = 0` and `as = 0` fall out
  * automatically. The `(1 - ab)·cs` term is the one the current renderer is
- * missing — without it a `multiply` layer over empty canvas renders black.
+ * missing - without it a `multiply` layer over empty canvas renders black.
  *
  * `B` takes NON-premultiplied colours, hence the guarded un-premultiplication.
  */
@@ -390,7 +390,7 @@ export function compositeStraight(
 }
 
 // ---------------------------------------------------------------------------
-// Dissolve — stochastic alpha (GIMP gimpoperationdissolve.c)
+// Dissolve - stochastic alpha (GIMP gimpoperationdissolve.c)
 // ---------------------------------------------------------------------------
 
 const u32 = (n: number): number => n >>> 0
@@ -421,7 +421,7 @@ export function hash3(x: number, y: number, z: number): number {
 
 /**
  * Deterministic per-pixel value in [0,1]. It MUST depend only on document
- * coordinates and a per-layer seed — never on time, zoom or scroll — otherwise
+ * coordinates and a per-layer seed - never on time, zoom or scroll - otherwise
  * the layer flickers on every repaint and undo/redo does not restore the same
  * image.
  */

@@ -1,4 +1,4 @@
-// Distort family — every entry is one gather pass.
+// Distort family - every entry is one gather pass.
 //
 // All of these are INVERSE mappings: for the output pixel p, compute the source
 // position and fetch it. That is exactly what the CPU `distort()` helper did,
@@ -91,7 +91,7 @@ export function distortPasses(mode: DistortMode, a: number, b = 1): GpuPass[] {
 
 /**
  * Offset with wrap-around. Ports `layerFilters.offset`. `fract` on the UV is
- * enough — the target is sampled with REPEAT wrapping.
+ * enough - the target is sampled with REPEAT wrapping.
  */
 export const OFFSET_FRAG = fragmentShader(`
 uniform vec2 uDelta;   // in pixels

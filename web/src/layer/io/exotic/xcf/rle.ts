@@ -7,7 +7,7 @@
 // The point third-party implementations most often miss: XCF's RLE runs over BYTE
 // PLANES, not over pixels and not over components. For `bpp` bytes per pixel there are
 // `bpp` successive planes; plane i fills tileData[i], tileData[i+bpp], … That is exactly
-// why the scheme compresses 16-bit images well — the high byte of a component and its
+// why the scheme compresses 16-bit images well - the high byte of a component and its
 // low byte end up in different planes, and the high byte is nearly constant.
 
 /** Raised when a run description walks past the end of the compressed tile. */

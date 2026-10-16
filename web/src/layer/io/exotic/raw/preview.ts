@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Camera RAW — embedded preview extraction (spec 07 §5.3).
+// Camera RAW - embedded preview extraction (spec 07 §5.3).
 //
 // The honest scope, stated once: a RAW file is a container of sensor measurements, and
 // turning those into a picture requires decoding a per-manufacturer compressed stream
 // (Canon lossless JPEG, Nikon Huffman, Sony ARW2 delta, Fuji X-Trans…). That is the wall,
-// and it is not crossable in TypeScript at a maintainable cost — LibRaw carries model
+// and it is not crossable in TypeScript at a maintainable cost - LibRaw carries model
 // quirks for 1200+ bodies. NO WebAssembly is used here, by deliberate decision.
 //
 // What IS crossable, for ~7 KiB and zero dependencies: every RAW embeds at least one
-// JPEG preview, and the largest one is very often full resolution — already developed by
+// JPEG preview, and the largest one is very often full resolution - already developed by
 // the camera (white balance, colour matrix, tone curve, sharpening), in sRGB, looking
 // the way the manufacturer intended. That covers the real use case ("open my photo to
 // retouch it") and is what the file browser and the camera's own screen display.
@@ -76,11 +76,11 @@ export function searchPreviews(bytes: Uint8Array, format: RawFormatId): PreviewS
     all.push(c)
   }
 
-  // Pass 1: the format-specific shortcut — fast and exact when it applies.
+  // Pass 1: the format-specific shortcut - fast and exact when it applies.
   for (const c of perFormatCandidates(bytes, format, sweep)) add(c)
   // Pass 2: the standard IFD tags, which cover NEF, ARW, DNG and every generic TIFF RAW.
   if (sweep) for (const c of ifdCandidates(bytes, sweep)) add(c)
-  // Pass 3: brute-force SOI/EOI scan. Crude, and what rescues an unknown camera body —
+  // Pass 3: brute-force SOI/EOI scan. Crude, and what rescues an unknown camera body -
   // but strictly a LAST RESORT. A lossy DNG stores its sensor data as baseline-JPEG
   // tiles, and those tiles look exactly like previews to a byte scan; running the scan
   // alongside the declared tags would routinely import a 304×352 sensor tile instead of

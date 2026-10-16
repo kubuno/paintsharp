@@ -1,4 +1,4 @@
-// Stage 1 (GPU abstraction) — live-resource bookkeeping.
+// Stage 1 (GPU abstraction) - live-resource bookkeeping.
 //
 // The audit (F10) found that the current engine leaks: `fbPair` is overwritten
 // without deleting the previous pair, per-call framebuffers are created and

@@ -1,5 +1,5 @@
 // GLSL sources for the Layer compositing and display passes.
-// Extracted verbatim from LayerEditorPage during the layer/ refactor —
+// Extracted verbatim from LayerEditorPage during the layer/ refactor -
 // no behavioural change.
 
 // Composite pass: NO Y-flip. Layer textures store doc-top at t=0.
@@ -43,7 +43,7 @@ vec3 fPin(vec3 b,vec3 l){
     l.g<.5? min(b.g,2.*l.g) : max(b.g,2.*(l.g-.5)),
     l.b<.5? min(b.b,2.*l.b) : max(b.b,2.*(l.b-.5)));
 }
-// Non-separable (HSL) blends — hue / saturation / color / luminosity.
+// Non-separable (HSL) blends - hue / saturation / color / luminosity.
 float bLum(vec3 c){return dot(c,vec3(0.3,0.59,0.11));}
 vec3 clipColor(vec3 c){
   float l=bLum(c), n=min(min(c.r,c.g),c.b), x=max(max(c.r,c.g),c.b);
@@ -98,7 +98,7 @@ void main(){
 
 /**
  * Adjustment-layer pass: a full-screen operator applied to everything composited
- * so far, which is what makes an adjustment layer non-destructive — the layers
+ * so far, which is what makes an adjustment layer non-destructive - the layers
  * below keep their pixels, only the running composite is transformed.
  *
  * Works on straight (unpremultiplied) RGBA and leaves alpha untouched: an
@@ -186,12 +186,12 @@ uniform float uRot;
 in vec2 vUv; out vec4 fragColor;
 
 // Scale-aware resampler, three regimes chosen by fp (texels per device pixel):
-//  • fp ≤ ~1 (100% and any magnification): "sharp bilinear" / texel anti-aliasing —
+//  • fp ≤ ~1 (100% and any magnification): "sharp bilinear" / texel anti-aliasing -
 //    the sample is snapped to texel centres but the boundary between two texels is
 //    anti-aliased over exactly one screen pixel. At exactly 100% this is a 1:1
 //    pixel-perfect blit (the old code fell through to the supersampler at fp==1.0,
 //    which box-blurred the canvas at the single most-used zoom level).
-//  • 1 < fp ≤ 4 (zoom 25%..100%): 4×4 supersample at LOD 0 — each tap covers at
+//  • 1 < fp ≤ 4 (zoom 25%..100%): 4×4 supersample at LOD 0 - each tap covers at
 //    most one texel, so the average is a true box filter. Crisper than the old
 //    trilinear-mip taps AND mip-free, so the doc mipchain no longer has to be
 //    regenerated every brush-stroke frame (that was the main paint-time cost).

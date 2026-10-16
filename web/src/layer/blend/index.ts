@@ -1,8 +1,8 @@
 // Public surface of the blend-mode module.
 //
-// `modes.ts`    — metadata table (ids, PSD keys, i18n keys, categories, uMode)
-// `formulas.ts` — the TypeScript REFERENCE implementation (the oracle)
-// `glsl.ts`     — the GLSL ES 3.00 twin, as injectable string fragments
+// `modes.ts`    - metadata table (ids, PSD keys, i18n keys, categories, uMode)
+// `formulas.ts` - the TypeScript REFERENCE implementation (the oracle)
+// `glsl.ts`     - the GLSL ES 3.00 twin, as injectable string fragments
 //
 // Algorithms derived from GIMP `app/operations/layer-modes/*` (GPLv3+) and the
 // public PDF 1.7 §11.3.5 / PSD specifications. Kubuno is AGPLv3.

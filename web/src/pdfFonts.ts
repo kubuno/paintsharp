@@ -6,7 +6,7 @@
 //  2. Shared fonts dropped by an admin in the drive System/Fonts folder: each
 //     file is registered in the browser via `FontFace` (correct on-canvas
 //     rendering) AND its raw bytes are kept in a registry so the PDF export can
-//     embed the real font with fontkit — the exported file uses the same font
+//     embed the real font with fontkit - the exported file uses the same font
 //     as the editor.
 //
 // Everything is best-effort and non-blocking: an empty folder or a network
@@ -90,7 +90,7 @@ export function usePdfFonts(): string[] {
 
 /**
  * Returns the raw bytes of the System/Fonts variant closest to (family, bold,
- * italic), or null when the family is not a shared system font — the export then
+ * italic), or null when the family is not a shared system font - the export then
  * falls back to the standard-14 mapping. WOFF/WOFF2 bytes are excluded (fontkit
  * only parses TTF/OTF): their variants are registered for canvas display only.
  */

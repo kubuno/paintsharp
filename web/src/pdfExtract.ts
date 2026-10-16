@@ -7,7 +7,7 @@ import { resolveFont } from './pdfFontMatch'
 // transformer un PDF importé en objets manipulables (« vrai éditeur »).
 //
 // Compromis assumé : les graphiques vectoriels (filets, traits) et les mises en
-// page exactes ne sont PAS reconstitués — on récupère le texte (par fragment) et
+// page exactes ne sont PAS reconstitués - on récupère le texte (par fragment) et
 // les images bitmap, positionnés en points PDF. En revanche la POLICE de chaque
 // fragment est appariée au plus proche parmi les familles disponibles (cf.
 // `resolveFont`) : une police embarquée reconnue (Arial, Calibri, Times…) reste

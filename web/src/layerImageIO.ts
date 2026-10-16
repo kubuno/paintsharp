@@ -4,13 +4,13 @@
 // Routing is driven by the file's MAGIC BYTES, never by its extension or MIME
 // type (a PNG renamed `.tif` must still open as a PNG). Four paths:
 //
-//   • PSD/PSB              → layer/io/psd      — layers, groups and masks preserved
+//   • PSD/PSB              → layer/io/psd      - layers, groups and masks preserved
 //   • XCF, RAW, HEIC,
-//     SVG, PDF             → layer/io/exotic   — lazily loaded per family
+//     SVG, PDF             → layer/io/exotic   - lazily loaded per family
 //   • TIFF, BMP, ICO,
-//     TGA, PNM             → layer/io/formats  — the browser cannot decode these
+//     TGA, PNM             → layer/io/formats  - the browser cannot decode these
 //   • JPEG, WebP, AVIF,
-//     GIF, plain PNG       → createImageBitmap — native, fastest path
+//     GIF, plain PNG       → createImageBitmap - native, fastest path
 //
 // Every heavy decoder sits behind a dynamic import, so opening a plain JPEG
 // never pays for the PSD or XCF code.
@@ -25,7 +25,7 @@ export function isRasterImage(mime: string): boolean {
   return mime.startsWith('image/') && mime !== 'image/svg+xml'
 }
 
-/** Bytes handed to the sniffer — every signature we know fits well inside this. */
+/** Bytes handed to the sniffer - every signature we know fits well inside this. */
 const SNIFF_WINDOW = 4096
 
 /** Refuse absurd documents before allocating anything. */
@@ -273,7 +273,7 @@ export async function openImageAsLayer(file: { id: string; name: string }): Prom
 
   const imported = await decodeAny(blob, file.name)
   if (imported.warnings.length) {
-    console.warn(`[layer] ${file.name}: ${imported.provenance} —`, imported.warnings)
+    console.warn(`[layer] ${file.name}: ${imported.provenance} -`, imported.warnings)
   }
 
   const { id } = (await layerApi.createDoc({

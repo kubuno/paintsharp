@@ -17,7 +17,7 @@ export function crc32(bytes: Uint8Array, start = 0, end = bytes.length): number 
   return (c ^ 0xffffffff) >>> 0
 }
 
-/** CRC of several buffers in sequence — a PNG CRC covers type + data. */
+/** CRC of several buffers in sequence - a PNG CRC covers type + data. */
 export function crc32Concat(parts: readonly Uint8Array[]): number {
   let c = 0xffffffff
   for (const p of parts) {

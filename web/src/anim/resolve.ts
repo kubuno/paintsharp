@@ -2,7 +2,7 @@
 //
 // One function, testable on its own, instead of three encoders each improvising
 // their own workarounds. Everything a format cannot express is resolved here by
-// flattening — which is always correct, because the compositor is the reference.
+// flattening - which is always correct, because the compositor is the reference.
 
 import { flatten } from './compositor.ts'
 import type { AnimDoc, CommonEncodeOptions, FormatCaps } from './types.ts'
@@ -31,7 +31,7 @@ export function applyCommonOptions(doc: AnimDoc, opts: CommonEncodeOptions): Ani
  *
  * Flattening is unconditional on purpose. The encoders re-derive their own
  * (much better informed) disposal and rectangles in `optimize.ts`, from the
- * composited state — deriving them from a half-resolved document instead is how
+ * composited state - deriving them from a half-resolved document instead is how
  * subtle one-frame-off bugs get in.
  */
 export function resolveForTarget(doc: AnimDoc, caps: FormatCaps, opts: CommonEncodeOptions = {}): AnimDoc {
@@ -40,7 +40,7 @@ export function resolveForTarget(doc: AnimDoc, caps: FormatCaps, opts: CommonEnc
   const q = Math.max(1, caps.delayQuantumMs)
   for (const f of flat.frames) {
     // Quantise to the container's delay unit so that what we write is exactly
-    // what a decoder will read back — otherwise every round-trip drifts.
+    // what a decoder will read back - otherwise every round-trip drifts.
     f.delayMs = Math.round(f.delayMs / q) * q
   }
   flat.loop = normaliseLoop(opts.loop ?? doc.loop)

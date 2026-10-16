@@ -1,8 +1,8 @@
 // Pen family (F15) and path-selection family (F17) of the Layer editor.
 //
-// The eight tools registered here — `pen`, `pen-free`, `pen-curvature`,
+// The eight tools registered here - `pen`, `pen-free`, `pen-curvature`,
 // `anchor-add`, `anchor-remove`, `anchor-convert`, `path-select` and
-// `direct-select` — all drive ONE path model that lives in this module. Nothing
+// `direct-select` - all drive ONE path model that lives in this module. Nothing
 // about it leaks into the editor: paths are pure data, every pixel of feedback
 // goes through `ctx.setPreview`, and no tool here ever writes a layer texture or
 // pushes a pixel history entry.
@@ -27,7 +27,7 @@
 //
 // The free-hand pen fits the captured polyline with the classic least-squares
 // cubic fitting algorithm of Philip J. Schneider, "An Algorithm for
-// Automatically Fitting Digitized Curves", Graphics Gems (1990) — a real curve
+// Automatically Fitting Digitized Curves", Graphics Gems (1990) - a real curve
 // fit, not a polyline simplification.
 import { registerTool } from './registry'
 import type { ToolContext, ToolHandler, ToolPointer } from './types'
@@ -246,7 +246,7 @@ function nearestOnCubic(c: Cubic, pt: Vec): { t: number; d: number } {
       bestT = t
     }
   }
-  // Ternary refinement over the bracketing interval — the distance function is
+  // Ternary refinement over the bracketing interval - the distance function is
   // unimodal there for any reasonable segment.
   let lo = Math.max(0, bestT - 1 / STEPS)
   let hi = Math.min(1, bestT + 1 / STEPS)
@@ -292,7 +292,7 @@ export function pathContains(p: Path, pt: Vec): boolean {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  Path edition — the primitives the eight tools share
+//  Path edition - the primitives the eight tools share
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -380,7 +380,7 @@ export function moveHandle(a: Anchor, part: 'in' | 'out', to: Vec, symmetric: bo
   }
 }
 
-/** True when both handles rest on the anchor — a hard corner with no tangent. */
+/** True when both handles rest on the anchor - a hard corner with no tangent. */
 export function isEdgeAnchor(a: Anchor): boolean {
   const e = 1e-9
   return Math.abs(a.ix - a.x) < e && Math.abs(a.iy - a.y) < e
@@ -404,7 +404,7 @@ function catmullTangent(p: Path, i: number): Vec {
 
 /**
  * Recompute every tangent so the path passes smoothly through all its anchors
- * — the behaviour of the curvature pen. Anchors explicitly marked `corner`
+ * - the behaviour of the curvature pen. Anchors explicitly marked `corner`
  * keep their handles.
  */
 export function smoothTangents(p: Path): void {
@@ -447,7 +447,7 @@ export function toggleAnchorKind(p: Path, i: number): void {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  Schneider curve fitting — the free-hand pen
+//  Schneider curve fitting - the free-hand pen
 // ═══════════════════════════════════════════════════════════════════════════
 
 const B0 = (u: number): number => (1 - u) ** 3
@@ -660,7 +660,7 @@ export function pathFromCubics(cubics: readonly Cubic[], closed = false): Path {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  Rasterisation — "path → selection"
+//  Rasterisation - "path → selection"
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface RasterEdge {
@@ -715,7 +715,7 @@ export interface RasterOptions {
 }
 
 /**
- * Rasterise paths into an 8-bit coverage mask, one byte per document pixel —
+ * Rasterise paths into an 8-bit coverage mask, one byte per document pixel -
  * the exact shape `ctx.setSelection` / `ctx.combineSelection` expect. Filling
  * follows the NON-ZERO winding rule; open paths are filled as if closed, the
  * way SVG and PostScript do.
@@ -1161,7 +1161,7 @@ function drawOverlay(c: CanvasRenderingContext2D): void {
   c.restore()
 }
 
-/** Point count status — kept numeric so it needs no translation. */
+/** Point count status - kept numeric so it needs no translation. */
 function statusText(): string | null {
   const p = activePath()
   if (!p) return null
@@ -1212,7 +1212,7 @@ function cancelGesture(ctx: ToolContext): void {
 const clickSlop = (ctx: ToolContext): number => 3 / Math.max(0.05, ctx.zoom)
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  1. `pen` — Bézier pen
+//  1. `pen` - Bézier pen
 // ═══════════════════════════════════════════════════════════════════════════
 
 const penTool: ToolHandler = {
@@ -1303,7 +1303,7 @@ const penTool: ToolHandler = {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  2. `pen-free` — free-hand pen, fitted with Schneider's algorithm
+//  2. `pen-free` - free-hand pen, fitted with Schneider's algorithm
 // ═══════════════════════════════════════════════════════════════════════════
 
 const penFreeTool: ToolHandler = {
@@ -1379,7 +1379,7 @@ const penFreeTool: ToolHandler = {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  3. `pen-curvature` — clicks only, tangents derived from the neighbours
+//  3. `pen-curvature` - clicks only, tangents derived from the neighbours
 // ═══════════════════════════════════════════════════════════════════════════
 
 const penCurvatureTool: ToolHandler = {
@@ -1454,7 +1454,7 @@ const penCurvatureTool: ToolHandler = {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  4. `anchor-add` — De Casteljau insertion, shape preserved
+//  4. `anchor-add` - De Casteljau insertion, shape preserved
 // ═══════════════════════════════════════════════════════════════════════════
 
 const anchorAddTool: ToolHandler = {
@@ -1546,7 +1546,7 @@ const anchorRemoveTool: ToolHandler = {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  6. `anchor-convert` — corner ⇄ smooth, and handle editing
+//  6. `anchor-convert` - corner ⇄ smooth, and handle editing
 // ═══════════════════════════════════════════════════════════════════════════
 
 const anchorConvertTool: ToolHandler = {
@@ -1629,7 +1629,7 @@ const anchorConvertTool: ToolHandler = {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  7. `path-select` — pick and move whole paths
+//  7. `path-select` - pick and move whole paths
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Move every point of `refs` by a delta, without moving a handle twice. */
@@ -1726,7 +1726,7 @@ const pathSelectTool: ToolHandler = {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  8. `direct-select` — pick and move a single anchor or handle
+//  8. `direct-select` - pick and move a single anchor or handle
 // ═══════════════════════════════════════════════════════════════════════════
 
 const directSelectTool: ToolHandler = {

@@ -24,7 +24,7 @@ export interface ToRgbaOptions {
   readonly colorMode: PsdColorMode
   /** 768-byte palette for Indexed mode (256 R, then 256 G, then 256 B). */
   readonly palette?: Uint8Array | null
-  /** Resource 1047 — the palette index that must become fully transparent. */
+  /** Resource 1047 - the palette index that must become fully transparent. */
   readonly transparentIndex?: number | null
   /** Fills alpha with 255 when the source has no transparency channel. */
   readonly opaque?: boolean

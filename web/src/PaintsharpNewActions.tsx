@@ -1,5 +1,5 @@
 /**
- * Items of the sidebar "New" button for PaintSharp — DATA for the project's
+ * Items of the sidebar "New" button for PaintSharp - DATA for the project's
  * menu component (`MenuDropdown` from @ui), contributed through the generic
  * 'shell.new-actions' extension point (see entry.ts). Evaluated when the menu
  * opens, so labels are always fresh, without hooks.

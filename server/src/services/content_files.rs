@@ -1,6 +1,6 @@
 //! Stockage du CONTENU des éditeurs Paintsharp dans le module `files` (plus en base).
 //!
-//! Format Kubuno (JSON) propre à chaque app — MIME `application/vnd.kubuno.<app>+json`,
+//! Format Kubuno (JSON) propre à chaque app - MIME `application/vnd.kubuno.<app>+json`,
 //! extension `.kb<app>`. Le fichier porte tout le contenu ; la base ne garde que la
 //! métadonnée (entité, pages/calques : nom, position…).
 
@@ -37,7 +37,7 @@ fn gunzip(raw: &[u8]) -> Result<Vec<u8>, PaintsharpError> {
 // ── Plafond de taille d'un document (réglage d'instance) ──────────────────────
 // Single enforcement point for every editor of the suite: Vertex, Apex, Layer,
 // Motion, Keyframe, PdfWriter and FontEditor all reach the drive through the
-// helpers below. Measured on the GZIPPED payload — what is actually stored.
+// helpers below. Measured on the GZIPPED payload - what is actually stored.
 
 fn check_document_size(state: &AppState, gz_len: usize) -> Result<(), PaintsharpError> {
     let max = state.instance().max_document_bytes;
@@ -115,7 +115,7 @@ async fn create_kubuno_file(
     Ok(file.id)
 }
 
-// ── Apex (vectoriel) — `.kbvec` ─────────────────────────────────────────────
+// ── Apex (vectoriel) - `.kbvec` ─────────────────────────────────────────────
 
 pub const VECTOR_MIME: &str = "application/vnd.kubuno.vector+json";
 
@@ -160,7 +160,7 @@ pub async fn create_vector_content_file(
     create_vector_file(state, user_id, title, &content).await
 }
 
-// ── Layer (raster) — `.kblay` ───────────────────────────────────────────────
+// ── Layer (raster) - `.kblay` ───────────────────────────────────────────────
 // Le contenu = structure des calques + réglages de vue (les pixels sont stockés
 // à part via layer_data.storage_path, donc déjà hors base).
 
@@ -181,7 +181,7 @@ pub async fn create_layer_file(
     create_kubuno_file(state, user_id, "PaintSharp/Layer", title, "kblay", LAYER_MIME, "layer", content).await
 }
 
-// ── Vertex (3D) — `.kbscn` ──────────────────────────────────────────────────
+// ── Vertex (3D) - `.kbscn` ──────────────────────────────────────────────────
 // Contenu = scène Three.js (scene_json). Les assets binaires (textures, modèles)
 // sont stockés à part (scene_assets), donc déjà hors base.
 
@@ -201,7 +201,7 @@ pub async fn create_scene_file(
     create_kubuno_file(state, user_id, "PaintSharp/Vertex", title, "kbscn", SCENE_MIME, "scene", content).await
 }
 
-// ── Motion (vidéo) — `.kbmot` ───────────────────────────────────────────────
+// ── Motion (vidéo) - `.kbmot` ───────────────────────────────────────────────
 // Contenu d'édition = timeline (tracks/clips). Les médias et réglages
 // (composition, render_settings) restent des métadonnées en base.
 
@@ -221,7 +221,7 @@ pub async fn create_motion_file(
     create_kubuno_file(state, user_id, "PaintSharp/Motion", title, "kbmot", MOTION_MIME, "motion", content).await
 }
 
-// ── Keyframe (animation 2D) — `.kbanm` ──────────────────────────────────────
+// ── Keyframe (animation 2D) - `.kbanm` ──────────────────────────────────────
 // Contenu = anim_data (layers/bones) + assets. La composition (réglages) et
 // yjs_state (état CRDT collab, fréquemment écrit) restent en base.
 
@@ -241,7 +241,7 @@ pub async fn create_anim_file(
     create_kubuno_file(state, user_id, "PaintSharp/Keyframe", title, "kbanm", ANIM_MIME, "animation", content).await
 }
 
-// ── PdfWriter (annotation PDF) — `.kbpdf` ────────────────────────────────────
+// ── PdfWriter (annotation PDF) - `.kbpdf` ────────────────────────────────────
 // Contenu = annotations + form_data par page (clé = page_id). Le PDF source
 // importé reste sur disque (source_path) ; la métadonnée de page
 // (numéro, dimensions, rotation) reste en base.
@@ -275,7 +275,7 @@ pub async fn create_pdf_file(
     create_kubuno_file(state, user_id, "PaintSharp/PdfWriter", title, "kbpdf", PDFDOC_MIME, "pdf", content).await
 }
 
-// ── FontEditor (création de polices) — `.kbfnt` ──────────────────────────────
+// ── FontEditor (création de polices) - `.kbfnt` ──────────────────────────────
 // Contenu = définition complète de la police : infos (famille, style), métriques
 // verticales (unitsPerEm, ascender, descender…), glyphes (contours Bézier en
 // unités de police, y vers le haut) et paires de crénage.
@@ -310,7 +310,7 @@ pub async fn create_font_file(
 ///
 /// An entity's file IS its face in Drive: keeping it once the entity is gone
 /// leaves an orphan the user can still see and click, but which opens onto
-/// nothing. Call this on PERMANENT deletion only — trashing keeps the row, so
+/// nothing. Call this on PERMANENT deletion only - trashing keeps the row, so
 /// the file must stay too.
 ///
 /// Best-effort: a Drive failure is logged, never fatal, since the row is already
@@ -322,7 +322,7 @@ pub async fn delete_entity_files(
 ) {
     for fid in file_ids {
         if let Err(e) = state.files_client.delete_file(user_id, fid).await {
-            tracing::warn!(file_id = %fid, error = %e, "Drive: delete_file failed — file left orphaned");
+            tracing::warn!(file_id = %fid, error = %e, "Drive: delete_file failed - file left orphaned");
         }
     }
 }

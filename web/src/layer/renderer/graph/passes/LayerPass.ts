@@ -1,4 +1,4 @@
-// Composite one source onto a register — ORDER steps 4 through 9.
+// Composite one source onto a register - ORDER steps 4 through 9.
 //
 // This is the pass that runs for the vast majority of ops, so everything that
 // can be decided at compile time already has been. What is left at run time:
@@ -9,12 +9,12 @@
 //
 // Two regimes, and the choice is not a heuristic:
 //
-//   HARDWARE — the mode has an exact fixed-function equivalent (see
+//   HARDWARE - the mode has an exact fixed-function equivalent (see
 //              `hardwareBlend.ts`) AND the coverage is a plain scalar the
 //              shader can pre-multiply into the source. The accumulator is
 //              written in place: no ping-pong, no backdrop read, half the
 //              bandwidth. This is the path `normal` takes.
-//   SHADER   — everything else. Read `current(reg)`, write `scratch(reg)`,
+//   SHADER   - everything else. Read `current(reg)`, write `scratch(reg)`,
 //              swap. On a 256x256 tile that costs 512 KiB of traffic, not the
 //              64 MiB the current full-document ping-pong costs.
 

@@ -1,4 +1,4 @@
-// Stage 1 (GPU abstraction) — the WebGL2 façade.
+// Stage 1 (GPU abstraction) - the WebGL2 façade.
 //
 // ARCHITECTURAL RULE, enforced by review and by a `no-restricted-syntax` ESLint
 // rule to come: **every `gl.*` call of the engine lives under
@@ -43,7 +43,7 @@ export class GLBuffer implements GLResource {
 
   private handleRef: WebGLBuffer | null
 
-  /** @internal — go through `GLDevice.createBuffer`. */
+  /** @internal - go through `GLDevice.createBuffer`. */
   constructor(
     private readonly gl: WebGL2RenderingContext,
     private readonly tracker: ResourceTracker,
@@ -84,7 +84,7 @@ export class GLBuffer implements GLResource {
     this.gl.bindBuffer(this.target, this.handle)
   }
 
-  /** Update a range without reallocating — the instanced-dab path needs this. */
+  /** Update a range without reallocating - the instanced-dab path needs this. */
   update(data: ArrayBufferView, byteOffset = 0): void {
     const gl = this.gl
     gl.bindBuffer(this.target, this.handle)
@@ -131,7 +131,7 @@ export class GLVertexArray implements GLResource {
 
   private handleRef: WebGLVertexArrayObject | null
 
-  /** @internal — go through `GLDevice.createVertexArray`. */
+  /** @internal - go through `GLDevice.createVertexArray`. */
   constructor(
     private readonly gl: WebGL2RenderingContext,
     private readonly tracker: ResourceTracker,
@@ -206,7 +206,7 @@ export interface BlendState {
 
 /**
  * `source-over` on PREMULTIPLIED colours: `c = src + dst·(1-src.a)`.
- * No division, no `a < eps` branch — that is the whole point of §4.4.
+ * No division, no `a < eps` branch - that is the whole point of §4.4.
  * Usable on a float render target because EXT_float_blend is available here.
  */
 export const BLEND_OVER_PREMULTIPLIED: BlendState = {
@@ -296,7 +296,7 @@ void main() { vUv = ${QUAD_ATTRIB} * 0.5 + 0.5; gl_Position = vec4(${QUAD_ATTRIB
 export class GLDevice {
   readonly canvas: HTMLCanvasElement | OffscreenCanvas
   readonly caps: GLCaps
-  /** Pool of reusable render targets — never create framebuffers ad hoc. */
+  /** Pool of reusable render targets - never create framebuffers ad hoc. */
   readonly framebuffers: FramebufferPool
 
   private readonly tracker = new ResourceTracker()
@@ -355,7 +355,7 @@ export class GLDevice {
   }
 
   /**
-   * Create a device. Returns null when WebGL2 is unavailable — never throws for
+   * Create a device. Returns null when WebGL2 is unavailable - never throws for
    * that reason, because "no WebGL2" is a supported end-user situation.
    */
   static create(
@@ -430,7 +430,7 @@ export class GLDevice {
    * The precision statements come FIRST and are part of the preamble on purpose:
    * the preamble is inserted right after `#version`, i.e. BEFORE the shader's own
    * `precision highp float;`, and GLSL ES 3.00 fragment shaders have no default
-   * float precision — without this, every shared function fails to compile with
+   * float precision - without this, every shared function fails to compile with
    * "No precision specified for (float)". Redeclaring precision later in the
    * shader is legal, so a shader that declares its own is unaffected.
    */
@@ -606,7 +606,7 @@ export class GLDevice {
     this.glCtx.flush()
   }
 
-  /** Block until the GPU is idle. Tests only — never in the render loop. */
+  /** Block until the GPU is idle. Tests only - never in the render loop. */
   finish(): void {
     this.glCtx.finish()
   }
@@ -635,7 +635,7 @@ export class GLDevice {
    * The backing store is sized in DEVICE pixels and must be an integer.
    * Rounding the CSS size and multiplying is wrong: it drifts by up to dpr-1
    * device pixels and blurs the image by half a pixel at every zoom level.
-   * Returns true when the size changed — a resize resets GL state, so callers
+   * Returns true when the size changed - a resize resets GL state, so callers
    * must redraw.
    */
   syncCanvasSize(dpr: number): boolean {
@@ -656,7 +656,7 @@ export class GLDevice {
     return this.tracker.inventory()
   }
 
-  /** What is still alive, with labels — the leak report. */
+  /** What is still alive, with labels - the leak report. */
   liveResources(): { kind: ResourceKind; label: string; gpuBytes: number }[] {
     return this.tracker.list()
   }
@@ -680,7 +680,7 @@ export class GLDevice {
 
   /**
    * Release EVERY GPU object owned by this device. Idempotent.
-   * The inventory is guaranteed to be empty afterwards — that is the property
+   * The inventory is guaranteed to be empty afterwards - that is the property
    * the leak test asserts, and the one the current engine fails (F10).
    */
   dispose(): void {
@@ -705,7 +705,7 @@ export class GLDevice {
 
   // ── Internals ────────────────────────────────────────────────────────────
 
-  /** Lazily created fullscreen-quad VAO — one per device, shared by all passes. */
+  /** Lazily created fullscreen-quad VAO - one per device, shared by all passes. */
   private quad(): GLVertexArray {
     if (this.quadVao) return this.quadVao
     this.quadBuffer = this.createBuffer(

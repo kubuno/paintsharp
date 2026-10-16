@@ -3,8 +3,8 @@
 // One button per FAMILY, never one per tool: a click selects the family's
 // remembered tool, a long press / right-click / click on the corner triangle
 // opens the flyout listing the family's members. The floating layer is always
-// `MenuDropdown` from `@ui` — it owns the portal, the viewport clamping and the
-// automatic switch to a bottom sheet on touch — while the menu's CONTENT is ours
+// `MenuDropdown` from `@ui` - it owns the portal, the viewport clamping and the
+// automatic switch to a bottom sheet on touch - while the menu's CONTENT is ours
 // so it can carry `role="menu"` / `role="menuitemradio"`, which the primitive
 // does not emit on its own.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -27,7 +27,7 @@ export interface ToolRailProps {
   /** Usable length in px (height when vertical). Measured from the DOM when omitted. */
   available?: number
   orientation?: 'vertical' | 'horizontal'
-  /** Long-press delay before the flyout opens — 120…600 ms for motor accessibility. */
+  /** Long-press delay before the flyout opens - 120…600 ms for motor accessibility. */
   longPressMs?: number
   /** Tools the current layer cannot accept; shown greyed out and not selectable. */
   disabledTools?: ToolId[]
@@ -375,7 +375,7 @@ export function ToolRail({
                 width: btnSize, height: btnSize, flex: '0 0 auto',
                 touchAction: 'none',
                 scrollSnapAlign: vertical ? undefined : 'center',
-                // Selection is a background tint — never a coloured bar on the edge.
+                // Selection is a background tint - never a coloured bar on the edge.
                 background: isActive ? C.active : 'transparent',
                 color: isActive ? '#fff' : C.textDim,
                 // An open flyout wears the same focus ring as a focused Input.

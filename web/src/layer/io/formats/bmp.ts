@@ -145,7 +145,7 @@ export interface DibDecodeOptions {
   readonly heightOverride?: number
   /**
    * ICO semantics: a 32-bit entry is ARGB, its fourth byte IS the alpha. Plain BMP says
-   * the opposite — `BI_RGB` at 32 bits has no alpha unless a V4/V5 mask declares one,
+   * the opposite - `BI_RGB` at 32 bits has no alpha unless a V4/V5 mask declares one,
    * which is what GIMP (bmp-load.c `set_default_masks`, alpha mask = 0) and ImageMagick
    * both implement.
    */
@@ -208,7 +208,7 @@ function unpackIndexedRows(
   bitCount: number,
   topDown: boolean,
 ): void {
-  // BMP rows are padded to 4 bytes — not to a byte as in TIFF.
+  // BMP rows are padded to 4 bytes - not to a byte as in TIFF.
   const rowBytes = Math.floor((width * bitCount + 31) / 32) * 4
   const max = (1 << bitCount) - 1
   for (let y = 0; y < height; y++) {
@@ -318,7 +318,7 @@ function decodeTrueColor(
   // An alpha mask only means something if its bits actually exist at this depth.
   // BITMAPV4/V5 headers written by ImageMagick carry `a = 0xFF000000` even on
   // 24-bit images, where there is no fourth byte to read: trusting the mask there
-  // yields a fourth channel that is never written, i.e. alpha 0 — a fully
+  // yields a fourth channel that is never written, i.e. alpha 0 - a fully
   // transparent (black-looking) image. Require the mask to fit inside `bpp`,
   // which still accepts genuine 16-bit ARGB1555 (a = 0x8000).
   const alphaMaskBits = masks.a === 0 ? 0 : 32 - Math.clz32(masks.a)
@@ -374,7 +374,7 @@ function decodeTrueColor(
       // ICO: ARGB entry with real alpha.
       alpha = 'unassociated'
     } else if (useFourthByte) {
-      // ICO: 0RGB entry — every alpha is zero, which means opaque, not invisible.
+      // ICO: 0RGB entry - every alpha is zero, which means opaque, not invisible.
       for (let i = 3; i < out.length; i += 4) out[i] = 255
       alpha = 'unassociated'
     } else {
@@ -473,7 +473,7 @@ export function decodeBmp(bytes: Uint8Array): DecodedFile {
 }
 
 // ---------------------------------------------------------------------------
-// Encoder — the browser cannot write BMP at all (measured: `convertToBlob` silently
+// Encoder - the browser cannot write BMP at all (measured: `convertToBlob` silently
 // returns a PNG for `image/bmp`), so this is the only path.
 // ---------------------------------------------------------------------------
 
@@ -594,8 +594,8 @@ function writeBmp16(rgba: Uint8Array, width: number, height: number, layout: '55
 }
 
 /**
- * Flattens any `RasterImage` to straight RGBA8. High-bit-depth sources are scaled down —
- * BMP has no deeper form — and indexed sources are expanded through their palette.
+ * Flattens any `RasterImage` to straight RGBA8. High-bit-depth sources are scaled down -
+ * BMP has no deeper form - and indexed sources are expanded through their palette.
  */
 export function toRgba8(image: RasterImage): Uint8Array {
   const { width, height, data, colorChannels, alpha, palette } = image

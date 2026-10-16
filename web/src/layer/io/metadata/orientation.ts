@@ -1,11 +1,11 @@
-// EXIF orientation (spec 05 §6.3) — the fix for the single most visible photo bug:
+// EXIF orientation (spec 05 §6.3) - the fix for the single most visible photo bug:
 // phone pictures arriving on their side.
 //
 // Policy, applied without exception:
 //   1. On import the decoder RECORDS the tag and `createImageBitmap` is called with
 //      `imageOrientation: 'none'` (otherwise Chrome applies it too and the rotation is
 //      counted twice). The transform is then baked into the pixels here and the value is
-//      reset to 1 in the document metadata — a hidden rotation is a permanent bug source.
+//      reset to 1 in the document metadata - a hidden rotation is a permanent bug source.
 //   2. On export `Orientation = 1` is written. The pixels are already upright; writing
 //      anything else would rotate the picture a second time at the recipient's end.
 //
@@ -121,7 +121,7 @@ export function transformSamples(
 }
 
 /**
- * Bakes `image.orientation` into the pixels and resets the recorded value to 1 — both in
+ * Bakes `image.orientation` into the pixels and resets the recorded value to 1 - both in
  * the `RasterImage` and in the EXIF block, so a later export cannot rotate twice.
  */
 export function applyOrientation(image: RasterImage, orientation = image.orientation ?? 1): RasterImage {

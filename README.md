@@ -7,7 +7,7 @@
 
 <img src=".github/logo.png" alt="Kubuno PaintSharp logo" width="120">
 
-# Kubuno — PaintSharp
+# Kubuno - PaintSharp
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 ![Rust](https://img.shields.io/badge/Rust-edition_2021-orange.svg)
@@ -16,9 +16,9 @@
 ![Status](https://img.shields.io/badge/status-alpha-yellow.svg)
 ![Kubuno module](https://img.shields.io/badge/Kubuno-module-4D38DB.svg)
 
-**The creative suite for Kubuno — a bundle of self-hosted editors for raster and vector art, 3D, video, 2D animation, PDF and type design, all collaborating in real time on files that live in your own drive.**
+**The creative suite for Kubuno - a bundle of self-hosted editors for raster and vector art, 3D, video, 2D animation, PDF and type design, all collaborating in real time on files that live in your own drive.**
 
-A module for [Kubuno](https://github.com/kubuno/core), the self-hosted, libre (AGPLv3) cloud platform — a sovereign alternative to the mainstream productivity suites.
+A module for [Kubuno](https://github.com/kubuno/core), the self-hosted, libre (AGPLv3) cloud platform - a sovereign alternative to the mainstream productivity suites.
 
 </div>
 
@@ -91,29 +91,29 @@ The editors share a common UI library (EditorShell, colour tools, navigator…).
 
 ### Highlights
 
-- **Layer** — layer-based raster editing with a professional filter library (blur, sharpen, noise, stylize… — one-click defaults plus tunable dialogs), applied as pure pixel operations with full undo.
-- **Apex** — pen/node editing with gradients and boolean path operations; freehand **pencil & brush** tools with stroke stabilization, path fitting and pressure-driven calligraphic ribbons; **image tracing** (raster → editable vectors) running server-side on the [VTracer](https://github.com/visioncortex/vtracer) engine, with a live preview, full parameter control and post-trace path simplification; SVG import/export interop (including pasting SVG from the clipboard as editable shapes); vector selections copy as portable envelopes and paste into other Kubuno modules (chat cards, office documents…).
-- **Vertex** — 3D modeling with a professional **sculpt mode** (14 sculpting brushes — clay, inflate, crease, grab, snake hook… — with falloff curves, pen pressure and dynamic-topology refinement) and **CSG booleans** (union / difference / intersect), plus weld, join and normal tools.
-- **Motion** — a multi-track video timeline (video, audio and image tracks) with trimming, splitting and transitions, a live preview engine and export to WebM/MP4 straight from the browser.
-- **Keyframe** — frame-by-frame 2D animation on a timeline with onion skinning and a configurable frame rate; each frame is drawn with the real Apex and Layer editors mounted in place, so every tool they gain is available here, and animations export as video.
-- **PdfWriter** — imports real PDFs and keeps text editable: embedded font names are matched onto the closest available family, and admin-provided fonts (drive `System/Fonts`) are both rendered on-canvas and **embedded in the exported PDF**; **signatures** (draw with smoothing, type in a cursive font, or import an image with background removal — saved for reuse); offline **OCR** on scanned pages (Tesseract, fully local).
-- **FontEditor** — full type-design workflow: glyph overview grid, Bézier glyph editor with vertical metrics and draggable advance width, kerning pairs and a live text preview; projects are saved as `.kbfnt` files and export to **OTF** (CFF), **TTF** (native sfnt writer, kerning included), WOFF, WOFF2, EOT and SVG font; existing `ttf`/`otf`/`woff`/`woff2`/`eot` fonts open directly as new projects.
-- **Files in your drive** — documents live in the Kubuno drive as regular files (`.kblayer`, `.kbvec`, `.kb3d`, `.kbvid`, `.kbanim`, `.kbpdf`, `.kbfnt`), reached through the platform core so hardened per-module secrets keep saving, opening and importing working.
-- **Real-time collaboration** — the editors collaborate in real time through the core's Yjs service; collaboration can be toggled instance-wide by an administrator.
+- **Layer** - layer-based raster editing with a professional filter library (blur, sharpen, noise, stylize… - one-click defaults plus tunable dialogs), applied as pure pixel operations with full undo.
+- **Apex** - pen/node editing with gradients and boolean path operations; freehand **pencil & brush** tools with stroke stabilization, path fitting and pressure-driven calligraphic ribbons; **image tracing** (raster → editable vectors) running server-side on the [VTracer](https://github.com/visioncortex/vtracer) engine, with a live preview, full parameter control and post-trace path simplification; SVG import/export interop (including pasting SVG from the clipboard as editable shapes); vector selections copy as portable envelopes and paste into other Kubuno modules (chat cards, office documents…).
+- **Vertex** - 3D modeling with a professional **sculpt mode** (14 sculpting brushes - clay, inflate, crease, grab, snake hook… - with falloff curves, pen pressure and dynamic-topology refinement) and **CSG booleans** (union / difference / intersect), plus weld, join and normal tools.
+- **Motion** - a multi-track video timeline (video, audio and image tracks) with trimming, splitting and transitions, a live preview engine and export to WebM/MP4 straight from the browser.
+- **Keyframe** - frame-by-frame 2D animation on a timeline with onion skinning and a configurable frame rate; each frame is drawn with the real Apex and Layer editors mounted in place, so every tool they gain is available here, and animations export as video.
+- **PdfWriter** - imports real PDFs and keeps text editable: embedded font names are matched onto the closest available family, and admin-provided fonts (drive `System/Fonts`) are both rendered on-canvas and **embedded in the exported PDF**; **signatures** (draw with smoothing, type in a cursive font, or import an image with background removal - saved for reuse); offline **OCR** on scanned pages (Tesseract, fully local).
+- **FontEditor** - full type-design workflow: glyph overview grid, Bézier glyph editor with vertical metrics and draggable advance width, kerning pairs and a live text preview; projects are saved as `.kbfnt` files and export to **OTF** (CFF), **TTF** (native sfnt writer, kerning included), WOFF, WOFF2, EOT and SVG font; existing `ttf`/`otf`/`woff`/`woff2`/`eot` fonts open directly as new projects.
+- **Files in your drive** - documents live in the Kubuno drive as regular files (`.kblayer`, `.kbvec`, `.kb3d`, `.kbvid`, `.kbanim`, `.kbpdf`, `.kbfnt`), reached through the platform core so hardened per-module secrets keep saving, opening and importing working.
+- **Real-time collaboration** - the editors collaborate in real time through the core's Yjs service; collaboration can be toggled instance-wide by an administrator.
 
 ## Architecture
 
 PaintSharp is a **separate process** (a standalone Rust binary listening on port **3106**) that registers with the [core](https://github.com/kubuno/core) at startup. The core proxies its routes (`/api/v1/paintsharp/*`), distributes platform events to it and manages its lifecycle; it also serves the module's runtime-loaded React frontend bundle through the host import map.
 
-- **Server** — `server/`: Axum on the shared `kubuno-db` layer, running on **PostgreSQL, MySQL/MariaDB or SQLite** (the engine is an administrator choice read at run time — one binary, no rebuild), in a dedicated `paintsharp` schema; migrations for each engine in `server/migrations/`. Proxied requests are authenticated from a signed `X-Kubuno-Auth` token minted by the core, never from plain forwarded headers.
-- **Web** — `web/`: a React bundle built to `entry.js`, consuming `@kubuno/sdk`, `@kubuno/ui` (`@ui`) and `@kubuno/drive` from npm — resolved by the host at runtime via the import map, never re-bundled.
-- **Mobile** — `mobile/`: reserved for the mobile apps (see `mobile/README.md`).
+- **Server** - `server/`: Axum on the shared `kubuno-db` layer, running on **PostgreSQL, MySQL/MariaDB or SQLite** (the engine is an administrator choice read at run time - one binary, no rebuild), in a dedicated `paintsharp` schema; migrations for each engine in `server/migrations/`. Proxied requests are authenticated from a signed `X-Kubuno-Auth` token minted by the core, never from plain forwarded headers.
+- **Web** - `web/`: a React bundle built to `entry.js`, consuming `@kubuno/sdk`, `@kubuno/ui` (`@ui`) and `@kubuno/drive` from npm - resolved by the host at runtime via the import map, never re-bundled.
+- **Mobile** - `mobile/`: reserved for the mobile apps (see `mobile/README.md`).
 
 ## Install
 
-A Kubuno module is distributed as a single **`.kbpkg`** — a portable package that the Kubuno server installs by itself, the same file on Linux, Windows and macOS. It is not a system service and ships in no other format.
+A Kubuno module is distributed as a single **`.kbpkg`** - a portable package that the Kubuno server installs by itself, the same file on Linux, Windows and macOS. It is not a system service and ships in no other format.
 
-The easiest way to self-host a full Kubuno instance (core + every module) is the all-in-one **Docker image** (`ghcr.io/kubuno/kubuno`); see **[kubuno/docker](https://github.com/kubuno/docker)**. To install PaintSharp into an existing instance, grab the `.kbpkg` from the [GitHub Releases](https://github.com/kubuno/paintsharp/releases) and let the core unpack it — from the admin console's module marketplace, or offline from the CLI:
+The easiest way to self-host a full Kubuno instance (core + every module) is the all-in-one **Docker image** (`ghcr.io/kubuno/kubuno`); see **[kubuno/docker](https://github.com/kubuno/docker)**. To install PaintSharp into an existing instance, grab the `.kbpkg` from the [GitHub Releases](https://github.com/kubuno/paintsharp/releases) and let the core unpack it - from the admin console's module marketplace, or offline from the CLI:
 
 ```bash
 sudo kubuno modules:install kubuno-paintsharp-<version>-<os>-<arch>.kbpkg
@@ -131,19 +131,19 @@ bash build_kbpkg.sh                         # → dist/paintsharp-<version>-<os>
 bash build_kbpkg.sh --install              # build, install into the module store and restart
 ```
 
-> Shared dependencies come from Kubuno — no `kubuno/core` checkout required:
-> - **Rust** — shared crates via tagged git dependencies on `kubuno/core`.
-> - **Frontend** — `@kubuno/sdk`, `@kubuno/ui`, `@kubuno/drive` from the `@kubuno` npm scope.
+> Shared dependencies come from Kubuno - no `kubuno/core` checkout required:
+> - **Rust** - shared crates via tagged git dependencies on `kubuno/core`.
+> - **Frontend** - `@kubuno/sdk`, `@kubuno/ui`, `@kubuno/drive` from the `@kubuno` npm scope.
 
 ## Acknowledgements
 
 - Image tracing (raster → vector, Apex's *Image trace* dialog) is powered by **[VTracer](https://github.com/visioncortex/vtracer)**, the [visioncortex](https://www.visioncortex.org/) vectorization engine (MIT/Apache-2.0). Its conversion pipeline is vendored in `src/services/vtrace.rs` on top of the `visioncortex` crate.
-- OCR (PdfWriter's *Recognize text* on scanned pages, and text recognition inside traced images in Apex) uses **[Tesseract](https://github.com/tesseract-ocr/tesseract)** compiled to WebAssembly — worker, core and language models are self-hosted with the module, no public CDN involved.
+- OCR (PdfWriter's *Recognize text* on scanned pages, and text recognition inside traced images in Apex) uses **[Tesseract](https://github.com/tesseract-ocr/tesseract)** compiled to WebAssembly - worker, core and language models are self-hosted with the module, no public CDN involved.
 - Font export builds on **[opentype.js](https://github.com/opentypejs/opentype.js)** (OTF/CFF) and **[fonteditor-core](https://github.com/kekee000/fonteditor-core)** (font-file parsing).
 
 ## Tech stack
 
-Rust 2021 · Axum · Tokio · `kubuno-db` over SQLx (PostgreSQL, MySQL/MariaDB or SQLite) — React 19 · TypeScript · Vite · Tailwind CSS v4 · Zustand · React Query · Yjs · Three.js.
+Rust 2021 · Axum · Tokio · `kubuno-db` over SQLx (PostgreSQL, MySQL/MariaDB or SQLite) - React 19 · TypeScript · Vite · Tailwind CSS v4 · Zustand · React Query · Yjs · Three.js.
 
 ## Contributing
 

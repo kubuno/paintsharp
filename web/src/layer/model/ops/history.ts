@@ -2,7 +2,7 @@
 //
 // Why this file exists (gap E4 of the audit)
 // ------------------------------------------
-// The current editor's history is `UndoEntry = { id, x, y, w, h, px }` — pixel
+// The current editor's history is `UndoEntry = { id, x, y, w, h, px }` - pixel
 // rectangles and nothing else. Creating, deleting, reordering, renaming or
 // grouping a layer is therefore NOT undoable at all. Worse, `pushUndoFull()`
 // allocates `w * h * 4` in one block (96 MiB on an 8000x3000 document) through a
@@ -369,7 +369,7 @@ export class HistoryStack {
 
   /**
    * Opens a coalescing transaction. Every push until `commit()` folds into a
-   * single entry — one brush stroke, one drag, one panel session.
+   * single entry - one brush stroke, one drag, one panel session.
    */
   begin(labelKey: string, coalesceKey?: string): Transaction {
     if (this.txn) return this.txn
@@ -377,7 +377,7 @@ export class HistoryStack {
     return this.txn
   }
 
-  /** @internal — called by `Transaction`. */
+  /** @internal - called by `Transaction`. */
   endTransaction(cmd: Command | null): void {
     this.txn = null
     if (cmd) this.push(cmd)
@@ -385,7 +385,7 @@ export class HistoryStack {
 
   /**
    * Closes the current coalescing window. MUST be called on selection change,
-   * active-layer change, tool change, save and window blur — otherwise a single
+   * active-layer change, tool change, save and window blur - otherwise a single
    * undo can swallow twenty minutes of work.
    */
   breakCoalescing(): void { this.coalesceBroken = true }

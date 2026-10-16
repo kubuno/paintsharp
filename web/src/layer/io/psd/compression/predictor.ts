@@ -3,8 +3,8 @@
  *
  * The algorithms implemented here were derived from the GIMP PSD plug-in
  * (file-psd), Copyright 2007 John Marshall, licensed under the GNU General
- * Public License v3 or later — the `PSD_COMP_ZIP_PRED` branch of psd-load.c
- * (~l. 5344-5400) and `decode_32_bit_predictor()` (~l. 5430-5472) — and from
+ * Public License v3 or later - the `PSD_COMP_ZIP_PRED` branch of psd-load.c
+ * (~l. 5344-5400) and `decode_32_bit_predictor()` (~l. 5430-5472) - and from
  * Adobe's public "Photoshop File Formats Specification" plus TIFF Technical
  * Note 3 for the byte-planar 32-bit scheme.
  *
@@ -107,7 +107,7 @@ export function undoPredictor(
 }
 
 /* ------------------------------------------------------------------ *
- * Encoders — used only by the tests today: Kubuno never writes
+ * Encoders - used only by the tests today: Kubuno never writes
  * `compression = 3` (spec §3.5). They exist so `predictor-roundtrip`
  * can validate the decoders against a known-good inverse.
  * ------------------------------------------------------------------ */

@@ -80,7 +80,7 @@ export type RasterPayload =
 
 export interface ImportedRaster extends ImportedNodeBase {
   readonly kind: 'raster'
-  /** Full-document-sized, non-premultiplied RGBA8 (the offset is baked in — §3.3). */
+  /** Full-document-sized, non-premultiplied RGBA8 (the offset is baked in - §3.3). */
   readonly pixels: RasterPayload
   /** Full-document-sized, 1 byte per pixel, 0 = fully masked. */
   readonly mask?: {
@@ -104,9 +104,9 @@ export type ImportedNode = ImportedRaster | ImportedGroup
 export interface ImportedDocument {
   readonly width: number
   readonly height: number
-  /** Suggested title — the file name without its extension. */
+  /** Suggested title - the file name without its extension. */
   readonly title: string
-  /** TOP-FIRST, exactly like `LayerStructureItem[]` (spec 07 §3.2 — XCF agrees, PSD does not). */
+  /** TOP-FIRST, exactly like `LayerStructureItem[]` (spec 07 §3.2 - XCF agrees, PSD does not). */
   readonly layers: readonly ImportedNode[]
   readonly dpi?: number
   /** Embedded ICC profile, carried but NOT applied by v1 (§3.4). */

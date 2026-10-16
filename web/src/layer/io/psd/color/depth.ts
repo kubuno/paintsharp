@@ -2,7 +2,7 @@
  * PSD/PSB bit-depth normalisation to 8 bits (spec §2.4).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * GPLv3+ — `convert_1_bit()` in psd-load.c — plus the public sRGB transfer
+ * GPLv3+ - `convert_1_bit()` in psd-load.c - plus the public sRGB transfer
  * function. Independent TypeScript re-implementation; no GIMP source was
  * copied. Kubuno is AGPLv3.
  */

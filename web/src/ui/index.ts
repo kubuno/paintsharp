@@ -1,4 +1,4 @@
-// Shared Paintsharp editor UI library — primitives & shell reused by every Paintsharp
+// Shared Paintsharp editor UI library - primitives & shell reused by every Paintsharp
 // sub-editor (Layer, Apex, Vertex, Keyframe, Motion, PdfWriter).
 export * from './theme'
 export { ColorPicker, harmonyColors } from './ColorPicker'

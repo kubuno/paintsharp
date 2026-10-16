@@ -2,7 +2,7 @@
 //
 // Level 0 is full resolution; level L stores one texel per 2^L document pixels.
 // A level-L tile is built by a 2x2 alpha-weighted (premultiplied) reduction of
-// the four level-(L-1) tiles below it, in LINEAR space — reducing in encoded
+// the four level-(L-1) tiles below it, in LINEAR space - reducing in encoded
 // sRGB is what makes naive downscales look too dark.
 //
 // The point of this class is what it does NOT do. The current renderer calls
@@ -111,7 +111,7 @@ export class LodPyramid {
     return tilesAcross(this.docHeight, level)
   }
 
-  /** Total tiles at `level` — bounded by the document, unlike the visible count. */
+  /** Total tiles at `level` - bounded by the document, unlike the visible count. */
   tileCountAt(level: number): number {
     return this.tilesAcrossAt(level) * this.tilesDownAt(level)
   }
@@ -169,7 +169,7 @@ export class LodPyramid {
     return this.regions[key.level].dirtyInRect(tileLevelRect(key))
   }
 
-  /** Same rect, expressed in document pixels — handy for logging and tests. */
+  /** Same rect, expressed in document pixels - handy for logging and tests. */
   dirtyDocRectInTile(key: TileKey): Rect | null {
     const local = this.dirtyRectInTile(key)
     if (!local) return null
@@ -245,7 +245,7 @@ export class LodPyramid {
 
   /**
    * Walk up the pyramid until `isValid` accepts a tile. Returns null when no
-   * ancestor is usable — the caller then draws the checkerboard, never nothing.
+   * ancestor is usable - the caller then draws the checkerboard, never nothing.
    */
   bestAvailable(key: TileKey, isValid: (k: TileKey) => boolean): TileKey | null {
     if (isValid(key)) return key

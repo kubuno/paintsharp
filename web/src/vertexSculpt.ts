@@ -1,4 +1,4 @@
-// Vertex editor — professional sculpt engine.
+// Vertex editor - professional sculpt engine.
 // Pure array math (no three.js import): every function works in the mesh's
 // LOCAL space on raw position/index buffers, so the whole engine is unit-testable
 // headlessly (node --experimental-strip-types) without WebGL.
@@ -328,7 +328,7 @@ function smoothDab(pos: Float32Array, count: number, p: DabParams, adjacency: In
 }
 
 // ── Spatial / topological acceleration ─────────────────────────────────────────
-// Collect the vertices inside a sphere — one O(V) pass per pointer event, so the
+// Collect the vertices inside a sphere - one O(V) pass per pointer event, so the
 // (up to 24) dabs of that event only touch candidates instead of re-scanning
 // the whole mesh each.
 export function collectRegion(
@@ -486,7 +486,7 @@ export function refineRegion(
       }
     }
     if (!longEdges.length) break
-    // Pass B: edge→tris map for the WANTED edges only — a region edge shared
+    // Pass B: edge→tris map for the WANTED edges only - a region edge shared
     // with an outside triangle must split both sides (no T-junctions), so this
     // pass scans every triangle but only stores the split candidates.
     const edgeTris = new Map<number, number[]>()      // edgeKey → [triOffset...]
@@ -561,7 +561,7 @@ export function collapseRegion(
 
   // Vertex → triangle offsets, restricted to in-region vertices (collapse only
   // ever touches edges whose BOTH endpoints are in the region, but their tri
-  // lists must be complete — hence the whole-mesh scan with flagged inserts).
+  // lists must be complete - hence the whole-mesh scan with flagged inserts).
   const flags = new Uint8Array(m.count)
   for (let v = 0; v < m.count; v++) if (inRegion(v)) flags[v] = 1
   const v2t = new Map<number, number[]>()

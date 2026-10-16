@@ -7,7 +7,7 @@
 // that silently disappears is harder to reason about than one that is visibly
 // not ready yet.
 //
-// `transform` has no rail entry on purpose — the spec reclassifies free
+// `transform` has no rail entry on purpose - the spec reclassifies free
 // transform as a COMMAND (Ctrl+T), which is also what Photoshop does. It stays
 // reachable from the keyboard and the menus.
 import { ALL_TOOL_IDS } from './helpers'
@@ -45,7 +45,7 @@ export const TOOL_TO_LEGACY: Partial<Record<ToolId, LegacyTool>> = Object.fromEn
 export const IMPLEMENTED_TOOLS: ToolId[] = Object.values(LEGACY_TO_TOOL)
 
 /**
- * Everything else — passed to `ToolRail.disabledTools` so the families and their
+ * Everything else - passed to `ToolRail.disabledTools` so the families and their
  * flyouts render in full while unavailable entries stay unselectable.
  */
 export const UNIMPLEMENTED_TOOLS: ToolId[] =

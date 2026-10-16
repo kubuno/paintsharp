@@ -44,7 +44,7 @@ export function animCaps(): Promise<AnimCaps> {
   return cached
 }
 
-/** Forget the cached probe result — for tests, and after a worker restart. */
+/** Forget the cached probe result - for tests, and after a worker restart. */
 export function resetAnimCaps(): void {
   cached = null
 }

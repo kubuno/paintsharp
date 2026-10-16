@@ -10,7 +10,7 @@ const handlers = new Map<ToolId, ToolHandler>()
 
 export function registerTool(id: ToolId, handler: ToolHandler): void {
   if (handlers.has(id)) {
-    // A duplicate means two files claim the same tool — worth knowing about,
+    // A duplicate means two files claim the same tool - worth knowing about,
     // but the first registration wins so behaviour stays deterministic.
     console.warn(`[layer/tools] "${id}" is already registered; ignoring the second handler`)
     return

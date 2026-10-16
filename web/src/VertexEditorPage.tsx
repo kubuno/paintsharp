@@ -318,7 +318,7 @@ function loadLSArray<T>(key: string, fallback: T[]): T[] {
   } catch { return fallback }
 }
 
-// Falloff curve icons — small custom SVG profiles (no lucide equivalent).
+// Falloff curve icons - small custom SVG profiles (no lucide equivalent).
 const FALLOFF_PATHS: Record<FalloffKind, string> = {
   smooth:   'M1 3 C 5 3, 8 6, 15 13',
   sphere:   'M1 3 C 9 3.5, 13 6, 15 13',
@@ -586,7 +586,7 @@ function SelectableMesh({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Reapply when the mesh payload changes externally (undo/redo) — not mid-stroke.
+  // Reapply when the mesh payload changes externally (undo/redo) - not mid-stroke.
   useEffect(() => {
     if (meshSeenRef.current === obj.mesh) return
     meshSeenRef.current = obj.mesh
@@ -860,7 +860,7 @@ function SelectableMesh({
         ? [cur[0] - s.lastLocal[0], cur[1] - s.lastLocal[1], cur[2] - s.lastLocal[2]]
         : [0, 0, 0]
       // Grab/twist displace their captured set; snakehook/nudge scan around the
-      // current hit — give the latter a candidate region.
+      // current hit - give the latter a candidate region.
       const cands = (base === 'snakehook' || base === 'nudge')
         ? collectAround(cur, localR * 1.05)
         : null
@@ -1098,7 +1098,7 @@ function SelectableMesh({
 
   const showVertexColors = mode === 'vertex_paint' || mode === 'weight_paint'
 
-  // Edit-Mode highlight overlays — geometries share the live position buffer so
+  // Edit-Mode highlight overlays - geometries share the live position buffer so
   // selected verts/edges/faces follow the mesh as it is grabbed.
   const editHighlight = useMemo(() => {
     if (mode !== 'edit') return null
@@ -1173,7 +1173,7 @@ function SelectableMesh({
         </points>
       )}
 
-      {/* Edit Mode: highlighted selection (orange) — points / edges / faces. */}
+      {/* Edit Mode: highlighted selection (orange) - points / edges / faces. */}
       {active && mode === 'edit' && editHighlight && (
         <group position={obj.position} rotation={obj.rotation ?? [0,0,0]} scale={obj.scale ?? [1,1,1]}>
           {editSel.f.length > 0 && (
@@ -1449,7 +1449,7 @@ function Viewport({
       {objects.filter(o => o.visible && o.primType !== 'container').map((obj) => (
         <SelectableMesh
           // Remount on topology change (subdivide/decimate/import) so geometry rebuilds;
-          // a plain sculpt keeps the vertex count, so the key — and the mesh — stays put.
+          // a plain sculpt keeps the vertex count, so the key - and the mesh - stays put.
           key={`${obj.id}:${obj.primType}:${obj.mesh?.positions?.length ?? 0}:${obj.mesh?.index?.length ?? 0}`}
           obj={obj}
           selected={selectedIds.includes(obj.id)}
@@ -1957,7 +1957,7 @@ function SculptPanel({
                     <button key={b.id}
                       onClick={() => onSelectBrush(b.id)}
                       onContextMenu={(e) => brushCtxMenu(e, b)}
-                      title={`${brushDisplayName(t, b)} — ${t('vertex_brush_ctx_hint', { defaultValue: 'clic droit : options' })}`}
+                      title={`${brushDisplayName(t, b)} - ${t('vertex_brush_ctx_hint', { defaultValue: 'clic droit : options' })}`}
                       className="flex flex-col items-center gap-0.5 py-1.5 rounded"
                       style={{
                         background: isActive ? `${m.color}20` : 'transparent',
@@ -2346,7 +2346,7 @@ export default function VertexEditorPage() {
   const [showShadows,   setShowShadows]   = useState(true)
   const [showStats,     setShowStats]     = useState(true)
   const [selectedIds,   setSelectedIds]   = useState<string[]>([])
-  // Brush-cursor position: a mutable ref consumed by the render loop — hover
+  // Brush-cursor position: a mutable ref consumed by the render loop - hover
   // pointermoves must NOT re-render the page (that alone caused visible lag).
   const cursorRef = useRef<CursorRef>({ point: new THREE.Vector3(), normal: new THREE.Vector3(0, 0, 1), has: false })
   const [focusSignal,   setFocusSignal]   = useState(0)
@@ -2377,7 +2377,7 @@ export default function VertexEditorPage() {
   // Snapshots are SHALLOW: scene mutations never write into existing objects
   // (every commit rebuilds the changed entry), so history can share references.
   // structuredClone here deep-copied megabytes of mesh data at EVERY stroke
-  // start — the single biggest sculpt hitch.
+  // start - the single biggest sculpt hitch.
   const record = useCallback(() => {
     past.current.push([...objectsRef.current])
     if (past.current.length > HIST_CAP) past.current.shift()
@@ -2419,7 +2419,7 @@ export default function VertexEditorPage() {
     setReady(true)
   }, [id, scene, isLoading])
 
-  // ── Editable title (standard WorkspaceShell) — synced from the scene ──────────
+  // ── Editable title (standard WorkspaceShell) - synced from the scene ──────────
   const [titleDraft, setTitleDraft] = useState('')
   useEffect(() => { if (scene?.title != null) setTitleDraft(scene.title) }, [scene?.title])
   const renameMut = useMutation({
@@ -2570,7 +2570,7 @@ export default function VertexEditorPage() {
   }, [record])
 
   // Property/transform edits (record an undo step first). Rapid successive edits
-  // of the same property (slider drags, typing) coalesce into one undo step —
+  // of the same property (slider drags, typing) coalesce into one undo step -
   // otherwise a single drag would flood the history with full-scene snapshots.
   const lastEditRef = useRef<{ key: string; at: number }>({ key: '', at: 0 })
   const updateObject = useCallback((tid: string | null, patch: Partial<SceneObject>) => {
@@ -2590,7 +2590,7 @@ export default function VertexEditorPage() {
     setObjects(prev => prev.map(o => ids.includes(o.id) ? { ...o, ...patch } : o))
   }, [record, targetIds])
 
-  // Transform gizmo commit — the snapshot was already taken on drag start.
+  // Transform gizmo commit - the snapshot was already taken on drag start.
   // A translation of the active object drags the rest of the selection along.
   const commitTransform = useCallback((tid: string, patch: Partial<SceneObject>) => {
     const all = objectsRef.current
@@ -2802,7 +2802,7 @@ export default function VertexEditorPage() {
     }
   }, [bakedSelection, replaceSelectionWith, t])
 
-  // Sculpt/paint stroke commit — snapshot already taken on pointer-down.
+  // Sculpt/paint stroke commit - snapshot already taken on pointer-down.
   // A dyntopo stroke changes the topology: the object bakes into a custom mesh.
   const commitMesh = useCallback((tid: string, mesh: MeshData, topologyChanged?: boolean) => {
     setObjects(prev => prev.map(o => o.id === tid
@@ -3033,7 +3033,7 @@ export default function VertexEditorPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [mode, undo, redo, duplicateObjects, deleteObjects, joinSelected, groupSelected, ungroupSelected, invertSelect, selectAll, selectNone, hideSelected, showAll, saveMut, activeBrushId, settingsFor, patchBrush])
 
-  // Autosave (debounced) — armed only once the scene has loaded.
+  // Autosave (debounced) - armed only once the scene has loaded.
   useDebouncedAutosave(objects, ready && !!id, (d) => saveMut.mutate({ objects: d }))
 
   // Live scene / selection statistics (cheap: cached per-primitive topology).
@@ -3500,7 +3500,7 @@ export default function VertexEditorPage() {
               : mode === 'object'
                 ? t('vertex_hud_select', { mode: transformMode, name: selectedObj ? ` · ${selectedObj.name}` : '' })
                   + (selectedIds.length > 1 ? ` (+${selectedIds.length - 1})` : '')
-                : `${t(MODE_LIST.find(m => m.id === mode)?.labelKey ?? '')}${selectedObj ? ' · ' + selectedObj.name : ` — ${t('vertex_select_object')}`}`}
+                : `${t(MODE_LIST.find(m => m.id === mode)?.labelKey ?? '')}${selectedObj ? ' · ' + selectedObj.name : ` - ${t('vertex_select_object')}`}`}
           </div>
 
           {showStats && (
@@ -3511,7 +3511,7 @@ export default function VertexEditorPage() {
               {' · '}{t('vertex_stat_tris',  { defaultValue: 'Triangles' })} {sceneStats.f.toLocaleString()}
               {selStats && (
                 <span style={{ color: C.accent }}>
-                  {'  —  '}{t('vertex_hud_selection', { defaultValue: 'Sélection' })} : {selectedIds.length} obj · {selStats.v.toLocaleString()} v · {selStats.f.toLocaleString()} t
+                  {'  -  '}{t('vertex_hud_selection', { defaultValue: 'Sélection' })} : {selectedIds.length} obj · {selStats.v.toLocaleString()} v · {selStats.f.toLocaleString()} t
                 </span>
               )}
             </div>

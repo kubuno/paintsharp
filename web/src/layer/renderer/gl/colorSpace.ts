@@ -1,16 +1,16 @@
-// Stage 1 (GPU abstraction) — colour space: sRGB transfer functions, the linear
+// Stage 1 (GPU abstraction) - colour space: sRGB transfer functions, the linear
 // premultiplied working space, and the real browser output-colour-space API.
 //
 // Working space, non negotiable (spec §4): LINEAR light, PREMULTIPLIED alpha,
 // RGBA16F. Compositing `a·x + (1-a)·y` on sRGB-encoded values is mathematically
-// wrong — the classic symptoms are mid-grey gradients that read too dark, dark
+// wrong - the classic symptoms are mid-grey gradients that read too dark, dark
 // haloes on antialiased edges, and downscales that darken.
 //
 // This mirrors GIMP's modern layer modes, which declare
 // `composite_space = GIMP_LAYER_COLOR_SPACE_RGB_LINEAR`
 // (app/operations/layer-modes/gimp-layer-modes.c); its *_LEGACY modes keep the
 // non-linear space only for backwards compatibility with old XCF files.
-// GIMP is GPLv3 — this is a reimplementation from the documented behaviour,
+// GIMP is GPLv3 - this is a reimplementation from the documented behaviour,
 // not a copy of its code.
 //
 // ⚠️ Correction to a widespread claim, verified on Chrome 150 (2026-07-27):
@@ -163,7 +163,7 @@ export interface OutputColorSpaceResult {
 /**
  * Configure the output colour space. P0 stays on sRGB; `wide` is the P1 hook.
  *
- * NOTE: there is no `colorSpace` WebGL context attribute — see the file header.
+ * NOTE: there is no `colorSpace` WebGL context attribute - see the file header.
  * The assignment is also read back, because an unsupported value is allowed to
  * be ignored rather than to throw.
  */

@@ -2,7 +2,7 @@
  * PSD/PSB channel compression dispatch (spec §3).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * GPLv3+ — `read_channel_data()` in psd-load.c — and from Adobe's public
+ * GPLv3+ - `read_channel_data()` in psd-load.c - and from Adobe's public
  * "Photoshop File Formats Specification". Independent TypeScript
  * re-implementation; no GIMP source was copied. Kubuno is AGPLv3.
  */

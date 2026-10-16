@@ -4,7 +4,7 @@
 // Spec 09 §7.3 lists `normal`, `add`, `subtract`, `multiply`, `screen`,
 // `darken` and `lighten` as hardware-blendable. That list is too generous, and
 // getting it wrong reintroduces exactly the class of error this rewrite exists
-// to fix — a composition that is "close enough" everywhere except over
+// to fix - a composition that is "close enough" everywhere except over
 // transparency. The derivations below are done in the premultiplied form
 //
 //     cr = (1 - as)*cb + (1 - ab)*cs + ab*as*B(Cb, Cs)          [PDF 1.7 §11.3.6]
@@ -15,7 +15,7 @@
 // its `cr` can be written in that shape.
 //
 //
-// EXACT — implemented
+// EXACT - implemented
 // -------------------
 // normal        B = Cs
 //               ab*as*Cs = ab*cs, so cr = (1-as)*cb + (1-ab)*cs + ab*cs
@@ -34,14 +34,14 @@
 //               => Fs = ONE_MINUS_DST_COLOR, Fd = ONE.
 //
 //
-// NOT EXACT — deliberately excluded
+// NOT EXACT - deliberately excluded
 // ---------------------------------
 // multiply      B = Cb*Cs, and ab*as*Cb*Cs = cb*cs, so
 //               cr = (1-as)*cb + (1-ab)*cs + cb*cs.
 //               The middle term needs Fs = (1 - dst.a) while the last needs
 //               Fs = dst.rgb; GL offers one source factor, not their sum. The
 //               usual `glBlendFunc(DST_COLOR, ONE_MINUS_SRC_ALPHA)` silently
-//               DROPS `(1-ab)*cs` — which is precisely the missing term that
+//               DROPS `(1-ab)*cs` - which is precisely the missing term that
 //               makes a Multiply layer render black over empty canvas. Using it
 //               would re-create the bug in fixed-function form.
 //
@@ -53,7 +53,7 @@
 // Everything else reads the backdrop non-linearly and needs the shader path.
 //
 // Net effect on real documents: `normal` is the overwhelming majority of layers
-// and it is exact, so the ping-pong disappears for them — which is where the
+// and it is exact, so the ping-pong disappears for them - which is where the
 // bandwidth saving of §7.3 actually comes from. The other four modes gain
 // nothing from being wrong.
 
@@ -87,7 +87,7 @@ export function hardwareBlendFor(gl: WebGL2RenderingContext, mode: BlendMode): B
   }
 }
 
-/** Plain premultiplied `source-over` — used by blits and group resolution. */
+/** Plain premultiplied `source-over` - used by blits and group resolution. */
 export function sourceOver(gl: WebGL2RenderingContext): BlendState {
   return {
     srcRGB: gl.ONE,

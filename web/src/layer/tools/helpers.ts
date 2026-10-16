@@ -125,7 +125,7 @@ export function formatShortcut(shortcut?: string): string {
 }
 
 /**
- * Next tool of a family, wrapping around — what `Shift`+the family letter does.
+ * Next tool of a family, wrapping around - what `Shift`+the family letter does.
  * Falls back to the family default when the current tool is not a member.
  */
 export function cycleNext(fam: FamilyId, cur: ToolId): ToolId {
@@ -225,7 +225,7 @@ export function railFamilies(available: number): RailFamily[] {
   return compactRail()
 }
 
-/** Tool count of the registry — asserted by the demo page and worth a sanity check. */
+/** Tool count of the registry - asserted by the demo page and worth a sanity check. */
 export const TOOL_COUNT = ALL_TOOL_IDS.length
 
 /** Family count of the registry. */

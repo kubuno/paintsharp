@@ -7,10 +7,10 @@
 //
 // THREE REACT TRAPS, NAMED, WITH THEIR COUNTERMEASURE
 // ---------------------------------------------------
-// 1. React #310 — a hook short-circuited by `&&`. This project has already hit
+// 1. React #310 - a hook short-circuited by `&&`. This project has already hit
 //    it (`useIsMobile() && useIsLandscape()` blowing up on resize). The
 //    structural countermeasure is that THE ENGINE HAS NO HOOKS AT ALL, and this
-//    adapter has exactly two — `useRef` and `useEffect` — both unconditional,
+//    adapter has exactly two - `useRef` and `useEffect` - both unconditional,
 //    both at the top level, neither with a derived dependency. There is no `&&`
 //    and no early `return` before a hook anywhere in this file, and there must
 //    never be an `eslint-disable` in this folder.
@@ -30,8 +30,8 @@
 // ---------------------------------------
 // It does not subscribe to `'frame'`. It does not call `setState` on anything
 // the engine emits during a gesture. Components that want to react to engine
-// output subscribe themselves, to `'tiles-settled'` or `'thumbnails'` — both of
-// which the engine rate-caps — and they do it deliberately, in their own file,
+// output subscribe themselves, to `'tiles-settled'` or `'thumbnails'` - both of
+// which the engine rate-caps - and they do it deliberately, in their own file,
 // where the cost is visible.
 
 import { useEffect, useRef } from 'react'
@@ -42,7 +42,7 @@ import type { RendererDeps, RendererOptions } from '../Renderer.ts'
 export interface UseRendererResult {
   /**
    * The engine, or null before the first effect runs / when WebGL2 is missing.
-   * Read it in event handlers and effects — NEVER during render, or the
+   * Read it in event handlers and effects - NEVER during render, or the
    * component becomes coupled to the engine's frame timing.
    */
   readonly current: Renderer | null
@@ -55,7 +55,7 @@ export interface UseRendererResult {
  * dependency array being empty on purpose: an engine that were re-created
  * whenever a parent re-rendered would drop every GPU allocation it owns, which
  * is exactly the failure mode this hook exists to prevent. Pass a stable object
- * (a module constant, or a `useRef`'d one) — changing its contents later is a
+ * (a module constant, or a `useRef`'d one) - changing its contents later is a
  * no-op by design.
  */
 export function useRenderer(
@@ -81,7 +81,7 @@ export function useRenderer(
       r?.dispose()
       ref.current = null
     }
-    // Empty ON PURPOSE — see the doc comment above.
+    // Empty ON PURPOSE - see the doc comment above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -93,7 +93,7 @@ export function useRenderer(
  *
  * Separate from `useRenderer` so that the decision to let engine output reach
  * React is always an explicit, greppable call site. The callback is kept in a
- * ref, so passing an inline arrow does not re-subscribe on every render — the
+ * ref, so passing an inline arrow does not re-subscribe on every render - the
  * mistake that makes an "innocent" subscription cost a listener churn per
  * frame.
  */

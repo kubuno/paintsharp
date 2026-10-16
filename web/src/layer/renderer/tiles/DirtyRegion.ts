@@ -16,7 +16,7 @@
 //     precision loss is bounded by CHUNK_SIZE (32px).
 //   - Memory is negligible: a 4000x4000 document is 125x125 chunks = 1.9 KiB.
 //
-// Everything here is pure arithmetic — no WebGL, no DOM, no React.
+// Everything here is pure arithmetic - no WebGL, no DOM, no React.
 
 import {
   CHUNK_SIZE,
@@ -183,7 +183,7 @@ export class DirtyRegion {
     this.bboxValid = true
   }
 
-  /** Clear exactly the chunks of one tile — the normal "tile rebuilt" path. */
+  /** Clear exactly the chunks of one tile - the normal "tile rebuilt" path. */
   clearTile(key: TileKey): void {
     this.clear(tileDocRect(key))
   }
@@ -218,7 +218,7 @@ export class DirtyRegion {
 
   /**
    * Chunk-aligned dirty rect inside `r`, in document pixels, or null when clean.
-   * This is what a tile rebuild scissors to — the whole point of the fine grid.
+   * This is what a tile rebuild scissors to - the whole point of the fine grid.
    */
   dirtyInRect(r: Rect | null): Rect | null {
     const c = this.chunkRange(r)
@@ -300,7 +300,7 @@ export class DirtyRegion {
    * Rows of set chunks are merged into horizontal runs, then vertically adjacent
    * runs with identical extents are merged into one rect. Without this, a long
    * diagonal stroke would produce one rect per chunk and the caller would issue
-   * hundreds of tiny scissored draws — the fragmentation this method exists to
+   * hundreds of tiny scissored draws - the fragmentation this method exists to
    * avoid.
    */
   dirtyRects(): Rect[] {

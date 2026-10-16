@@ -2,7 +2,7 @@
 // merge plan the rail applies when it runs out of height.
 //
 // Every icon below was checked against the `lucide-react` build actually installed
-// in this package (1.18.0) — a missing export is a build error, not a runtime one.
+// in this package (1.18.0) - a missing export is a build error, not a runtime one.
 import {
   ALargeSmall, Bandage, Baseline, Blend, Brush, Circle, CircleDashed, Contrast,
   CornerUpRight, Crop, Droplet, Droplets, Eraser, Eye, Feather,
@@ -70,13 +70,13 @@ const SHAPE_CONSTRAINT_CHOICES = [
   { value: 'center', labelKey: 'layer_topt_shape_constraint_center' },
 ]
 
-/** Brush / size / hardness only — the trio every "painterly" retouch tool shows. */
+/** Brush / size / hardness only - the trio every "painterly" retouch tool shows. */
 const BRUSH_TRIO_OMIT = [
   'blend', 'opacity', 'flow', 'smoothing', 'airbrush',
   'pressure-size', 'pressure-opacity', 'symmetry',
 ]
 
-/** Shape styling without the fill/stroke half — used by the anchor-point tools. */
+/** Shape styling without the fill/stroke half - used by the anchor-point tools. */
 const PATH_ONLY_OMIT = ['shape-output', 'fill', 'stroke', 'stroke-width', 'stroke-style', 'antialias']
 
 // Common option fragments reused verbatim by several tools.
@@ -322,7 +322,7 @@ export const TOOLS: Record<ToolId, ToolDef> = {
       { kind: 'action', id: 'select-mask', labelKey: 'layer_topt_select_mask', priority: 2, run: 'select-mask' },
     ],
   },
-  // Single row/column: no geometry, no feathering — a 1px band cannot be feathered.
+  // Single row/column: no geometry, no feathering - a 1px band cannot be feathered.
   'marquee-row': {
     id: 'marquee-row', family: 'marquee', nameKey: 'layer_tool_marquee_row', Icon: Minus,
     priority: 'P2', shortcut: 'shift+M', cursor: 'crosshair', blocks: ['selection'], omit: ['feather'],
@@ -1187,7 +1187,7 @@ export const FAMILY_MERGE_STAGES: [FamilyId, FamilyId][][] = [
 
 /**
  * Last resort on a very short rail: eight groups only. Not expressible as pairs
- * (it regroups differently), so it is spelled out — spec §3.7.
+ * (it regroups differently), so it is spelled out - spec §3.7.
  */
 export const COMPACT_RAIL_GROUPS: { keep: FamilyId; absorb: FamilyId[] }[] = [
   { keep: 'move', absorb: ['marquee', 'crop'] },
@@ -1200,7 +1200,7 @@ export const COMPACT_RAIL_GROUPS: { keep: FamilyId; absorb: FamilyId[] }[] = [
   { keep: 'navigate', absorb: ['zoom'] },
 ]
 
-/** Height (px) one rail button occupies, gap included — drives `railFamilies`. */
+/** Height (px) one rail button occupies, gap included - drives `railFamilies`. */
 export const RAIL_ITEM_PITCH = 36
 
 /** Room the rail reserves above/below the family buttons (separators, padding). */

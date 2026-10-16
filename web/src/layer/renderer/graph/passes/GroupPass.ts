@@ -1,10 +1,10 @@
-// Group isolation — open and resolve a nested accumulator.
+// Group isolation - open and resolve a nested accumulator.
 //
 // Isolation is the difference between "the children see what is under the
 // group" and "the children only see each other". Photoshop's default for a new
 // group is `pass-through` (they see through), but the moment the group gets a
 // blend mode, an opacity below 100 %, a mask or a style, it is FORCED into
-// isolation — otherwise the semantics are undefined (spec 08 §2.3).
+// isolation - otherwise the semantics are undefined (spec 08 §2.3).
 //
 // `compilePlan` makes that decision once, so this pass never has to:
 //
@@ -13,14 +13,14 @@
 //   * anything else emits `group-begin` / `group-end` around its children.
 //
 // `seed: 'backdrop'` implements the PDF non-isolated group whose contribution
-// is still scaled — children composite against a COPY of the backdrop, and the
+// is still scaled - children composite against a COPY of the backdrop, and the
 // resolution is a mix rather than an `over`. The compiler never emits it today
 // because Photoshop forces isolation instead; the pass exists because the model
 // allows it and getting it wrong later would be expensive.
 //
 // Knockout (`shallow` / `deep`) is carried in the plan but NOT executed. It is
 // a subtractive alpha operator against the parent group or the document, and
-// implementing it half-way would be worse than not implementing it — the plan
+// implementing it half-way would be worse than not implementing it - the plan
 // records it and `compilePlan` emits a diagnostic.
 
 import { BLEND_UMODE, COMPOSITE_OP_INT } from '../../../blend/index.ts'
@@ -75,7 +75,7 @@ export const groupEndPass: Pass<'group-end'> = {
       return
     }
 
-    // Isolated group: composite the result as if it were a single layer — same
+    // Isolated group: composite the result as if it were a single layer - same
     // shader, same three-term PDF formula, same coverage collapse. That is the
     // whole point of isolation: a group behaves exactly like a layer.
     const prog = ctx.device.program(

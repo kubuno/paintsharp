@@ -24,7 +24,7 @@ import type {
 } from '../types.ts'
 import { rectHeight, rectWidth } from '../types.ts'
 
-/** Pixels for one layer, at the LAYER's rectangle — never document-sized. */
+/** Pixels for one layer, at the LAYER's rectangle - never document-sized. */
 export interface PlacedPixels {
   readonly data: Uint8Array
   readonly x: number

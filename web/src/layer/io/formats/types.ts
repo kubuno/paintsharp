@@ -76,7 +76,7 @@ export interface RasterImage {
   readonly data: SampleArray
   /** RGB triplets (3 bytes per entry) for `indexed`, else undefined. */
   readonly palette?: Uint8Array
-  /** Spot colours, TIFF extra samples, extra EXR channels — carried, never guessed at. */
+  /** Spot colours, TIFF extra samples, extra EXR channels - carried, never guessed at. */
   readonly extra?: readonly ExtraChannel[]
   readonly colorSpace: ColorSpaceRef
   readonly metadata: ImageMetadata
@@ -97,7 +97,7 @@ export interface RasterPage {
   readonly index: number
 }
 
-/** Non-fatal problem, surfaced in the import report — never silently dropped (§7.1). */
+/** Non-fatal problem, surfaced in the import report - never silently dropped (§7.1). */
 export interface IoWarning {
   /** Stable machine code, e.g. `'tiff.unsupported-compression'`. */
   readonly code: string
@@ -158,7 +158,7 @@ export interface FastProbe {
 }
 
 // ---------------------------------------------------------------------------
-// Errors — a malformed file must always surface as one of these, never as a
+// Errors - a malformed file must always surface as one of these, never as a
 // crash, an infinite loop or a silent `undefined`.
 // ---------------------------------------------------------------------------
 

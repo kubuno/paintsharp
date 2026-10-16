@@ -159,7 +159,7 @@ pub async fn delete(
 #[derive(serde::Deserialize)]
 pub struct OpenByFileDto { pub file_id: uuid::Uuid }
 
-/// Ouvre l'entité liée à un fichier (.kb*) — utilisé par StartPage / « ouvrir avec ».
+/// Ouvre l'entité liée à un fichier (.kb*) - utilisé par StartPage / « ouvrir avec ».
 pub async fn open_by_file(
     State(state): State<AppState>,
     Extension(user): Extension<PaintsharpUser>,

@@ -5,7 +5,7 @@
 // chunk IS the image content of a STILL WebP. Re-wrap it in a minimal still
 // container, hand it to the platform, and composite the result ourselves using
 // the `B` / `D` flags we parsed. That works in any browser able to display a
-// WebP at all — which is the entire installed base — so no mandatory path of
+// WebP at all - which is the entire installed base - so no mandatory path of
 // this library depends on WebCodecs.
 //
 // `parseWebpContainer()` is pure TypeScript and needs no DOM: it is the

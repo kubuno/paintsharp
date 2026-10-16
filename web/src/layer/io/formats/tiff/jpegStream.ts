@@ -1,7 +1,7 @@
 // JPEG stream surgery, used by TIFF compression 7 and by the JPEG metadata writer.
 //
 // The key trick of spec 05 §4.4: a TIFF strip holds an *abbreviated* JPEG stream (no
-// quantisation/Huffman tables — those live in the `JPEGTables` tag). Splicing the two
+// quantisation/Huffman tables - those live in the `JPEGTables` tag). Splicing the two
 // back together yields a self-contained JPEG that the browser decodes natively, so this
 // layer never needs a DCT implementation.
 

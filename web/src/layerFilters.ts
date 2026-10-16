@@ -1,7 +1,7 @@
 // Photoshop-style filter library for the Layer editor.
 //
 // Every filter is a pure function (src RGBA Uint8Array, w, h) → new RGBA
-// Uint8Array — no WebGL, no DOM — so the editor can apply one to the active
+// Uint8Array - no WebGL, no DOM - so the editor can apply one to the active
 // layer's pixels, snapshot for undo, and upload the result. Filters are grouped
 // into Photoshop's menu families and surfaced one-click with sensible defaults.
 //
@@ -58,7 +58,7 @@ function sample(src: Uint8Array, w: number, h: number, x: number, y: number, out
   out[0] = src[i]; out[1] = src[i + 1]; out[2] = src[i + 2]; out[3] = src[i + 3]
 }
 
-// Bilinear sample (used by distort filters) — premultiplied so transparent
+// Bilinear sample (used by distort filters) - premultiplied so transparent
 // neighbours don't bleed colour.
 function sampleBilinear(src: Uint8Array, w: number, h: number, fx: number, fy: number, out: number[]) {
   const x0 = Math.floor(fx), y0 = Math.floor(fy)
@@ -636,7 +636,7 @@ const halftonePattern = (dot: number): FilterFn => (src, w, h) => {
   return out
 }
 
-// Offset (wrap) — Other family.
+// Offset (wrap) - Other family.
 const offset = (dx: number, dy: number): FilterFn => (src, w, h) => {
   const out = new Uint8Array(src.length)
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {

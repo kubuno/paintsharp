@@ -1,4 +1,4 @@
-// Mask resolution — fold pixel mask x vector mask x densities into ONE coverage
+// Mask resolution - fold pixel mask x vector mask x densities into ONE coverage
 // texture.
 //
 // A layer with a single mask never needs this pass: the coverage folds into the
@@ -8,8 +8,8 @@
 // reused by the layer's styles.
 //
 // Semantics implemented (spec 08 §3.1):
-//   inverted — sampled inversion, the stored pixels are never rewritten;
-//   density  — `m' = 1 - (1 - m)*density`. Density attenuates how much a mask
+//   inverted - sampled inversion, the stored pixels are never rewritten;
+//   density  - `m' = 1 - (1 - m)*density`. Density attenuates how much a mask
 //              can HIDE, never how much it reveals, so density 0 disables the
 //              mask instead of blanking the layer;
 //   the two masks MULTIPLY (intersection), which is Photoshop's rule.

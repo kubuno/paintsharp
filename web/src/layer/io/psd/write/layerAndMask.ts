@@ -3,8 +3,8 @@
  *
  * The placeholder/patch mechanics and the group-marker layout were derived from
  * the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall, licensed under
- * the GNU General Public License v3 or later — `save_layer_and_mask()` in
- * psd-export.c — and from Adobe's public "Photoshop File Formats
+ * the GNU General Public License v3 or later - `save_layer_and_mask()` in
+ * psd-export.c - and from Adobe's public "Photoshop File Formats
  * Specification".
  *
  * This is an independent TypeScript re-implementation; no GIMP source code was
@@ -234,7 +234,7 @@ function writeRecord(
         ? SECTION_TYPE.DIVIDER
         : SECTION_TYPE.NORMAL
 
-  // ⚠️ Rectangle order is top, left, bottom, right — not left, top.
+  // ⚠️ Rectangle order is top, left, bottom, right - not left, top.
   w.i32(rect.top)
   w.i32(rect.left)
   w.i32(rect.bottom)
@@ -303,7 +303,7 @@ function writeAdditionalBlocks(
   blendKey: string,
   nextLayerId: () => number,
 ): void {
-  // luni — the authoritative name, capped at 255 UTF-16 units like Photoshop.
+  // luni - the authoritative name, capped at 255 UTF-16 units like Photoshop.
   const uni = name.slice(0, 255)
   block(w, 'luni', () => {
     w.u32(uni.length)

@@ -1,11 +1,11 @@
-// Stage 2 of the Layer render pipeline — tiling, invalidation, LOD, scheduling.
+// Stage 2 of the Layer render pipeline - tiling, invalidation, LOD, scheduling.
 //
 //   GLDevice (stage 4)  ->  TileCache / Scheduler / DirtyRegion (this stage)
 //                       ->  CompositeGraph (stage 3)  ->  Renderer (stage 1)
 //
 // Nothing in this folder imports React, the DOM or WebGL. The only GPU contact
 // is through `GLDeviceLike`, a four-method interface that the real `GLDevice`
-// satisfies structurally — which is what let this stage be written and tested
+// satisfies structurally - which is what let this stage be written and tested
 // in parallel with stage 4.
 
 export * from './geometry'

@@ -1,4 +1,4 @@
-// Stage 1 (GPU abstraction) — capability detection and format fallback.
+// Stage 1 (GPU abstraction) - capability detection and format fallback.
 //
 // Nothing here is assumed: every capability is probed against the live context,
 // and every candidate render-target format is validated by actually attaching a
@@ -36,7 +36,7 @@ export interface TextureFormatInfo {
   readonly format: GLenum
   /** Default GL client type for uploads. */
   readonly type: GLenum
-  /** Bytes of VRAM per texel — the basis of all memory accounting. */
+  /** Bytes of VRAM per texel - the basis of all memory accounting. */
   readonly bytesPerTexel: number
   /** Number of colour channels stored. */
   readonly channels: 1 | 4
@@ -56,7 +56,7 @@ export function textureFormatInfo(
     case 'rgba8':
       return { internalFormat: gl.RGBA8, format: gl.RGBA, type: gl.UNSIGNED_BYTE, bytesPerTexel: 4, channels: 4, float: false }
     case 'srgb8_alpha8':
-      // sRGB decode happens in the texture unit for free — §4.3 of the spec allows
+      // sRGB decode happens in the texture unit for free - §4.3 of the spec allows
       // this for 8-bit SOURCE textures only, never for the working space.
       return { internalFormat: gl.SRGB8_ALPHA8, format: gl.RGBA, type: gl.UNSIGNED_BYTE, bytesPerTexel: 4, channels: 4, float: false }
     case 'rgba16f':
@@ -76,30 +76,30 @@ export function workingTextureFormat(w: WorkingFormat): TextureFormat {
 }
 
 export interface GLCaps {
-  /** EXT_color_buffer_float — RGBA32F (and RGBA16F) usable as a render target. */
+  /** EXT_color_buffer_float - RGBA32F (and RGBA16F) usable as a render target. */
   readonly colorBufferFloat: boolean
-  /** EXT_color_buffer_half_float — RGBA16F usable as a render target. */
+  /** EXT_color_buffer_half_float - RGBA16F usable as a render target. */
   readonly colorBufferHalfFloat: boolean
-  /** OES_texture_float_linear — LINEAR filtering on 32-bit float textures. */
+  /** OES_texture_float_linear - LINEAR filtering on 32-bit float textures. */
   readonly textureFloatLinear: boolean
   /**
    * RGBA16F is filterable in core WebGL2, so this is always true; kept explicit
    * so callers never have to remember the asymmetry with 32F.
    */
   readonly textureHalfFloatLinear: boolean
-  /** EXT_float_blend — hardware blending into a floating-point render target. */
+  /** EXT_float_blend - hardware blending into a floating-point render target. */
   readonly floatBlend: boolean
   /**
-   * EXT_texture_norm16 — normalised integer RGBA16. ABSENT on this machine, and
+   * EXT_texture_norm16 - normalised integer RGBA16. ABSENT on this machine, and
    * not needed: half-float has ~10 bits of mantissa per octave, which beats a
    * linear 16-bit integer in the shadows.
    */
   readonly textureNorm16: boolean
   /** 0 when unsupported, otherwise MAX_TEXTURE_MAX_ANISOTROPY_EXT. */
   readonly anisotropy: number
-  /** KHR_parallel_shader_compile — lets link status be polled instead of blocked on. */
+  /** KHR_parallel_shader_compile - lets link status be polled instead of blocked on. */
   readonly parallelShaderCompile: boolean
-  /** WEBGL_lose_context — only used by tests and by dispose(). */
+  /** WEBGL_lose_context - only used by tests and by dispose(). */
   readonly loseContext: boolean
   readonly maxTextureSize: number
   readonly maxRenderbufferSize: number
@@ -109,7 +109,7 @@ export interface GLCaps {
   /** Unmasked strings when WEBGL_debug_renderer_info is available. */
   readonly renderer: string
   readonly vendor: string
-  /** Chosen after real FBO probing — never assumed. */
+  /** Chosen after real FBO probing - never assumed. */
   readonly working: WorkingFormat
   /**
    * true when the working format is the RGBA8 fallback: stored values are LINEAR
@@ -176,7 +176,7 @@ export function probeRenderable(gl: WebGL2RenderingContext, fmt: TextureFormat):
 
 /**
  * Probe order: RGBA16F → RGBA32F → RGBA8, biased by the requested depth.
- * RGBA8 is the last resort and stays LINEAR (dithered on store), never sRGB —
+ * RGBA8 is the last resort and stays LINEAR (dithered on store), never sRGB -
  * switching the fallback to sRGB storage would force conversions inside the
  * compositing loop, which §4.2 of the spec forbids.
  */
@@ -258,7 +258,7 @@ export function detectCapabilities(
   }
 }
 
-/** One-line human summary — used by the diagnostics panel and by CI logs. */
+/** One-line human summary - used by the diagnostics panel and by CI logs. */
 export function describeCaps(caps: GLCaps): string {
   const exts = [
     caps.colorBufferFloat && 'color_buffer_float',

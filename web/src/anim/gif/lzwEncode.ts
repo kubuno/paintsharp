@@ -10,7 +10,7 @@ const HSIZE = 5003
 
 /**
  * @param indices     one byte per pixel, values < 2**minCodeSize
- * @param minCodeSize 2..8 (2 even for a two-colour image — the format demands it)
+ * @param minCodeSize 2..8 (2 even for a two-colour image - the format demands it)
  * @returns the raw LZW byte stream, WITHOUT the sub-block framing
  */
 export function lzwEncode(indices: Uint8Array, minCodeSize: number): Uint8Array {
@@ -94,7 +94,7 @@ export function lzwEncode(indices: Uint8Array, minCodeSize: number): Uint8Array 
       if (next > 1 << codeSize && codeSize < 12) codeSize++
     } else {
       // Table full: emit a clear code and start over. Emitting it BEFORE the
-      // code size resets matters — the decoder reads it at the current width.
+      // code size resets matters - the decoder reads it at the current width.
       output(clearCode)
       codeSize = mcs + 1
       resetTable()

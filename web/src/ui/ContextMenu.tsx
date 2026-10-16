@@ -1,5 +1,5 @@
 // Paintsharp primitive: right-click floating context menu, shared by every editor.
-// Délègue désormais au MenuDropdown du core (thème sombre) — plus de div maison.
+// Délègue désormais au MenuDropdown du core (thème sombre) - plus de div maison.
 // Usage (inchangé) :
 //   const ctx = useContextMenu()
 //   <div onContextMenu={e => ctx.open(e, [{ label:'Dupliquer', onClick:dup }, 'sep', ...])}>…</div>

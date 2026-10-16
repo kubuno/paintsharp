@@ -159,7 +159,7 @@ export function isSrgbProfile(p: IccProfile): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// JPEG APP2 chunking — an ICC profile larger than 65 533 bytes must be split across
+// JPEG APP2 chunking - an ICC profile larger than 65 533 bytes must be split across
 // several APP2 segments, each prefixed by `ICC_PROFILE\0` + 1-based index + total.
 // ---------------------------------------------------------------------------
 

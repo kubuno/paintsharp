@@ -2,7 +2,7 @@
 //
 // This directory is a LIBRARY: no React, no `@kubuno/*`, no UI, and no import
 // from any sibling sub-module's private folder. Layer, Keyframe and Motion all
-// consume it as equals — which is why it lives at `src/anim/` and not under one
+// consume it as equals - which is why it lives at `src/anim/` and not under one
 // of them. It is testable without a DOM and runs unchanged in a Web Worker;
 // the two places that genuinely need the platform (WebP still encoding and
 // decoding) take an injectable backend.

@@ -17,7 +17,7 @@
  * ⚠️ `readPsd` / `writePsd` are ASYNCHRONOUS, on purpose and unavoidably:
  * `DecompressionStream` / `CompressionStream` are the only zlib available in a
  * browser and they are stream-based. `readPsdStructure()` is the synchronous
- * complement — it parses everything except the pixels.
+ * complement - it parses everything except the pixels.
  */
 
 export { readPsd, readPsdStructure } from './read/readPsd.ts'

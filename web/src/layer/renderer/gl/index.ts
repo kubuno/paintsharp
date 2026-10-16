@@ -1,4 +1,4 @@
-// Stage 1 (GPU abstraction) — public surface of the new Layer render engine's
+// Stage 1 (GPU abstraction) - public surface of the new Layer render engine's
 // GL floor. This is the ONLY module upper stages import from; everything they
 // need to drive the GPU is re-exported here.
 //
@@ -10,7 +10,7 @@
 // exception for `src/layer/renderer/gl/**`.
 //
 // This engine lives ALONGSIDE the current one (layer/renderer/{shaders,glUtils}.ts,
-// LayerEditorPage) — the switchover is a separate, later step.
+// LayerEditorPage) - the switchover is a separate, later step.
 
 export {
   BLEND_ADD,

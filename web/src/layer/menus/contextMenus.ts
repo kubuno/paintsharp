@@ -1,7 +1,7 @@
 // The 18 right-click targets of the Layer editor, as pure data (spec §11).
 //
 // Same rules as `menuDefs.ts`: entries name command ids only. Context entries
-// deliberately REUSE the menu-bar command ids and i18n keys — a right-click
+// deliberately REUSE the menu-bar command ids and i18n keys - a right-click
 // entry must never be a second, drifting copy of the same action.
 //
 // Shared layout convention (spec §11, "Principes communs"):
@@ -138,7 +138,7 @@ const CANVAS_NAVIGATE: MenuSpec[] = [
   { cmd: 'view.rotate.reset', key: 'layer_rotate_reset', fr: "Réinitialiser la rotation de l'affichage", sc: 'Maj+R', when: 'viewRotated', p: 'P1' },
 ]
 
-/** §11.13 — right-click inside the marching ants, whatever the active tool. */
+/** §11.13 - right-click inside the marching ants, whatever the active tool. */
 const CANVAS_MARQUEE: MenuSpec[] = [
   { cmd: 'select.none',         key: 'layer_deselect',                 fr: 'Désélectionner', sc: 'Ctrl+D',     p: 'P0' },
   { cmd: 'select.invert',       key: 'layer_select_invert',            fr: 'Intervertir',    sc: 'Ctrl+Maj+I', p: 'P0' },
@@ -153,7 +153,7 @@ const CANVAS_MARQUEE: MenuSpec[] = [
 
 /* -------------------------------------------------- layers panel targets --- */
 
-/** §11.9 — layer row. Replaces today's flat ~16-entry menu. */
+/** §11.9 - layer row. Replaces today's flat ~16-entry menu. */
 const LAYERS_ROW: MenuSpec[] = [
   { cmd: 'layer.duplicate', key: 'layer_duplicate', fr: 'Dupliquer le calque…', sc: 'Ctrl+Alt+J', p: 'P0' },
   { cmd: 'layer.rename',    key: 'layer_rename',    fr: 'Renommer…',            sc: 'F2',         p: 'P0' },
@@ -184,7 +184,7 @@ const LAYERS_ROW: MenuSpec[] = [
   { cmd: 'layer.delete', key: 'layer_delete', fr: 'Supprimer le calque', danger: true, when: 'nLeaves > 1', p: 'P0' },
 ]
 
-/** §11.10 — group row: the layer-row menu minus the entries that mean nothing on
+/** §11.10 - group row: the layer-row menu minus the entries that mean nothing on
  *  a group, plus the group-specific ones. */
 const LAYERS_GROUP: MenuSpec[] = [
   { cmd: 'layer.duplicate', key: 'layer_duplicate', fr: 'Dupliquer le groupe…', sc: 'Ctrl+Alt+J', p: 'P0' },
@@ -210,7 +210,7 @@ const LAYERS_GROUP: MenuSpec[] = [
   { cmd: 'layer.delete', key: 'layer_delete', fr: 'Supprimer le groupe', danger: true, when: 'nLeaves > 1', p: 'P0' },
 ]
 
-/** §11.11 — the thumbnail talks about the CONTENT, not about the layer. */
+/** §11.11 - the thumbnail talks about the CONTENT, not about the layer. */
 const LAYERS_THUMBNAIL: MenuSpec[] = [
   { cmd: 'select.from_alpha', key: 'layer_select_from_alpha', fr: 'Sélectionner les pixels du calque', when: '!L.group', p: 'P0' },
   SEP,
@@ -218,7 +218,7 @@ const LAYERS_THUMBNAIL: MenuSpec[] = [
   { sub: 'layers.thumb_content', key: 'layer_menu_thumb_content', fr: 'Contenu de la vignette', provider: MENU_PROVIDERS.thumbContent, p: 'P2' },
 ]
 
-/** §11.12 — mask thumbnail. */
+/** §11.12 - mask thumbnail. */
 const LAYERS_MASK: MenuSpec[] = [
   { cmd: 'layer.mask.edit',   key: 'layer_mask_edit',              fr: 'Modifier le masque',  sc: '\\', check: true, p: 'P0' },
   { cmd: 'layer.mask.enable', key: 'layer_menu_layer_mask_enable', fr: 'Activer le masque',   check: true, p: 'P1' },
@@ -293,23 +293,23 @@ const SWATCH: MenuSpec[] = [
 /* -------------------------------------------------------------- registry -- */
 
 export const LAYER_CONTEXT_MENUS: Record<LayerContextTarget, ContextMenuSpec> = {
-  'canvas.move':       { id: 'canvas.move',       about: '§11.1 canvas — selection / move tool',   items: CANVAS_MOVE },
-  'canvas.selection':  { id: 'canvas.selection',  about: '§11.2 canvas — geometric selection',     items: CANVAS_SELECTION },
-  'canvas.paint':      { id: 'canvas.paint',      about: '§11.3 canvas — brush / eraser / bucket', items: CANVAS_PAINT },
-  'canvas.eyedropper': { id: 'canvas.eyedropper', about: '§11.4 canvas — eyedropper',              items: CANVAS_EYEDROPPER },
-  'canvas.crop':       { id: 'canvas.crop',       about: '§11.5 canvas — crop',                    items: CANVAS_CROP },
-  'canvas.text':       { id: 'canvas.text',       about: '§11.6 canvas — text',                    items: CANVAS_TEXT },
-  'canvas.transform':  { id: 'canvas.transform',  about: '§11.7 canvas — transform',               items: CANVAS_TRANSFORM },
-  'canvas.navigate':   { id: 'canvas.navigate',   about: '§11.8 canvas — zoom / hand',             items: CANVAS_NAVIGATE },
-  'layers.row':        { id: 'layers.row',        about: '§11.9 layers panel — layer row',         items: LAYERS_ROW },
-  'layers.group':      { id: 'layers.group',      about: '§11.10 layers panel — group row',        items: LAYERS_GROUP },
-  'layers.thumbnail':  { id: 'layers.thumbnail',  about: '§11.11 layers panel — layer thumbnail',  items: LAYERS_THUMBNAIL },
-  'layers.mask':       { id: 'layers.mask',       about: '§11.12 layers panel — mask thumbnail',   when: 'L.mask', items: LAYERS_MASK },
-  'canvas.marquee':    { id: 'canvas.marquee',    about: '§11.13 canvas — inside the active selection', when: 'sel', items: CANVAS_MARQUEE },
+  'canvas.move':       { id: 'canvas.move',       about: '§11.1 canvas - selection / move tool',   items: CANVAS_MOVE },
+  'canvas.selection':  { id: 'canvas.selection',  about: '§11.2 canvas - geometric selection',     items: CANVAS_SELECTION },
+  'canvas.paint':      { id: 'canvas.paint',      about: '§11.3 canvas - brush / eraser / bucket', items: CANVAS_PAINT },
+  'canvas.eyedropper': { id: 'canvas.eyedropper', about: '§11.4 canvas - eyedropper',              items: CANVAS_EYEDROPPER },
+  'canvas.crop':       { id: 'canvas.crop',       about: '§11.5 canvas - crop',                    items: CANVAS_CROP },
+  'canvas.text':       { id: 'canvas.text',       about: '§11.6 canvas - text',                    items: CANVAS_TEXT },
+  'canvas.transform':  { id: 'canvas.transform',  about: '§11.7 canvas - transform',               items: CANVAS_TRANSFORM },
+  'canvas.navigate':   { id: 'canvas.navigate',   about: '§11.8 canvas - zoom / hand',             items: CANVAS_NAVIGATE },
+  'layers.row':        { id: 'layers.row',        about: '§11.9 layers panel - layer row',         items: LAYERS_ROW },
+  'layers.group':      { id: 'layers.group',      about: '§11.10 layers panel - group row',        items: LAYERS_GROUP },
+  'layers.thumbnail':  { id: 'layers.thumbnail',  about: '§11.11 layers panel - layer thumbnail',  items: LAYERS_THUMBNAIL },
+  'layers.mask':       { id: 'layers.mask',       about: '§11.12 layers panel - mask thumbnail',   when: 'L.mask', items: LAYERS_MASK },
+  'canvas.marquee':    { id: 'canvas.marquee',    about: '§11.13 canvas - inside the active selection', when: 'sel', items: CANVAS_MARQUEE },
   'ruler':             { id: 'ruler',             about: '§11.14 ruler',                           items: RULER },
   'guide':             { id: 'guide',             about: '§11.15 guide',                           items: GUIDE },
   'document.tab':      { id: 'document.tab',      about: '§11.16 document tab',                    items: DOCUMENT_TAB },
-  'brush.preset':      { id: 'brush.preset',      about: '§11.17 brush palette — preset tile',     items: BRUSH_PRESET },
+  'brush.preset':      { id: 'brush.preset',      about: '§11.17 brush palette - preset tile',     items: BRUSH_PRESET },
   'swatch':            { id: 'swatch',            about: '§11.18 swatches / colour history',       items: SWATCH },
 }
 

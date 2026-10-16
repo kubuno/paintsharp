@@ -1,4 +1,4 @@
-// Stage 1 (GPU abstraction) — render target + reusable framebuffer pool.
+// Stage 1 (GPU abstraction) - render target + reusable framebuffer pool.
 //
 // The current engine creates and deletes a framebuffer around EVERY readback
 // (readTex l.1199, readTexRect l.1227): one object creation, one destruction and
@@ -18,7 +18,7 @@ export interface FramebufferOptions {
   readonly label?: string
   /**
    * Attach an existing texture instead of allocating one. The framebuffer then
-   * does NOT own it and will not dispose it — used to render into layer tiles.
+   * does NOT own it and will not dispose it - used to render into layer tiles.
    */
   readonly color?: GLTexture
 }
@@ -45,7 +45,7 @@ export class GLFramebuffer implements GLResource {
   private readonly ownsColor: boolean
 
   /**
-   * Not called directly — go through `GLDevice.createFramebuffer`.
+   * Not called directly - go through `GLDevice.createFramebuffer`.
    * @internal
    */
   constructor(
@@ -160,7 +160,7 @@ export class FramebufferPool {
   private readonly free = new Map<string, GLFramebuffer[]>()
   private readonly busy = new Set<GLFramebuffer>()
 
-  /** @internal — constructed by GLDevice. */
+  /** @internal - constructed by GLDevice. */
   constructor(private readonly make: (o: FramebufferOptions) => GLFramebuffer) {}
 
   acquire(width: number, height: number, format: TextureFormat, label = 'pool'): GLFramebuffer {
@@ -181,7 +181,7 @@ export class FramebufferPool {
     else this.free.set(key, [fb])
   }
 
-  /** Number of framebuffers held, split by state — for the diagnostics panel. */
+  /** Number of framebuffers held, split by state - for the diagnostics panel. */
   stats(): { free: number; busy: number; bytes: number } {
     let free = 0
     let bytes = 0

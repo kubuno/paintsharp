@@ -2,7 +2,7 @@
  * PSD/PSB Image Resources writer (spec §8.8).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * GPLv3+ — `save_resources()` in psd-export.c — and from Adobe's public
+ * GPLv3+ - `save_resources()` in psd-export.c - and from Adobe's public
  * "Photoshop File Formats Specification". Independent TypeScript
  * re-implementation; no GIMP source was copied. Kubuno is AGPLv3.
  */

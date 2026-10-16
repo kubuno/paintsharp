@@ -2,10 +2,10 @@
  * Additional-layer-information blocks: the structural / property keys (spec §5.2).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * licensed under the GNU General Public License v3 or later —
+ * licensed under the GNU General Public License v3 or later -
  * `load_layer_resource()` and the matching `load_resource_*()` helpers in
  * psd-layer-res-load.c, plus `psd_to_gimp_layer_color_tag()` /
- * `gimp_to_psd_layer_color_tag()` in psd-util.c for the `lclr` mapping — and
+ * `gimp_to_psd_layer_color_tag()` in psd-util.c for the `lclr` mapping - and
  * from Adobe's public "Photoshop File Formats Specification".
  *
  * This is an independent TypeScript re-implementation; no GIMP source code was
@@ -48,7 +48,7 @@ export interface ParsedBlocks {
   sectionType?: number
   /** Blend key stored inside `lsct` (usually `pass` for folders). */
   sectionBlendMode?: string
-  /** `luni` — authoritative layer name. */
+  /** `luni` - authoritative layer name. */
   unicodeName?: string
   /** `lyid`. */
   layerId?: number

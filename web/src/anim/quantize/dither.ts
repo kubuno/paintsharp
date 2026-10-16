@@ -1,5 +1,5 @@
 // Dithering. Three modes, and the default depends on whether we are writing an
-// animation or a still image — which is not a matter of taste.
+// animation or a still image - which is not a matter of taste.
 //
 // Floyd-Steinberg diffuses the quantisation error to neighbours that have not
 // been processed yet, so a pixel's final value depends on ITS NEIGHBOURS.
@@ -10,11 +10,11 @@
 //   1. The minimal difference rectangle explodes and ends up covering nearly the
 //      whole image, cancelling the most profitable optimisation of the pipeline
 //      (up to a factor 5 on file size).
-//   2. On playback the dither noise crawls from frame to frame — a temporal
+//   2. On playback the dither noise crawls from frame to frame - a temporal
 //      artefact far more visible than the banding it was meant to remove.
 //
 // Bayer thresholds on POSITION only, `(x & 7, y & 7)` in ABSOLUTE canvas
-// coordinates (note: absolute, not rectangle-relative — otherwise a moving
+// coordinates (note: absolute, not rectangle-relative - otherwise a moving
 // difference rectangle would shift the pattern and reintroduce the crawl). Same
 // colour at the same position always gives the same index, so the inter-frame
 // diff stays clean.

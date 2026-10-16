@@ -2,7 +2,7 @@
 name        = "kubuno-paintsharp"
 version     = "0.1.8"
 edition     = "2021"
-description = "Kubuno PaintSharp — module d'édition 3D"
+description = "Kubuno PaintSharp - module d'édition 3D"
 license     = "AGPL-3.0"
 repository  = "https://github.com/kubuno/paintsharp"
 
@@ -44,7 +44,7 @@ clap               = { workspace = true }
 hex                = { workspace = true }
 tokio-util         = { workspace = true }
 lopdf              = "0.42"
-# Raster → vector tracing (visioncortex engine — the VTracer pipeline is
+# Raster → vector tracing (visioncortex engine - the VTracer pipeline is
 # vendored in services/vtrace.rs to avoid the vtracer crate's clap2/image0.23)
 visioncortex       = "0.8"
 fastrand           = "2"

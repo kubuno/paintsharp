@@ -1,4 +1,4 @@
-// FontEditor — the PaintSharp type-design sub-editor (FontForge/Glyphr-style):
+// FontEditor - the PaintSharp type-design sub-editor (FontForge/Glyphr-style):
 // a glyph overview grid, a Bézier glyph editor with vertical metrics and
 // draggable advance width, kerning pairs, a live text preview and OTF export.
 // Same UI/UX shell as Apex: EditorShell + DockArea + tool rail + options bar.
@@ -496,7 +496,7 @@ export default function FontEditorPage() {
   const [showGrid, setShowGrid] = useState(false)
   const [snapOn, setSnapOn] = useState(true)
   const [exportNote, setExportNote] = useState<string | null>(null)
-  // Guide (metric line / advance line) hovered or being dragged — drives the
+  // Guide (metric line / advance line) hovered or being dragged - drives the
   // highlight and the resize cursor.
   const [hotGuide, setHotGuide] = useState<MetricKey | 'advance' | null>(null)
 
@@ -1102,7 +1102,7 @@ export default function FontEditorPage() {
       return
     }
 
-    // Vertical metric guides — only where they are not covered by the outline,
+    // Vertical metric guides - only where they are not covered by the outline,
     // so clicking a contour that crosses a guide still selects the contour.
     const mkey = hitMetric(sy)
     if (mkey && !hitPoint(sx, sy) && !hitHandle(sx, sy) && hitContour(sx, sy) == null) {
@@ -1295,7 +1295,7 @@ export default function FontEditorPage() {
       case 'move-points':
       case 'move-contours':
       case 'handle': {
-        // Live edits already applied — record the pre-drag state for undo.
+        // Live edits already applied - record the pre-drag state for undo.
         if (fontRef.current && JSON.stringify(fontRef.current) !== d.origJson) pushHistory(d.origJson)
         break
       }
@@ -1442,7 +1442,7 @@ export default function FontEditorPage() {
             { label: t('font_ctx_advance_em'), onClick: () => commit(ff => { ensureGlyph(ff, cp).advance = ff.unitsPerEm }) },
           ]
         : [
-            { label: `${t(METRIC_LABELS[mkey!])} — ${Math.round(f[mkey!])}`, onClick: () => {}, disabled: true },
+            { label: `${t(METRIC_LABELS[mkey!])} - ${Math.round(f[mkey!])}`, onClick: () => {}, disabled: true },
             'sep',
             { label: t('font_ctx_metric_reset'), onClick: () => commit(ff => {
                 const u = ff.unitsPerEm || 1000
@@ -1642,7 +1642,7 @@ export default function FontEditorPage() {
         }
       }
 
-      // Vertical metrics — every named guide is draggable, so the hovered/dragged
+      // Vertical metrics - every named guide is draggable, so the hovered/dragged
       // one is highlighted and gets a grab knob on the right edge.
       const metricLines: [MetricKey | null, number, string, string][] = [
         ['ascender',  font.ascender,  t('font_ascender'),  'rgba(90,155,220,0.55)'],
@@ -1841,7 +1841,7 @@ export default function FontEditorPage() {
   const importInputRef = useRef<HTMLInputElement>(null)
   const [pendingImport, setPendingImport] = useState<FontData | null>(null)
 
-  // Replaces the whole document with the imported font — undoable (Ctrl+Z).
+  // Replaces the whole document with the imported font - undoable (Ctrl+Z).
   const applyImport = useCallback((imported: FontData) => {
     setFont(prev => {
       if (prev) pushHistory(JSON.stringify(prev))

@@ -1,4 +1,4 @@
-// Octree quantiser (Gervautz-Purgathofer 1988) — the "fast" preset.
+// Octree quantiser (Gervautz-Purgathofer 1988) - the "fast" preset.
 //
 // Kept alongside median cut because it has properties median cut does not:
 // bounded memory by construction and incremental insertion, which suits very

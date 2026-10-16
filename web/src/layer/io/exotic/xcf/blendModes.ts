@@ -6,7 +6,7 @@
 // TypeScript for Kubuno (AGPL-3.0-or-later).
 //
 // Layer's own vocabulary lives in `layer/blend/modes.ts` (28 entries) and its reference
-// maths in `layer/blend/formulas.ts` — themselves reimplemented from the same GIMP
+// maths in `layer/blend/formulas.ts` - themselves reimplemented from the same GIMP
 // sources. Most GIMP modes therefore map one-to-one; the ones that do not are flagged
 // `approximated`, which the importer aggregates into a single warning.
 
@@ -97,7 +97,7 @@ const MODES: readonly ModeMapping[] = [
   /* 52 */ exact('exclusion', 'EXCLUSION'),
   /* 53 */ exact('linear-burn', 'LINEAR_BURN'),
   // GIMP's luma variants pick the whole pixel by luminance, which is what Photoshop's
-  // darker/lighter colour does — but on BT.709 linear luma rather than BT.601 encoded.
+  // darker/lighter colour does - but on BT.709 linear luma rather than BT.601 encoded.
   /* 54 */ approx('darker-color', 'LUMA_DARKEN_ONLY'),
   /* 55 */ approx('lighter-color', 'LUMA_LIGHTEN_ONLY'),
   /* 56 */ approx('luminosity', 'LUMINANCE'),

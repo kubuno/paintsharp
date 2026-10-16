@@ -1,4 +1,4 @@
-// GIF LZW decoder — variable-width, LSB-first codes, 4096-entry table.
+// GIF LZW decoder - variable-width, LSB-first codes, 4096-entry table.
 //
 // Algorithm reimplemented in TypeScript from GIMP's
 // plug-ins/common/file-gif-load.c (GPL-3.0-or-later), itself derived from the

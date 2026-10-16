@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// LZW, the TIFF variant (compression 5) — NOT the GIF variant.
+// LZW, the TIFF variant (compression 5) - NOT the GIF variant.
 //
 // Five traps sink naive implementations (spec 05 §4.4):
 //   1. Bits are packed MSB-first (GIF is LSB-first).
@@ -143,7 +143,7 @@ function firstByte(prefix: Int32Array, suffix: Uint8Array, code: number): number
 
 /**
  * Decompresses one strip/tile. `maxOut` is the exact expected size (rows × bytes/row),
- * which is what bounds the allocation — the compressed data never dictates it.
+ * which is what bounds the allocation - the compressed data never dictates it.
  *
  * When the stream turns incoherent under Adobe's early-change rule and produced less
  * than 90 % of the expected bytes, it is retried without early change and the longer
@@ -159,7 +159,7 @@ export function lzwDecode(src: Uint8Array, maxOut: number): Uint8Array {
 }
 
 // ---------------------------------------------------------------------------
-// Encoder — same variant (MSB-first, early change), emitting a ClearCode whenever the
+// Encoder - same variant (MSB-first, early change), emitting a ClearCode whenever the
 // dictionary fills up. Deflate compresses better and costs nothing, so LZW output exists
 // only for compatibility with older software (spec 05 §4.4).
 // ---------------------------------------------------------------------------
@@ -212,7 +212,7 @@ export function lzwEncode(src: Uint8Array): Uint8Array {
     } else if (next >= 1 << width && width < 12) {
       // The decoder is exactly one entry behind (it only starts adding on the SECOND code
       // after a clear), so it widens at 511/1023/2047 while the encoder widens at
-      // 512/1024/2048. That one-code offset IS Adobe's "early change" — matching libtiff,
+      // 512/1024/2048. That one-code offset IS Adobe's "early change" - matching libtiff,
       // whose encoder uses MAXCODE(n) and whose decoder uses MAXCODE(n) - 1.
       width++
     }

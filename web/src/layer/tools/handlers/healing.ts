@@ -1,14 +1,14 @@
-// F07 — the healing family: spot-heal, heal, patch, content-move, red-eye.
+// F07 - the healing family: spot-heal, heal, patch, content-move, red-eye.
 //
 // Everything here goes through `ToolContext`; nothing imports the editor. The
 // five tools share one numeric core:
 //
-//   • `laplaceSolve` — a membrane (Laplace) solver over an arbitrary mask, with
+//   • `laplaceSolve` - a membrane (Laplace) solver over an arbitrary mask, with
 //     Dirichlet conditions taken from the untouched pixels around it. Used raw it
 //     reconstructs a region from its own border (spot-heal, the hole left by
 //     content-move); applied to the DIFFERENCE between a destination and a source
 //     it performs seamless (Poisson) cloning, i.e. it keeps the source TEXTURE
-//     while adopting the destination's low frequencies — luminosity and colour.
+//     while adopting the destination's low frequencies - luminosity and colour.
 //     That is what `heal`, `patch` and `content-move` do.
 //
 // ─── Attribution ─────────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ const MIN_ITER = 24
  * be `depth * (width * height + 1)` long: the extra trailing pixel is the dummy
  * "zero" neighbour that stands in for anything off the canvas.
  *
- * Port of `gimp_heal_laplace_loop()` — see the attribution header.
+ * Port of `gimp_heal_laplace_loop()` - see the attribution header.
  */
 function laplaceSolve(
   values: Float32Array,
@@ -130,7 +130,7 @@ function laplaceSolve(
 
   // All off-diagonal coefficients are -1, so only the neighbour indices are
   // stored. Rows are laid out in checkerboard order, which turns one linear pass
-  // over `aIdx` into "all red cells, then all black cells" — that is what makes
+  // over `aIdx` into "all red cells, then all black cells" - that is what makes
   // plain Gauss-Seidel converge like its red/black variant.
   let nmask = 0
   for (let parity = 0; parity < 2; parity++) {
@@ -414,7 +414,7 @@ interface ApplyArgs {
   lockAlpha: boolean
   /** When false, the active selection does not gate this write (see content-move). */
   honourSelection: boolean
-  /** Alpha is left untouched — heal must not change a layer's opacity. */
+  /** Alpha is left untouched - heal must not change a layer's opacity. */
   keepAlpha: boolean
 }
 
@@ -453,7 +453,7 @@ function applyResult(args: ApplyArgs): boolean {
 }
 
 /**
- * Records the undo entry for `b` — always BEFORE any pixel is written. Uses the
+ * Records the undo entry for `b` - always BEFORE any pixel is written. Uses the
  * cheap rectangle form, falling back to a full-layer snapshot only when the
  * rectangle is so large that copying it would be the expensive option.
  */
@@ -469,7 +469,7 @@ function pushUndoFor(ctx: ToolContext, layerId: string, b: Bounds, snapshot: Uin
 
 /**
  * Rebuilds the masked pixels from their own border: a Laplace membrane pinned to
- * the surrounding pixels. This is the "it just disappears" behaviour — the blob
+ * the surrounding pixels. This is the "it just disappears" behaviour - the blob
  * is replaced by the smooth continuation of what surrounds it.
  */
 function diffuseFromBorder(
@@ -493,7 +493,7 @@ function diffuseFromBorder(
  *
  * `verbatim` opts a sub-area out of the correction: its difference is pinned to
  * zero, so the source is reproduced exactly there and the solve only spans what
- * is left — the seam. That is what separates MOVING content (keep the object,
+ * is left - the seam. That is what separates MOVING content (keep the object,
  * hide the join) from HEALING it (dissolve the object into its surroundings).
  */
 function poissonClone(
@@ -558,7 +558,7 @@ function tracePath(g: CanvasRenderingContext2D, ctx: ToolContext, pts: readonly 
   if (close) g.closePath()
 }
 
-/** Dashed two-tone outline — readable over any image. */
+/** Dashed two-tone outline - readable over any image. */
 function strokeOutline(g: CanvasRenderingContext2D): void {
   g.save()
   g.lineWidth = 1
@@ -918,7 +918,7 @@ function regionFromSelection(ctx: ToolContext, layerId: string): RegionState | n
 }
 
 /**
- * patch — the lasso marks the area to repair, the drag says where to take the
+ * patch - the lasso marks the area to repair, the drag says where to take the
  * replacement from. On release the marked area is rebuilt from the pixels under
  * the dragged position, with the same seamless blend as `heal`.
  */
@@ -975,7 +975,7 @@ function applyPatch(ctx: ToolContext, region: RegionState): void {
 }
 
 /**
- * content-move — the selected content is moved, and the hole it leaves is filled
+ * content-move - the selected content is moved, and the hole it leaves is filled
  * by continuation of its neighbourhood (Laplace diffusion from the hole border).
  * The moved content is pasted with the same seamless blend as `heal`, so it takes
  * the colour and luminosity of its new surroundings while keeping its texture.
@@ -1277,7 +1277,7 @@ function applyRedEye(ctx: ToolContext, state: StrokeState): void {
   let coverage: Uint8Array
 
   // A single click with an active selection treats the whole selection as the
-  // pupil — the usual way to correct an eye that has already been selected.
+  // pupil - the usual way to correct an eye that has already been selected.
   const singleClick = state.points.length <= 1
   const fromSelection = singleClick && ctx.selection !== null
     ? regionFromSelection(ctx, target.id)

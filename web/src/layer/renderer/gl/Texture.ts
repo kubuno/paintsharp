@@ -1,4 +1,4 @@
-// Stage 1 (GPU abstraction) — typed 2D texture.
+// Stage 1 (GPU abstraction) - typed 2D texture.
 //
 // Storage is IMMUTABLE (texStorage2D): size, format and level count are fixed at
 // creation, so the driver can pick its optimal layout once and the VRAM figure
@@ -23,7 +23,7 @@ export interface TextureOptions {
   readonly wrap?: TextureWrap
   /** Max anisotropy to request; clamped to the hardware maximum by the device. */
   readonly anisotropy?: number
-  /** Diagnostic name — shows up in leak reports. */
+  /** Diagnostic name - shows up in leak reports. */
   readonly label?: string
 }
 
@@ -102,7 +102,7 @@ export class GLTexture implements GLResource {
   private magFilter: TextureFilter
 
   /**
-   * Not called directly — go through `GLDevice.createTexture`, which registers
+   * Not called directly - go through `GLDevice.createTexture`, which registers
    * the object so that `dispose()` can be exhaustive.
    * @internal
    */

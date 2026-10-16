@@ -14,7 +14,7 @@
  *
  * `MAX_TOTAL_LAYER_BYTES` is the cumulative budget for decoded layer pixels.
  * Because we keep every layer at its OWN rectangle (never expanded to the
- * document size — see the note on PsdLayer.rect), the realistic cost of a
+ * document size - see the note on PsdLayer.rect), the realistic cost of a
  * 40-layer 6000x4000 document is ~1 GB rather than the ~3.8 GB it would be with
  * document-sized textures. The budget is checked before decoding, not after.
  */
@@ -81,7 +81,7 @@ export const COMPRESSION = {
  * In a PSD (version 1) these very same keys keep a 32-bit length.
  *
  * Observed GIMP behaviour (psd-layer-res-load.c, get_layer_resource_header):
- * the `8B64` signature does NOT by itself widen the length field — only the
+ * the `8B64` signature does NOT by itself widen the length field - only the
  * file version plus membership in this set do. We follow the same rule, and
  * accept `8B64` as a valid signature wherever `8BIM` is.
  */

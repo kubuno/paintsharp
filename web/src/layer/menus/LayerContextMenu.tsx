@@ -1,6 +1,6 @@
 // Right-click host for the Layer editor, driven by the unified `MenuNode` model.
 //
-// It renders through `MenuDropdown` from `@ui` — the same primitive as the
+// It renders through `MenuDropdown` from `@ui` - the same primitive as the
 // shared `useContextMenu()` of `ui/ContextMenu.tsx`, never a hand-rolled
 // floating div. The only difference is the item type: `MenuNode` instead of the
 // flat legacy `CtxItem`, which unlocks submenus, real checkboxes, radio groups,
@@ -24,7 +24,7 @@ export interface LayerContextMenuHandle {
   open: (e: OpenEventLike, nodes: MenuNode[]) => void
   close: () => void
   isOpen: boolean
-  /** Render this in the component tree — a portal, so placement is irrelevant. */
+  /** Render this in the component tree - a portal, so placement is irrelevant. */
   menu: React.ReactNode
 }
 

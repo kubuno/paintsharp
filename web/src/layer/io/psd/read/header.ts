@@ -2,8 +2,8 @@
  * PSD/PSB file header (spec §1.2).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * licensed under the GNU General Public License v3 or later — `read_header()`
- * in psd-load.c — and from Adobe's public "Photoshop File Formats
+ * licensed under the GNU General Public License v3 or later - `read_header()`
+ * in psd-load.c - and from Adobe's public "Photoshop File Formats
  * Specification". Independent TypeScript re-implementation; no GIMP source code
  * was copied. Kubuno is AGPLv3, compatible with the GPLv3 (GPLv3 §13).
  */

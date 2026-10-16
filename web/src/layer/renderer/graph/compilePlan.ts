@@ -7,8 +7,8 @@
 //
 // What the compiler buys, beyond not re-walking a tree 60 times a second:
 //
-//   * exact `scratchDepth` — the register pool is sized once and never grows;
-//   * trivial per-tile skipping — an op whose bbox misses the tile is removed
+//   * exact `scratchDepth` - the register pool is sized once and never grows;
+//   * trivial per-tile skipping - an op whose bbox misses the tile is removed
 //     from that tile's op list, so a typical tile runs 2-3 passes, not 30;
 //   * `pass-through` becomes a COMPILE-TIME decision (flatten or isolate)
 //     instead of a per-pixel one;
@@ -17,13 +17,13 @@
 // Three semantics that the current renderer gets wrong and that are decided
 // here, once, rather than in a shader branch:
 //
-//   E11 — a clipping run is composited as a UNIT. The base's blend mode applies
+//   E11 - a clipping run is composited as a UNIT. The base's blend mode applies
 //         to the aggregate base+clipped, not to the base alone. Compositing
 //         each clipped layer individually gives a different picture as soon as
 //         the base is not in `normal`.
-//   §5.2 — `fill` scales the content, `opacity` scales content AND styles. They
+//   §5.2 - `fill` scales the content, `opacity` scales content AND styles. They
 //         only collapse into one number when the layer has no styles.
-//   §2.3 — a group's opacity < 100 %, a group mask or a group style FORCES
+//   §2.3 - a group's opacity < 100 %, a group mask or a group style FORCES
 //         isolation, even on a `pass-through` group.
 //
 // Register discipline
@@ -55,7 +55,7 @@ export interface CompileOptions {
    * unit for the backdrop, so this is already the net budget. Default 7.
    */
   maxFusedSources?: number
-  /** Set false to get one op per layer — used by the fusion tests. */
+  /** Set false to get one op per layer - used by the fusion tests. */
   enableFusion?: boolean
   /** Document bounds; layers whose bbox is unknown are assumed to cover it. */
   documentBounds?: Rect | null
@@ -114,7 +114,7 @@ const hasMask = (n: LayerNode): boolean => !!n.mask?.enabled || !!n.vectorMask?.
 
 /**
  * Spec 08 §2.3, `needsIsolation()`. A group escapes isolation only when it is a
- * plain, unscaled, unmasked, unstyled `pass-through` — the state a freshly
+ * plain, unscaled, unmasked, unstyled `pass-through` - the state a freshly
  * created group is in, which is exactly why the fast path matters.
  */
 export function groupNeedsIsolation(g: LayerNode): boolean {
@@ -130,7 +130,7 @@ export function groupNeedsIsolation(g: LayerNode): boolean {
 }
 
 function effectiveSourceId(n: LayerNode): string {
-  // ORDER step 2 — dynamic filters. The filter stage republishes the layer
+  // ORDER step 2 - dynamic filters. The filter stage republishes the layer
   // under the last enabled filter's output id; the compositor just samples it.
   for (let i = n.filters.length - 1; i >= 0; i--) {
     if (n.filters[i].enabled) return n.filters[i].outputId
@@ -180,7 +180,7 @@ function clipRuns(bottomUp: LayerNode[], diagnostics: string[]): ClipRun[] {
       if (n.clipping) {
         // The bottom layer of a sibling list cannot be clipped; Photoshop's
         // validator forces `clipping = false` there.
-        diagnostics.push(`layer ${n.id}: clipping with no base below — treated as unclipped`)
+        diagnostics.push(`layer ${n.id}: clipping with no base below - treated as unclipped`)
       }
       runs.push({ base: n, clipped: [] })
     }
@@ -196,15 +196,15 @@ function maskCoverage(n: LayerNode, clipReg: Reg | null, clipFromOp: number | nu
   const mask = n.mask?.enabled ? n.mask : null
   const vec = n.vectorMask?.enabled ? n.vectorMask : null
   return {
-    // ORDER step 4 — blend (pixel) mask
+    // ORDER step 4 - blend (pixel) mask
     maskId: mask ? mask.layerId : null,
     maskInverted: mask ? mask.inverted : false,
     maskDensity: mask ? clamp01(mask.density) : 1,
-    // ORDER step 5 — vector mask; the two masks multiply (intersection)
+    // ORDER step 5 - vector mask; the two masks multiply (intersection)
     vectorMaskId: vec ? vec.layerId : null,
     vectorMaskInverted: vec ? vec.inverted : false,
     vectorMaskDensity: vec ? clamp01(vec.density) : 1,
-    // ORDER step 7 — clipping
+    // ORDER step 7 - clipping
     clipReg,
     clipFromOp,
   }
@@ -278,7 +278,7 @@ function emitStyle(
   target: Reg,
   selfClipReg: Reg | null,
 ): void {
-  // ORDER step 8 — styles are scaled by `opacity` at the aggregate level, so
+  // ORDER step 8 - styles are scaled by `opacity` at the aggregate level, so
   // here they carry only their OWN opacity. They are never scaled by `fill`;
   // that is the entire reason the two fields exist.
   st.ops.push({
@@ -299,7 +299,7 @@ function emitStyle(
 /**
  * Emit `body` into a private register, then composite that register onto
  * `target` as one unit. This single primitive covers all three cases that need
- * isolation — a style aggregate, an isolated group, and a clipping run —
+ * isolation - a style aggregate, an isolated group, and a clipping run -
  * because they are the same operation with different bodies.
  */
 function emitIsolated(
@@ -355,7 +355,7 @@ function emitIsolated(
 /**
  * One leaf, with its styles. `contentInto` lets a clipping run substitute a
  * richer body (base + clipped layers) while keeping the style/opacity wrapper
- * identical — the aggregate is styled and blended the same way either way.
+ * identical - the aggregate is styled and blended the same way either way.
  */
 function emitLeaf(
   st: CompileState,
@@ -420,7 +420,7 @@ function emitLeaf(
       for (const s of below) {
         if (s.clipToLayer) {
           st.diagnostics.push(
-            `layer ${n.id}: style ${s.id} is below and clipToLayer — the layer alpha does not exist yet, clip ignored`,
+            `layer ${n.id}: style ${s.id} is below and clipToLayer - the layer alpha does not exist yet, clip ignored`,
           )
         }
         emitStyle(st, n, s, reg, null)
@@ -459,10 +459,10 @@ function emitGroup(
   const children = n.children ?? []
   const bbox = subtreeBounds(children, st.opts.documentBounds)
 
-  // ORDER step 10 — the parent group. Two regimes, decided here, once.
+  // ORDER step 10 - the parent group. Two regimes, decided here, once.
   if (!groupNeedsIsolation(n) && clipReg === null) {
     // Free pass-through: the children are spliced straight into the parent's op
-    // list. No register, no copy, no extra draw call — and a child in `multiply`
+    // list. No register, no copy, no extra draw call - and a child in `multiply`
     // correctly sees what lies BELOW the group, which is the whole point.
     st.diagnostics.push(`group ${n.id}: pass-through flattened into parent`)
     emitList(st, children, target)
@@ -542,8 +542,8 @@ function emitNode(
  *
  * Step 3 is implemented by multiplying each clipped layer's coverage by the
  * base's alpha snapshot rather than by a separate full-surface multiply pass.
- * That is algebraically equivalent — a clipped layer can only ever add alpha
- * where the base has some, and the base is already inside its own alpha — and
+ * That is algebraically equivalent - a clipped layer can only ever add alpha
+ * where the base has some, and the base is already inside its own alpha - and
  * it saves one pass per clipped layer.
  *
  * Fast path: when the base is `normal`, fully opaque, unmasked, unstyled and
@@ -647,7 +647,7 @@ function isFusable(op: PassOp): op is PlainLayerOp {
  *
  * Correctness: `source-over` is associative, so folding N of them into one
  * shader is exact, not an approximation. It is only legal because every fused
- * op is unmasked, unclipped and at full opacity — any of those needs its own
+ * op is unmasked, unclipped and at full opacity - any of those needs its own
  * coverage uniform and breaks the fold.
  */
 function fuse(ops: PassOp[], maxSources: number, diagnostics: string[]): PassOp[] {
@@ -823,7 +823,7 @@ function prune(ops: PassOp[]): PassOp[] {
 // Diagnostics
 // ---------------------------------------------------------------------------
 
-/** Human-readable dump of a plan — the tests assert on this. */
+/** Human-readable dump of a plan - the tests assert on this. */
 export function planToString(plan: PassPlan): string {
   const lines: string[] = [`plan gen=${plan.generation} regs=${plan.scratchDepth} ops=${plan.ops.length}`]
   let indent = 0

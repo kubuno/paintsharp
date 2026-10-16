@@ -1,7 +1,7 @@
 // Format descriptors (spec 05 §7.2).
 //
 // GOLDEN RULE: no codec is imported statically here. Each descriptor is a few hundred
-// bytes — strings, a `sniff` closure and `() => import(...)` thunks — so the whole set
+// bytes - strings, a `sniff` closure and `() => import(...)` thunks - so the whole set
 // stays on the critical path for ~4 KiB while every decoder is a separate chunk.
 //
 // `sniff` returns a CONFIDENCE, never a boolean: TIFF and the RAW formats share a
@@ -385,7 +385,7 @@ export const webpFormat: FormatDescriptor = {
   },
 }
 
-/** AVIF: readable natively, NOT writable — `convertToBlob` falls back to PNG (measured). */
+/** AVIF: readable natively, NOT writable - `convertToBlob` falls back to PNG (measured). */
 export const avifFormat: FormatDescriptor = {
   id: 'avif',
   labelKey: 'layer.io.format.avif',

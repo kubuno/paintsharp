@@ -2,7 +2,7 @@
  * PSD/PSB channel-data writer helpers (spec §8.5).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * GPLv3+ — `save_layer_and_mask()` / `save_data()` in psd-export.c — and from
+ * GPLv3+ - `save_layer_and_mask()` / `save_data()` in psd-export.c - and from
  * Adobe's public "Photoshop File Formats Specification". Independent TypeScript
  * re-implementation; no GIMP source was copied. Kubuno is AGPLv3.
  */
@@ -29,7 +29,7 @@ export interface LayerPlanes {
  * layer's OWN rectangle. Never expands to the document size.
  *
  * Returns null when the layer has no pixels (group markers, adjustment layers,
- * empty rectangles) — such a layer is written with empty channels.
+ * empty rectangles) - such a layer is written with empty channels.
  */
 export async function layerPlanes(
   layer: PsdLayer,

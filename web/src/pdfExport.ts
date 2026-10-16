@@ -62,7 +62,7 @@ interface FontResolver { (family: string, bold: boolean, italic: boolean): Promi
 function winAnsiSafe(s: string): string {
   return (s || '')
     .replace(/[‘’‚]/g, "'").replace(/[“”„]/g, '"')
-    .replace(/[–−]/g, '-').replace(/—/g, '--').replace(/…/g, '...')
+    .replace(/[–−]/g, '-').replace(/\u2014/g, '--').replace(/…/g, '...')
     .replace(/[   ]/g, ' ')
     // eslint-disable-next-line no-control-regex
     .replace(/[^\x20-\x7E\xA1-\xFF€ŒœŠšŽžŸƒ•†‡ˆ˜™‹›‰]/g, '')
@@ -320,7 +320,7 @@ async function drawAnnotation(
       const a = ann as FreehandAnnotation
       if (a.points.length < 2) return
       const col = parseColor(a.color)
-      // Smoothed quadratic path through segment midpoints — same as the editor.
+      // Smoothed quadratic path through segment midpoints - same as the editor.
       const pts = a.points
       let d = `M${pts[0][0].toFixed(2)},${pts[0][1].toFixed(2)}`
       for (let i = 1; i < pts.length - 1; i++) {

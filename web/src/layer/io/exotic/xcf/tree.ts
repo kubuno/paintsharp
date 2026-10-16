@@ -7,7 +7,7 @@
 //
 // The layer list in the file is FLAT. Two properties rebuild the tree: PROP_GROUP_ITEM
 // says "this layer is a group", PROP_ITEM_PATH gives the insertion path. Layers arrive
-// top-first and each is appended at the END of its parent's child list — which
+// top-first and each is appended at the END of its parent's child list - which
 // reproduces GIMP's own ordering, and matches Layer's convention (index 0 = topmost),
 // so no reversal is ever needed. PSD, by contrast, stores bottom-first.
 

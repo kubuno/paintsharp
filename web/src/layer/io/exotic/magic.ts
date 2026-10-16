@@ -28,7 +28,7 @@ const MIN_SNIFF_BYTES = 32
 // XCF
 // ---------------------------------------------------------------------------
 
-/** `gimp xcf ` — an exclusive nine-byte signature. */
+/** `gimp xcf ` - an exclusive nine-byte signature. */
 export function sniffXcf(head: Uint8Array): number {
   if (head.length < 26) return 0
   return matchAscii(head, 0, 'gimp xcf ') ? 1 : 0
@@ -125,7 +125,7 @@ const MAKE_TO_FORMAT: readonly (readonly [RegExp, RawFormatId])[] = [
  * Classifies a TIFF-like header into a RAW flavour or plain TIFF.
  *
  * The order is the one the specification fixes, and it matters:
- *   1. `DNGVersion` (0xC612) is the only NORMATIVE discriminant — a DNG says so;
+ *   1. `DNGVersion` (0xC612) is the only NORMATIVE discriminant - a DNG says so;
  *   2. `Make` names the manufacturer, which names the flavour;
  *   3. a CFA sub-IFD proves it is raw sensor data from an unknown body;
  *   4. otherwise it is an ordinary TIFF and belongs to the plain raster decoder.
@@ -178,7 +178,7 @@ export function sniffPdf(head: Uint8Array): number {
 /**
  * SVG detection, which has no magic number at all.
  *
- * Skips a BOM, the XML declaration, comments and the DOCTYPE — including a DOCTYPE with
+ * Skips a BOM, the XML declaration, comments and the DOCTYPE - including a DOCTYPE with
  * an internal subset, whose `[ … ]` legitimately contains `>` characters and defeats a
  * naive "skip to the next >" loop.
  */

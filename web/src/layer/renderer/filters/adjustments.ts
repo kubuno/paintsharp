@@ -95,7 +95,7 @@ export interface AdjustmentImpl<S extends AdjustmentSpec> {
   readonly uniforms: (s: S) => UniformMap
   /** Lookup textures the adjustment needs (curves only, today). */
   readonly luts?: (s: S) => Readonly<Record<string, LutData>>
-  /** CPU reference — the ground truth the shader is verified against. */
+  /** CPU reference - the ground truth the shader is verified against. */
   readonly applyPixel: (s: S, r: number, g: number, b: number) => [number, number, number]
   /** Neutral parameters ⇒ the whole pass can be skipped. */
   readonly isIdentity: (s: S) => boolean
@@ -115,7 +115,7 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v)
 // DELIBERATE DEVIATION: GIMP runs this operation on "RGBA float", i.e. in
 // LINEAR light (its point filter defaults to GIMP_TRC_LINEAR and this op never
 // binds a "trc" property). We run it in PERCEPTUAL space because the midpoint
-// of the S-curve, 0.5, must be the perceptual midtone — that is the Photoshop
+// of the S-curve, 0.5, must be the perceptual midtone - that is the Photoshop
 // behaviour the editor's sliders are calibrated against (spec 08 §6.3: "c ∈
 // [0,1] en sRGB encodé (parité Photoshop)"). Running it in linear light moves
 // the pivot to 0.21 and crushes every midtone.
@@ -140,7 +140,7 @@ const brightnessContrast: AdjustmentImpl<Extract<AdjustmentSpec, { type: 'bright
   isIdentity: s => s.brightness === 0 && s.contrast === 0,
 }
 
-// ── 2. Exposure (LINEAR — this is the whole point) ───────────────────────────
+// ── 2. Exposure (LINEAR - this is the whole point) ───────────────────────────
 // `applyAdjustments` multiplied ENCODED values by 2^(stops), which is not an
 // exposure at all. Exposure is a scene-referred scale: out = (in + offset)·2^EV,
 // only meaningful in linear light. Gamma correction is applied afterwards, as
@@ -277,11 +277,11 @@ vec3 levelsMap(vec3 v, vec3 lo, vec3 hi, vec3 gamma, vec3 ol, vec3 oh) {
 
 // ── 6. Curves (perceptual, 1-D LUT texture) ──────────────────────────────────
 // One 256×1 RGBA texture: rgb = the per-channel curves, a = the master curve.
-// Per-channel is applied first, then master — GIMP's channel order.
+// Per-channel is applied first, then master - GIMP's channel order.
 
 export const CURVE_LUT_SIZE = 256
 
-/** Monotone cubic interpolation (Fritsch–Carlson) — no overshoot on curves. */
+/** Monotone cubic interpolation (Fritsch–Carlson) - no overshoot on curves. */
 export function buildCurveLut(points: CurvePoints, size = CURVE_LUT_SIZE): Float32Array {
   const pts = [...points].sort((a, b) => a[0] - b[0])
   const out = new Float32Array(size)
@@ -472,7 +472,7 @@ const blackAndWhite: AdjustmentImpl<Extract<AdjustmentSpec, { type: 'blackAndWhi
 //
 // `lightness` is the HSL L of the SOURCE pixel (GIMP converts the run to HSLA
 // first), and the three masks sum to 1 over [0,1]. `preserveLuminosity`
-// re-converts the result to HSL and puts the original L back — that is GIMP's
+// re-converts the result to HSL and puts the original L back - that is GIMP's
 // actual behaviour, not a Rec.709 luminance rescale.
 // Input format in GIMP: "R'G'B'A float" ⇒ PERCEPTUAL.
 
@@ -548,7 +548,7 @@ vec3 hslToRgb(vec3 hsl) {
   isIdentity: s => [...s.shadows, ...s.midtones, ...s.highlights].every(v => v === 0),
 }
 
-// ── 10. Invert (perceptual — Photoshop's Invert is on encoded values) ────────
+// ── 10. Invert (perceptual - Photoshop's Invert is on encoded values) ────────
 
 const invert: AdjustmentImpl<Extract<AdjustmentSpec, { type: 'invert' }>> = {
   type: 'invert',
@@ -621,7 +621,7 @@ export function applyAdjustmentPixel(
   return adjustmentImpl(spec).applyPixel(spec as never, r, g, b)
 }
 
-/** Space an adjustment operates in — needed by the fusion logic and the tests. */
+/** Space an adjustment operates in - needed by the fusion logic and the tests. */
 export function adjustmentSpace(spec: AdjustmentSpec): ColorSpaceMode {
   return adjustmentImpl(spec).space
 }

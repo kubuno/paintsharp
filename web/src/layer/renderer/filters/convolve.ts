@@ -45,7 +45,7 @@ void main() {
 }
 `, [NEIGHBOUR])
 
-/** Sobel magnitude per channel, inverted — Photoshop's "Find Edges". */
+/** Sobel magnitude per channel, inverted - Photoshop's "Find Edges". */
 export const FIND_EDGES_FRAG = fragmentShader(`
 uniform int uGray;
 void main() {
@@ -162,7 +162,7 @@ export function morphologyPasses(radius: number, kind: 'max' | 'min'): GpuPass[]
   ]
 }
 
-/** Desaturate to NTSC luma on encoded values — the legacy `grayscaleOf`. */
+/** Desaturate to NTSC luma on encoded values - the legacy `grayscaleOf`. */
 export const GRAYSCALE_FRAG = fragmentShader(`
 void main() {
   vec4 s = texture(uSrc, vUv);
@@ -176,7 +176,7 @@ export function grayscalePasses(): GpuPass[] {
   return [{ name: 'gray', key: 'convolve/gray', glsl: GRAYSCALE_FRAG }]
 }
 
-/** Threshold on encoded NTSC luma — the legacy `threshold` filter. */
+/** Threshold on encoded NTSC luma - the legacy `threshold` filter. */
 export const THRESHOLD_FRAG = fragmentShader(`
 uniform float uLevel;
 void main() {
@@ -187,7 +187,7 @@ void main() {
 }
 `)
 
-/** Posterize on encoded values — the legacy `posterize` filter. */
+/** Posterize on encoded values - the legacy `posterize` filter. */
 export const POSTERIZE_FRAG = fragmentShader(`
 uniform float uLevels;
 void main() {

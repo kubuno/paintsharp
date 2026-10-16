@@ -49,7 +49,7 @@ export type ExoticFormatId =
  */
 export interface ExoticFormatInfo {
   readonly id: ExoticFormatId
-  /** Approximate transferred weight of `load()`'s chunk, in KiB — for a metered-connection warning. */
+  /** Approximate transferred weight of `load()`'s chunk, in KiB - for a metered-connection warning. */
   readonly decoderWeightKiB: number
   /** Decoding depends on a runtime browser capability probe (HEIC). */
   readonly needsCapabilityProbe?: boolean

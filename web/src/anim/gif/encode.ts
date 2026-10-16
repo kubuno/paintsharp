@@ -158,7 +158,7 @@ function writeFrame(
   const tableSize = paddedSize((localTable ?? globalPalette).size)
   const minCodeSize = minCodeSizeFor(tableSize)
 
-  // Graphic Control Extension — describes what to do AFTER this frame.
+  // Graphic Control Extension - describes what to do AFTER this frame.
   w.u8(GIF_EXTENSION)
   w.u8(EXT_GRAPHIC_CONTROL)
   w.u8(4)

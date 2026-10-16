@@ -1,4 +1,4 @@
-// The contextual options bar — entirely data-driven.
+// The contextual options bar - entirely data-driven.
 //
 // It loops over `optionsFor(tool)` and renders one control per `ToolOption.kind`.
 // There is no per-tool branch anywhere: adding an option to a tool in
@@ -62,7 +62,7 @@ function NumField({ value, min, max, step, unit, width, disabled, onChange }: {
   )
 }
 
-/** A pill toggle. Never bold — the core forbids bold buttons. */
+/** A pill toggle. Never bold - the core forbids bold buttons. */
 function ToggleChip({ on, label, disabled, onToggle }: {
   on: boolean; label: string; disabled?: boolean; onToggle: () => void
 }) {
@@ -436,7 +436,7 @@ export function ToolOptionsBar({
   return (
     <div
       role="toolbar"
-      aria-label={`${t('layer_topt_options')} — ${t(def.nameKey)}`}
+      aria-label={`${t('layer_topt_options')} - ${t(def.nameKey)}`}
       className={className}
       style={{
         display: 'flex', alignItems: 'center', gap: GAP, height: rowHeight,

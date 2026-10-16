@@ -1,7 +1,7 @@
 // Data model of the GPU filter stage.
 //
 // A filter is DATA, not code: `GpuFilterDef` carries its parameters, its pass
-// list and its GLSL. Adding a filter means adding a record to `registry.ts` —
+// list and its GLSL. Adding a filter means adding a record to `registry.ts` -
 // no new module, no new switch case. Filters that cannot be expressed as a
 // bounded-neighbourhood fragment program declare `backend: 'worker'` and carry
 // the reason, so the routing layer knows what to hand to the worker pool.
@@ -50,7 +50,7 @@ export interface GpuPass {
   /** Complete GLSL ES 3.00 fragment source (build it with `fragmentShader`). */
   readonly glsl: string
   /**
-   * Program cache key. Must change whenever `glsl` changes — include every
+   * Program cache key. Must change whenever `glsl` changes - include every
    * `#define` permutation. Defaults to `${filterId}/${name}`.
    */
   readonly key?: string

@@ -1,4 +1,4 @@
-# Filter inventory — what is on the GPU, what is not, and why
+# Filter inventory - what is on the GPU, what is not, and why
 
 Scope: every entry of the legacy catalogue `src/layerFilters.ts` (`FILTER_GROUPS`),
 plus the non-destructive adjustments that replace `layer/imaging/adjustments.ts`.
@@ -16,31 +16,31 @@ counts 47 because it merges variants such as *radial spin* / *radial zoom* and
 Against the specification's own grouping this is **40/47 on GPU and 7 in the
 worker**, exactly the split §9.5 predicts. The four `hybrid` entries
 (cutout, watercolor, sponge, dry brush) are counted by the spec inside the
-"artistic — mixte" row.
+"artistic - mixte" row.
 
 The adjustments are a separate axis: **12 of 12 on GPU**, one pass, fusable.
 
 ---
 
-## 1. Colour space — read this first
+## 1. Colour space - read this first
 
 The engine works in **RGBA16F, linear light, premultiplied alpha**. Every filter
 declares the space its arithmetic is defined in (`GpuFilterDef.space`), and the
 shader wrapper does the conversion. Getting this wrong is silent and ugly, so it
 is stated per filter.
 
-* **`linear`** — anything that *averages, interpolates or scales light*: blurs,
+* **`linear`** - anything that *averages, interpolates or scales light*: blurs,
   distortions (they resample), mosaic/fragment (they average), exposure,
   Oklab hue/saturation. Averaging encoded values darkens the result; that is the
   single most visible legacy bug this port fixes.
-* **`perceptual`** — anything whose 0..1 domain has a perceptual midpoint at 0.5:
+* **`perceptual`** - anything whose 0..1 domain has a perceptual midpoint at 0.5:
   levels, curves, posterize, threshold, brightness/contrast, colour balance,
   solarize, emboss and the whole sketch family, plus noise amplitude (constant
   amplitude in linear light is invisible in shadows and violent in highlights).
 
 **Consequence, and it is intended**: filters that resample or average now
 disagree with the legacy CPU output *at hard edges*, by up to ~74/255 on a
-black/white checkerboard. That is the correction, not a regression — it is the
+black/white checkerboard. That is the correction, not a regression - it is the
 same effect the specification predicts for the blur in §9.3 ("il sera plus clair
 au milieu du dégradé : c'est la correction attendue").
 
@@ -48,7 +48,7 @@ au milieu du dégradé : c'est la correction attendue").
 
 ## 2. The catalogue
 
-Legend — **Route**: `GPU` (here), `WORKER` (Rust/WASM, later), `HYBRID`.
+Legend - **Route**: `GPU` (here), `WORKER` (Rust/WASM, later), `HYBRID`.
 **Δ**: maximum per-channel deviation from the legacy CPU filter, in 8-bit units,
 measured on a **smooth opaque** 256×256 image (the hard-edge image is reported in
 the session notes; its larger deltas are the linear-light resampling effect
@@ -71,7 +71,7 @@ described above). `0` means bit-identical after the 8-bit round trip.
 |---|---|---|---|---|
 | sharpen | GPU | 3 | 2 | One parameterised unsharp mask now serves all four entries; the legacy code had **three** copies of the maths. |
 | sharpen more | GPU | 3 | 3 | |
-| unsharp mask | GPU | 3 | 2 | **New parameter: threshold** (Photoshop has one, the legacy filter did not) — stops the filter amplifying grain in flat areas. |
+| unsharp mask | GPU | 3 | 2 | **New parameter: threshold** (Photoshop has one, the legacy filter did not) - stops the filter amplifying grain in flat areas. |
 | high pass | GPU | 3 | 1 | Same chain, `0.5 + (src − blur)`. |
 
 ### noise
@@ -80,23 +80,23 @@ described above). `0` means bit-identical after the 8-bit round trip.
 |---|---|---|---|---|
 | add noise | GPU | 1 | n/a | Deterministic PCG hash of (pixel, seed). **Not comparable to the legacy output**: the legacy LCG is consumed in raster order and *skips transparent pixels*, so its sequence depends on the alpha channel and no parallel implementation can reproduce it. New options: gaussian vs uniform, grain size. |
 | add noise mono | GPU | 1 | n/a | idem. |
-| **median** | WORKER | — | — | Per-pixel sort of (2r+1)² samples. A GPU sorting network is only viable up to r=2 (25 elements); the slider goes to 10 (441 elements). |
-| **despeckle** | WORKER | — | — | Median r=1. The 9-element sorting network *is* portable — kept in the worker for now so that one implementation serves both, flagged in the registry as a candidate GPU fast path. |
-| **dust & scratches** | WORKER | — | — | Median + threshold; inherits the median verdict. |
+| **median** | WORKER | - | - | Per-pixel sort of (2r+1)² samples. A GPU sorting network is only viable up to r=2 (25 elements); the slider goes to 10 (441 elements). |
+| **despeckle** | WORKER | - | - | Median r=1. The 9-element sorting network *is* portable - kept in the worker for now so that one implementation serves both, flagged in the registry as a candidate GPU fast path. |
+| **dust & scratches** | WORKER | - | - | Median + threshold; inherits the median verdict. |
 
-### distort — all 7 ported, all Δ ≤ 1
+### distort - all 7 ported, all Δ ≤ 1
 
 | Filter | Route | Passes | Δ | Notes |
 |---|---|---|---|---|
-| pinch, spherize, twirl, ripple, wave, zigzag, polar | GPU | 1 each | 1 | Inverse mapping in pixel space, hardware bilinear. Because the working space is premultiplied, transparent neighbours cannot bleed colour — the CPU version had to premultiply and unpremultiply inside every sample. |
+| pinch, spherize, twirl, ripple, wave, zigzag, polar | GPU | 1 each | 1 | Inverse mapping in pixel space, hardware bilinear. Because the working space is premultiplied, transparent neighbours cannot bleed colour - the CPU version had to premultiply and unpremultiply inside every sample. |
 
 ### pixelate
 
 | Filter | Route | Passes | Δ | Notes |
 |---|---|---|---|---|
 | mosaic | GPU | 2 | 1 | Cell mean rendered into a `ceil(w/cell)` target, then a nearest lookup. Exact for cells ≤ 16 px, 16×16 stratified above (legacy was O(cell²) per cell). |
-| **crystallize** | WORKER | — | — | Voronoi cell assignment. A GPU port needs jump flooding (2·log₂n passes) plus a colour gather; not worth a first pass. |
-| **pointillize** | WORKER | — | — | idem. |
+| **crystallize** | WORKER | - | - | Voronoi cell assignment. A GPU port needs jump flooding (2·log₂n passes) plus a colour gather; not worth a first pass. |
+| **pointillize** | WORKER | - | - | idem. |
 | colour halftone | GPU | 2 | 255 on 60 px | Binary output: a sub-LSB difference in the cell mean flips a pixel between 0 and 255 at the dot boundary. Mean deviation 0.08. |
 | fragment | GPU | 1 | 1 | Four offset copies averaged. |
 
@@ -108,9 +108,9 @@ described above). `0` means bit-identical after the 8-bit round trip.
 | find edges | GPU | 1 | 1 | Sobel per channel. |
 | solarize | GPU | 1 | **0** | |
 | trace contour | GPU | 1 | 255 on 1196 px | Binary output, same threshold-flip effect as halftone. Mean 1.56. |
-| **wind** | WORKER | — | — | **Sequential dependency**: pixel *x* is smeared from the value already written at *x−1*. Not expressible as a fragment program at any radius. |
+| **wind** | WORKER | - | - | **Sequential dependency**: pixel *x* is smeared from the value already written at *x−1*. Not expressible as a fragment program at any radius. |
 | diffuse | GPU | 1 | n/a | Deterministic hash instead of the serial LCG. |
-| **oil paint** | WORKER | — | — | 20-bin histogram per pixel; at r=8 that is 289 samples and 20 accumulators per pixel. Portable at r ≤ 4 if ever needed. |
+| **oil paint** | WORKER | - | - | 20-bin histogram per pixel; at r=8 that is 289 samples and 20 accumulators per pixel. Portable at r ≤ 4 if ever needed. |
 
 ### render
 
@@ -124,10 +124,10 @@ described above). `0` means bit-identical after the 8-bit round trip.
 | Filter | Route | Passes | Δ | Notes |
 |---|---|---|---|---|
 | poster edges | GPU | 3 | 2 | posterize × edge mask, two source branches and a combine. |
-| **cutout** | HYBRID | — | — | posterize → **median r=2**. |
-| **watercolor** | HYBRID | — | — | **median r=2** → posterize → edge modulation. |
-| **sponge** | HYBRID | — | — | **median r=2** → hashed darkening. |
-| **dry brush** | HYBRID | — | — | **median r=1** → posterize. |
+| **cutout** | HYBRID | - | - | posterize → **median r=2**. |
+| **watercolor** | HYBRID | - | - | **median r=2** → posterize → edge modulation. |
+| **sponge** | HYBRID | - | - | **median r=2** → hashed darkening. |
+| **dry brush** | HYBRID | - | - | **median r=1** → posterize. |
 | film grain | GPU | 1 | n/a | = monochrome noise. |
 
 ### sketch
@@ -147,13 +147,13 @@ described above). `0` means bit-identical after the 8-bit round trip.
 |---|---|---|---|---|
 | posterize | GPU | 1 | **0** | |
 | threshold | GPU | 1 | 255 on 1 px | One pixel of the test image sits exactly on the threshold. |
-| maximum | GPU | 2 | **0** | Chebyshev dilation is **separable** — 2 passes of O(r) instead of the legacy `rankFilter`, which sorted (2r+1)² values per pixel to take the last one. |
+| maximum | GPU | 2 | **0** | Chebyshev dilation is **separable** - 2 passes of O(r) instead of the legacy `rankFilter`, which sorted (2r+1)² values per pixel to take the last one. |
 | minimum | GPU | 2 | **0** | idem, erosion. |
 | offset | GPU | 1 | **0** | |
 
 ---
 
-## 3. Adjustments — 12/12 on GPU, one pass, non destructive
+## 3. Adjustments - 12/12 on GPU, one pass, non destructive
 
 Verified against a CPU reference implementation of the *same* formula
 (`AdjustmentImpl.applyPixel`), so any deviation is a shader bug, not a
@@ -167,7 +167,7 @@ specification difference. Max per-channel deviation over the whole test image:
 | hue | **linear** | 1 | OkLCh rotation |
 | levels | perceptual | 1 | GIMP `gimp_operation_levels_map`, per-channel then master |
 | curves | perceptual | 1 | 256×1 RGBA LUT, monotone cubic; GIMP order `master(per_channel(x))`; texel-centre addressing reproduces GIMP's linear interpolation |
-| vibrance | perceptual | 1 | saturation weighted by how unsaturated the pixel already is (no GIMP equivalent — GIMP has no vibrance op) |
+| vibrance | perceptual | 1 | saturation weighted by how unsaturated the pixel already is (no GIMP equivalent - GIMP has no vibrance op) |
 | black & white | perceptual | **0** | six colour families, Photoshop defaults, optional tint |
 | colour balance | perceptual | 1 | GIMP `gimp_operation_color_balance_map` (a=0.25, b=0.333, scale=0.7, masks driven by HSL lightness) |
 | colour balance + preserve luminosity | perceptual | 1 | GIMP's actual behaviour: HSL round trip restoring the original L |
@@ -187,13 +187,13 @@ Seven entries, with the reason each one is not a fragment program. The registry
 exposes this list programmatically (`nonPortableFilters()`), so the router never
 has to hard-code it:
 
-1. **median** — per-pixel sort.
-2. **despeckle** — median r=1 (GPU sorting network possible; kept together).
-3. **dust & scratches** — median + threshold.
-4. **wind** — sequential dependency along the scanline.
-5. **oil paint** — 20-bin histogram per pixel.
-6. **crystallize** — Voronoi (jump flooding not retained).
-7. **pointillize** — Voronoi.
+1. **median** - per-pixel sort.
+2. **despeckle** - median r=1 (GPU sorting network possible; kept together).
+3. **dust & scratches** - median + threshold.
+4. **wind** - sequential dependency along the scanline.
+5. **oil paint** - 20-bin histogram per pixel.
+6. **crystallize** - Voronoi (jump flooding not retained).
+7. **pointillize** - Voronoi.
 
 Plus the four `hybrid` chains whose only non-portable link is a median:
 **cutout, watercolor, sponge, dry brush**. Once the worker exposes a tiled
@@ -216,7 +216,7 @@ Anyone comparing old and new output will see these; none of them is a bug.
    the NTSC 0.299/0.587/0.114 weights are kept only where the legacy filter's
    *look* is the specification (threshold, grayscale for the sketch family).
 6. **Noise is a hash, not a stream.** The sequence changes, but it becomes
-   reproducible — which the legacy `Math.random()` path in
+   reproducible - which the legacy `Math.random()` path in
    `imaging/filters.applyFilters` never was, making undo replay impossible.
 7. **Unsharp mask gains a threshold**, defaulting to 0 (= legacy behaviour).
 8. **Box blur is now actually a box blur.**
@@ -227,7 +227,7 @@ Anyone comparing old and new output will see these; none of them is a bug.
 
 ## 6. Measurements
 
-Environment: Chrome 150 headless, **ANGLE / SwiftShader (software rasteriser)** —
+Environment: Chrome 150 headless, **ANGLE / SwiftShader (software rasteriser)** -
 the only WebGL2 available on this machine (the shared CDP Chrome cannot create
 any GL context; see spec §12.2). Per that same section, SwiftShader validates
 **correctness** but is **not a performance bench**.
@@ -239,7 +239,7 @@ conversion and IPC (17.8 s for a single 1000×1000 RGBA/FLOAT readback). Any
 "GPU milliseconds" figure from this environment would be fiction. A real
 GPU-backed Chrome is required, per §12.2.
 
-**What is measured and meaningful — MAIN-THREAD OCCUPANCY**, which is exactly
+**What is measured and meaningful - MAIN-THREAD OCCUPANCY**, which is exactly
 what goulet G3 is about ("l'interface est gelée pendant ce temps"). For the CPU
 path this is the whole filter; for the GPU path it is the pass construction and
 submission. Median of 10–30 repetitions, same page, same image:
@@ -286,7 +286,7 @@ scalar JavaScript, whatever the radius.
   worth reading before writing any neighbourhood shader: a fragment for output
   pixel *x* has `vUv·uSize == x + 0.5`, so a port of a CPU loop must start from
   `pixelCoord()`. Ignoring it shifts every tap by half a texel, which with
-  LINEAR filtering silently averages two neighbours — it looks like a slightly
+  LINEAR filtering silently averages two neighbours - it looks like a slightly
   soft image, not like a bug.
 * **Tiling** is not implemented here. Each filter declares its kernel support
   implicitly through its passes; when the tile scheduler lands, gather filters

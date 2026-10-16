@@ -6,7 +6,7 @@
 // ── Palette (Photoshop-style neutral grays, dense & professional) ───────────────
 export const C = {
   bg:      '#1e1e1e',  // app / canvas backdrop
-  panel:   '#323232',  // panel body — Photoshop "medium gray"
+  panel:   '#323232',  // panel body - Photoshop "medium gray"
   toolbar: '#393939',  // tool dock, panel headers, tab strips
   header:  '#2b2b2b',  // top bar / options bar / status bar
   active:  '#454545',  // active tab / hover
@@ -16,7 +16,7 @@ export const C = {
   textDim: '#8e8e8e',
 }
 
-// ── Colour conversions — promoted to @ui, re-exported for Paintsharp back-compat ──────
+// ── Colour conversions - promoted to @ui, re-exported for Paintsharp back-compat ──────
 export {
   hexToRgb, rgbToHex, rgbToHsl, hslToRgb, rgbToHsv, hsvToRgb, rgbToCmyk, cmykToRgb,
 } from '@ui'

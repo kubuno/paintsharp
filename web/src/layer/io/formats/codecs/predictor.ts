@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // TIFF `Predictor` (tag 317), applied AFTER decompression, per row, per channel.
-// Predictor 3 (floating point) is byte-plane de-interleaving plus byte differencing —
+// Predictor 3 (floating point) is byte-plane de-interleaving plus byte differencing -
 // exactly the mechanism OpenEXR's ZIP compression uses, so this file is shared between
 // the TIFF and EXR decoders (spec 05 §4.4).
 //
@@ -9,7 +9,7 @@
 // cross-checked against libtiff as used by GIMP's TIFF plug-in (GPL-3.0-or-later).
 
 /**
- * Predictor 2 — horizontal differencing, undone in increasing order. Additions wrap in
+ * Predictor 2 - horizontal differencing, undone in increasing order. Additions wrap in
  * the sample width, which is exactly what the encoder relied on.
  *
  * @param data   one decompressed block, `rows` rows of `width * channels` samples
@@ -74,7 +74,7 @@ export function undoHorizontalPredictor(
 }
 
 /**
- * Predictor 3 — floating point. The encoder split every sample into byte planes (all the
+ * Predictor 3 - floating point. The encoder split every sample into byte planes (all the
  * high-order bytes of a row first, then the next, …) and byte-differenced the result. So
  * the decoder accumulates the byte differences, then re-interleaves the planes back into
  * floats.

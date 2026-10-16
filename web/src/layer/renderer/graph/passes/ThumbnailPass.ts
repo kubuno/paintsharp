@@ -1,4 +1,4 @@
-// Layer thumbnails on the GPU — the fix for goulet G2.
+// Layer thumbnails on the GPU - the fix for goulet G2.
 //
 // WHAT IS BEING REPLACED
 // ----------------------
@@ -13,7 +13,7 @@
 //   * built by repeated 2x2 box reduction from the coarsest LOD the layer
 //     already has, so the source is a few thousand texels, not the document;
 //   * reduction done in LINEAR PREMULTIPLIED space, where averaging is correct
-//     by construction — averaging sRGB darkens, averaging straight alpha leaves
+//     by construction - averaging sRGB darkens, averaging straight alpha leaves
 //     a dark halo, and the current code does both;
 //   * the readback is ASYNCHRONOUS (PBO + fence), 64 KiB;
 //   * marked dirty by tile invalidation, never by React.
@@ -50,7 +50,7 @@ export class ThumbnailPass {
 
   /**
    * Render the thumbnail and return the target. The caller reads it back
-   * asynchronously — this method never blocks.
+   * asynchronously - this method never blocks.
    */
   render(req: ThumbnailRequest): RenderTargetLike | null {
     const prog = this.device.program('graph/thumbnail', VERT_QUAD, FRAG_THUMBNAIL)
@@ -65,7 +65,7 @@ export class ThumbnailPass {
     this.device.clear(0, 0, 0, 0)
 
     // Source: the coarsest LOD available. If the layer has no tiles at all the
-    // thumbnail is legitimately empty — that is a transparent layer.
+    // thumbnail is legitimately empty - that is a transparent layer.
     const src = req.tiles
       .map((k) => (req.layerId ? this.source.tileAt(req.layerId, k) : null))
       .find((t): t is WebGLTexture => !!t)

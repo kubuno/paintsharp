@@ -9,7 +9,7 @@
 //   - the keyboard handler, generated FROM the menus instead of duplicating them
 //                                        → `collectAccelerators()`
 //
-// Rendering always goes through `MenuDropdown` from `@ui` — never a hand-rolled
+// Rendering always goes through `MenuDropdown` from `@ui` - never a hand-rolled
 // floating div. Checked state is a real boolean, never a "✓ " string prefix.
 //
 // This file is additive: `ui/menus.ts`, `ui/MenuBar.tsx` and `ui/ContextMenu.tsx`
@@ -26,7 +26,7 @@ import type { WorkspaceMenuItem } from '@kubuno/sdk'
 export type MenuItemId = string
 
 export interface MenuItemBase {
-  /** Stable id — required on anything actionable. */
+  /** Stable id - required on anything actionable. */
   id?: MenuItemId
   /** Already-translated label. Callers pass t('...'), never a raw key. */
   label: string
@@ -251,7 +251,7 @@ export interface ToWorkspaceOptions {
   indent?: string
 }
 
-const CHECK_ON = '✓ '   // "✓ " — legacy bridge only, see comment below
+const CHECK_ON = '✓ '   // "✓ " - legacy bridge only, see comment below
 const CHECK_OFF = '  '  // figure space: same advance width, no label shift
 
 /**
@@ -277,14 +277,14 @@ export function toWorkspaceMenuItems(nodes: MenuNode[], opts: ToWorkspaceOptions
           out.push('sep')
           break
         case 'heading':
-          out.push({ label: `${pad}— ${n.label} —`, disabled: true })
+          out.push({ label: `${pad}- ${n.label} -`, disabled: true })
           break
         case 'custom':
           // No inline widgets in the legacy bar; the entry is simply skipped.
           break
         case 'submenu': {
           const disabled = forcedDisabled || !!n.disabled
-          out.push({ label: `${pad}— ${n.label} —`, disabled: true })
+          out.push({ label: `${pad}- ${n.label} -`, disabled: true })
           if (depth + 1 > maxDepth) {
             out.push({ label: `${pad}${indent}…`, disabled: true })
           } else {
@@ -414,7 +414,7 @@ export interface AcceleratorEventLike {
   metaKey?: boolean
 }
 
-/** Canonical accelerator for a keyboard event — the lookup key into the map
+/** Canonical accelerator for a keyboard event - the lookup key into the map
  *  returned by `collectAccelerators()`. */
 export function acceleratorFromEvent(e: AcceleratorEventLike): string {
   const mods: string[] = []

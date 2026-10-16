@@ -31,7 +31,7 @@
 // calls it and nothing else.
 //
 //
-// WORKING SPACE — and the one place the blend space is decided
+// WORKING SPACE - and the one place the blend space is decided
 // ------------------------------------------------------------
 // Storage and composition are LINEAR, PREMULTIPLIED, RGBA16F (spec 09 §4.1 /
 // §4.4). Two consequences the passes below rely on: reducing coverage is a
@@ -59,14 +59,14 @@
 // The decision is NARROW, and the narrowness is the whole point:
 //
 //   * evaluated in sRGB-encoded space:  ONLY the blend function B(Cb, Cs)
-//   * evaluated in linear space:        EVERYTHING else — Porter-Duff alpha
+//   * evaluated in linear space:        EVERYTHING else - Porter-Duff alpha
 //     composition, coverage, opacity, fill, group resolution, interpolation,
 //     gradients, 2x2 LOD and thumbnail reduction
 //
 // Concretely, per fragment: un-premultiply to linear, encode to sRGB, apply B,
 // decode back to linear, then compose in linear premultiplied. The alpha
 // algebra never sees an sRGB value, which is what keeps the fix for the missing
-// `as*(1-ab)*Cs` term intact — that term is pure composition and does not go
+// `as*(1-ab)*Cs` term intact - that term is pure composition and does not go
 // through B() at all.
 //
 // Two invariants follow, and both are asserted by the GPU tests:
@@ -83,7 +83,7 @@ import type { BlendMode } from '../../blend/index.ts'
 
 /**
  * Space in which the blend function B(Cb, Cs) is evaluated. Composition is
- * linear in BOTH cases — this only ever selects how B sees its inputs.
+ * linear in BOTH cases - this only ever selects how B sees its inputs.
  */
 export type BlendSpace = 'linear' | 'srgb-encoded'
 
@@ -110,15 +110,15 @@ void main() {
 }`
 
 /**
- * sRGB transfer functions, exact (spec 09 §4.3) — never `pow(c, 2.2)`: the
+ * sRGB transfer functions, exact (spec 09 §4.3) - never `pow(c, 2.2)`: the
  * error on the linear segment near black is several 8-bit codes and shows in
  * the shadows.
  *
  * NaN hazard, and why the `max()` is not decoration: `mix()` evaluates BOTH
  * arms, so a `pow(negative, 2.4)` in the arm that `step()` discards still
  * produces a NaN, and `mix(a, NaN, 0.0)` is `a + 0*(NaN - a)` = NaN. Blend
- * functions legitimately leave [0,1] — `color-burn` returns large negatives by
- * construction — so `srgbToLinear` WILL be handed negative values on the
+ * functions legitimately leave [0,1] - `color-burn` returns large negatives by
+ * construction - so `srgbToLinear` WILL be handed negative values on the
  * Photoshop-parity path. Clamping the `pow` argument keeps the discarded arm
  * finite while the linear arm (`c / 12.92`) still carries negatives through
  * with their sign, which is what the overshoot-preserving RGBA16F stack wants.
@@ -153,7 +153,7 @@ vec4 ditherStore(vec4 c) {
 
 /**
  * Coverage: the algebraic collapse of ORDER steps 4, 5 and 7 into one scalar.
- * Density attenuates how much a mask can HIDE, never how much it reveals —
+ * Density attenuates how much a mask can HIDE, never how much it reveals -
  * `m' = 1 - (1 - m) * density` (spec 08 §3.1).
  */
 const GLSL_COVERAGE = `
@@ -184,8 +184,8 @@ float coverageAt(vec2 uv) {
 
 /**
  * `fill` (ORDER step 6, content half). Two regimes:
- *   uFillMode 0 — scale alpha: the ordinary case.
- *   uFillMode 1 — interpolate the source colour toward the mode's neutral
+ *   uFillMode 0 - scale alpha: the ordinary case.
+ *   uFillMode 1 - interpolate the source colour toward the mode's neutral
  *                 colour, leaving alpha alone. This is what Photoshop does for
  *                 the dodge/burn/light/difference family, and it is the only
  *                 way "fill 50 % + Color Dodge" matches (spec 08 §5.3).
@@ -205,7 +205,7 @@ vec4 applyFill(vec4 premul) {
 }`
 
 /**
- * Composition wrapper — the ONLY place the blend space is applied.
+ * Composition wrapper - the ONLY place the blend space is applied.
  *
  * The alpha algebra and the three colour terms below are transcribed from
  * `GLSL_COMPOSITE` in `layer/blend/glsl.ts`, which is the reference. The single
@@ -237,7 +237,7 @@ BlendPixel graphComposite(int mode, int compOp, vec3 cbP, float ab, vec3 csP, fl
   vec3 Cb = blendUnpremul(cbP, ab);
   vec3 Cs = blendUnpremul(csP, as);
 
-  // B(Cb, Cs) — the ONLY step affected by the blend space.
+  // B(Cb, Cs) - the ONLY step affected by the blend space.
   // normal / dissolve / pass-through short-circuit to Cs, so they are provably
   // identical in both spaces: encode followed by decode is the identity.
   vec3 B = (mode == M_NORMAL || mode == M_DISSOLVE || mode == M_PASS_THROUGH)
@@ -323,7 +323,7 @@ out vec4 fragColor;
 void main() {
   vec4 src = texture(uSrc, vUv);
 
-  src = applyFill(src);                        // (6) fill — content only
+  src = applyFill(src);                        // (6) fill - content only
   src *= coverageAt(vUv) * uOpacity;           // (4)(5)(7) coverage, (6) opacity
 
   if (uMode == M_DISSOLVE) {
@@ -340,7 +340,7 @@ void main() {
     outc = src;
   } else {
     // (9) blend mode + the full three-term PDF composition.
-    // NOTE: an if/else, not a ternary — GLSL forbids the ternary operator on
+    // NOTE: an if/else, not a ternary - GLSL forbids the ternary operator on
     // struct types (ANGLE rejects it outright).
     vec4 base = texture(uBase, vUv);
     BlendPixel o;
@@ -421,7 +421,7 @@ void main() {
   fragColor = vec4(a, a, a, a);
 }`
 
-/** Straight copy — seeds a `backdrop` group register, and blits registers. */
+/** Straight copy - seeds a `backdrop` group register, and blits registers. */
 export const FRAG_BLIT = `#version 300 es
 precision highp float;
 uniform sampler2D uSrc;
@@ -467,7 +467,7 @@ void main() {
  * Adjustment layer. Reads the accumulator, un-premultiplies, runs the LUT,
  * re-premultiplies. The composite operator is `clip-to-backdrop`: alpha is
  * preserved exactly (`ar = ab`), so an adjustment can never add or remove
- * opacity — which is what makes it a no-op over empty canvas.
+ * opacity - which is what makes it a no-op over empty canvas.
  */
 export const FRAG_ADJUST = `#version 300 es
 precision highp float;
@@ -509,7 +509,7 @@ void main() {
 }`
 
 /**
- * GPU thumbnail reduction — the fix for goulet G2.
+ * GPU thumbnail reduction - the fix for goulet G2.
  *
  * Today a 44x32 thumbnail is produced by a synchronous full-document
  * `readPixels` (64 MiB per thumbnail, 1.88 GiB for 30 layers, with a measured

@@ -1,4 +1,4 @@
-// EmbedShell — a bare drop-in replacement for EditorShell (WorkspaceShell) used
+// EmbedShell - a bare drop-in replacement for EditorShell (WorkspaceShell) used
 // when a Paintsharp editor is mounted *inside* another editor (e.g. Keyframe draws
 // a cel with the real Apex/Layer editor). WorkspaceShell is a singleton-ish host
 // chrome that cannot be nested (a second instance renders nothing), so embedded

@@ -1,4 +1,4 @@
-// Declarative description of the Layer editor toolbox — the CONTRACT every other
+// Declarative description of the Layer editor toolbox - the CONTRACT every other
 // file in `layer/tools/` and every consumer in `LayerEditorPage` reads.
 //
 // Nothing here renders: this module only describes tools, families and their
@@ -63,7 +63,7 @@ export type FamilyId =
   | 'eraser' | 'fill' | 'focus' | 'tone' | 'pen'
   | 'text' | 'pathsel' | 'shape' | 'navigate' | 'zoom'
 
-/** Delivery priority of a tool — drives what ships first, not the rendering. */
+/** Delivery priority of a tool - drives what ships first, not the rendering. */
 export type ToolPriority = 'P0' | 'P1' | 'P2'
 
 /**
@@ -130,13 +130,13 @@ export interface ToolOptionBase {
   priority: OptionPriority
   /** Hidden when the predicate returns false (e.g. pattern picker unless source = pattern). */
   visibleIf?: (v: ToolValues) => boolean
-  /** Greyed out but still visible — discoverability beats a disappearing control. */
+  /** Greyed out but still visible - discoverability beats a disappearing control. */
   disabledIf?: (v: ToolValues) => boolean
   /** i18n key of the tooltip shown on the control. */
   help?: string
   /** Optional fixed width (px) for the rendered control. */
   width?: number
-  /** Suffix rendered after the value (`%`, `px`, `°`…) — free text, not an i18n key. */
+  /** Suffix rendered after the value (`%`, `px`, `°`…) - free text, not an i18n key. */
   unit?: string
 }
 
@@ -157,7 +157,7 @@ export type ToolOption =
   | (ToolOptionBase & { kind: 'readout'; read: ReadoutId })
   | (ToolOptionBase & { kind: 'popover'; items: ToolOption[] })
 
-/** Discriminant of `ToolOption` — handy for exhaustive switches in renderers. */
+/** Discriminant of `ToolOption` - handy for exhaustive switches in renderers. */
 export type ToolOptionKind = ToolOption['kind']
 
 /** Kinds that hold no value of their own (nothing to seed in `ToolValues`). */
@@ -225,7 +225,7 @@ export interface RailFamily extends ToolFamily {
 export interface ToolboxState {
   /** Active tool. */
   tool: ToolId
-  /** Last tool used per family — what the family button shows and selects. */
+  /** Last tool used per family - what the family button shows and selects. */
   lastPerFam: Partial<Record<FamilyId, ToolId>>
   /** Per-tool option values, so each tool finds its settings back next session. */
   values: Partial<Record<ToolId, ToolValues>>

@@ -1,8 +1,8 @@
-// Étage 3 — the composition graph.
+// Étage 3 - the composition graph.
 //
 // It owns exactly two things: a compiled `PassPlan`, and the register file that
 // executes it for one tile. It knows nothing about tiling policy (which tiles,
-// in what order, at what LOD — that is étage 2) and nothing about React.
+// in what order, at what LOD - that is étage 2) and nothing about React.
 //
 // The scale change against the current implementation is here. Today
 // `compositeInto` allocates a ping-pong pair of DOCUMENT-SIZED framebuffers per
@@ -54,7 +54,7 @@ export interface CompositeGraphOptions {
   allowHardwareBlend?: boolean
   /**
    * Space in which B(Cb, Cs) is evaluated. Default: Photoshop parity
-   * (sRGB-encoded). Composition is linear in both cases — see the arbitration
+   * (sRGB-encoded). Composition is linear in both cases - see the arbitration
    * note at the top of `graph/shaders.ts`.
    */
   blendSpace?: BlendSpace
@@ -63,7 +63,7 @@ export interface CompositeGraphOptions {
 }
 
 export interface BuildResult {
-  /** The register holding the finished tile — always register 0. */
+  /** The register holding the finished tile - always register 0. */
   target: RenderTargetLike
   stats: PassStats
   /** Ops actually executed for this tile, after specialisation. */
@@ -173,7 +173,7 @@ export class CompositeGraph {
   /**
    * Two tiles that keep the same set of ops share a specialised plan. The
    * signature is the bitmask of surviving ops, built from bbox intersections
-   * only — no GL, no allocation beyond the string.
+   * only - no GL, no allocation beyond the string.
    */
   private signature(rect: Rect): string {
     let s = ''

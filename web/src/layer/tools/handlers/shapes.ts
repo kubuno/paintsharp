@@ -1,7 +1,7 @@
 // Shape family (F18) and the gradient tool (F12) of the Layer editor.
 //
 // ── Attribution ──────────────────────────────────────────────────────────────
-// The gradient geometry — the five Photoshop shapes — is a TypeScript
+// The gradient geometry - the five Photoshop shapes - is a TypeScript
 // re-implementation of GIMP's gradient operation:
 //   app/operations/gimpoperationgradient.c  (`gradient_calc_*_factor`,
 //                                            `gradient_dither_pixel`)
@@ -77,7 +77,7 @@ export interface ShapeOptions {
   opacity: number
   /** Rounded-rectangle corner radius. */
   cornerRadius: number
-  /** The plain rectangle's own corner radius — 0 by default, unlike `rrect`. */
+  /** The plain rectangle's own corner radius - 0 by default, unlike `rrect`. */
   rectRadius: number
   /** Regular polygon: 3…100 sides. */
   sides: number
@@ -121,7 +121,7 @@ export function setShapeOptions(patch: Partial<ShapeOptions>): void {
   shapeOpts = { ...shapeOpts, ...patch }
 }
 
-/** Resets both option sets — used by the tests and by "reset tool". */
+/** Resets both option sets - used by the tests and by "reset tool". */
 export function resetShapeToolOptions(): void {
   gradientOpts = { ...DEFAULT_GRADIENT }
   shapeOpts = { ...DEFAULT_SHAPE }
@@ -289,7 +289,7 @@ function addSpan(cov: Float32Array, base: number, w: number, xa: number, xb: num
 
 /**
  * Anti-aliased coverage of `polys` over `rect`, non-zero winding.
- * Returns one float per pixel in 0…1 — 0 outside, 1 fully inside, anything in
+ * Returns one float per pixel in 0…1 - 0 outside, 1 fully inside, anything in
  * between on an edge. `aa = false` snaps to a hard 0/1 test (a 1-sample mask).
  */
 export function rasterizePolys(polys: readonly Polygon[], rect: Rect, aa = true): Float32Array {
@@ -606,7 +606,7 @@ export function customPoly(r: Rect, id: string): Polygon[] {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Gradient — GIMP-derived factor functions
+// Gradient - GIMP-derived factor functions
 //
 // `dist` is the gradient length, `(x, y)` the pixel offset from the start
 // point, `offset` the ramp's dead zone in percent (0 for the Photoshop tool).
@@ -623,7 +623,7 @@ export function calcLinearFactor(dist: number, vx: number, vy: number, offset: n
   return (rat - off) / (1 - off)
 }
 
-/** Photoshop "reflected" — GIMP's bilinear. */
+/** Photoshop "reflected" - GIMP's bilinear. */
 export function calcBilinearFactor(dist: number, vx: number, vy: number, offset: number, x: number, y: number): number {
   if (dist === 0) return 0
   const off = offset / 100
@@ -643,7 +643,7 @@ export function calcRadialFactor(dist: number, offset: number, x: number, y: num
   return (rat - off) / (1 - off)
 }
 
-/** Photoshop "diamond" — GIMP's square: the Chebyshev metric. */
+/** Photoshop "diamond" - GIMP's square: the Chebyshev metric. */
 export function calcSquareFactor(dist: number, offset: number, x: number, y: number): number {
   if (dist === 0) return 0
   const off = offset / 100
@@ -653,7 +653,7 @@ export function calcSquareFactor(dist: number, offset: number, x: number, y: num
   return (rat - off) / (1 - off)
 }
 
-/** Photoshop "angle" — GIMP's asymmetric conical: one full turn around the start. */
+/** Photoshop "angle" - GIMP's asymmetric conical: one full turn around the start. */
 export function calcConicalAsymFactor(dist: number, ax: number, ay: number, offset: number, x: number, y: number): number {
   if (dist === 0) return 0
   if (x === 0 && y === 0) return 0.5
@@ -770,7 +770,7 @@ export function buildRamp(
     const alpha = transparency ? a.a + (b.a - a.a) * t : 1
     let r: number, g: number, bl: number
     if (lin) {
-      // Interpolate in linear light, then return to sRGB — no dark band in the
+      // Interpolate in linear light, then return to sRGB - no dark band in the
       // middle of complementary ramps.
       r = toSrgb(toLinear(a.r) + (toLinear(b.r) - toLinear(a.r)) * t)
       g = toSrgb(toLinear(a.g) + (toLinear(b.g) - toLinear(a.g)) * t)
@@ -1297,7 +1297,7 @@ registerTool('shape-polygon', makeShapeTool('polygon'))
 registerTool('shape-line', makeShapeTool('line'))
 registerTool('shape-custom', makeShapeTool('custom'))
 
-/** Handlers this file owns — handy for the integrator's smoke tests. */
+/** Handlers this file owns - handy for the integrator's smoke tests. */
 export const SHAPE_TOOL_IDS: readonly ToolId[] = [
   'gradient', 'shape-rect', 'shape-rrect', 'shape-ellipse', 'shape-polygon', 'shape-line', 'shape-custom',
 ]

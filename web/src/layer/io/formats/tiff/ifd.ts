@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// TIFF / BigTIFF IFD reader — written ONCE and reused three ways (spec 05 §4.1, §6.2):
+// TIFF / BigTIFF IFD reader - written ONCE and reused three ways (spec 05 §4.1, §6.2):
 //   * the TIFF decoder (each IFD is a page),
 //   * the EXIF parser (an EXIF block *is* a small TIFF file),
 //   * the RAW/DNG sniffer's IFD0 peek.
@@ -8,7 +8,7 @@
 // Robustness rules, from the specification and from GIMP's tolerance of real-world files
 // (plug-ins/file-tiff/file-tiff-load.c has a dedicated `is_non_conformant_tiff`;
 // GPL-3.0-or-later, Copyright (C) 1995-2025 Spencer Kimball, Peter Mattis and the GIMP
-// developers — reimplemented in TypeScript, no code copied):
+// developers - reimplemented in TypeScript, no code copied):
 //   * an unknown field type does NOT fail the IFD: the entry is skipped with a warning,
 //   * an offset outside the file does NOT fail the IFD: same treatment,
 //   * IFD chains are cycle-checked and page-capped (a classic TIFF denial-of-service).
@@ -285,7 +285,7 @@ export class IfdReader {
 }
 
 // ---------------------------------------------------------------------------
-// Value accessors — all tolerant: a missing or wrongly-typed tag returns the default
+// Value accessors - all tolerant: a missing or wrongly-typed tag returns the default
 // rather than throwing, which is what real files require.
 // ---------------------------------------------------------------------------
 

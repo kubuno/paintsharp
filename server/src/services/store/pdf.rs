@@ -315,7 +315,7 @@ pub async fn source_of(db: &DbPool, id: Uuid, owner: Uuid) -> Result<Option<(Opt
     }
 }
 
-/// open_by_file: an already-known document for this Drive file — either the
+/// open_by_file: an already-known document for this Drive file - either the
 /// native `.kbpdf` (`file_id`) or a raw PDF already imported (`source_file_id`).
 pub async fn find_for_file(db: &DbPool, file_id: Uuid, owner: Uuid) -> Result<Option<Uuid>> {
     Ok(db

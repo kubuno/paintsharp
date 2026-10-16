@@ -2,8 +2,8 @@
  * Adobe descriptor parser (spec §6).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * licensed under the GNU General Public License v3 or later — `parse_descriptor()`,
- * `load_descriptor()`, `load_type()`, `load_key()` in psd-util.c — and from
+ * licensed under the GNU General Public License v3 or later - `parse_descriptor()`,
+ * `load_descriptor()`, `load_type()`, `load_key()` in psd-util.c - and from
  * Adobe's public "Photoshop File Formats Specification".
  *
  * This is an independent TypeScript re-implementation; no GIMP source code was
@@ -33,7 +33,7 @@ export function readKey(r: ByteReader): string {
  *
  * Throws `PsdError` on malformed data (unknown OSType, runaway nesting, EOF);
  * callers wrap the whole additional block so a single corrupt layer style can
- * never abort an import — they simply seek to the block's declared end and
+ * never abort an import - they simply seek to the block's declared end and
  * report `malformed-block-skipped`.
  */
 export function readDescriptor(r: ByteReader, depth = 0): Descriptor {
@@ -69,7 +69,7 @@ export function readValue(r: ByteReader, depth: number): DescriptorValue {
         throw new PsdError('DESCRIPTOR_MALFORMED', { listCount: count })
       }
       const list: DescriptorValue[] = []
-      // List items carry no key — just an OSType and a value.
+      // List items carry no key - just an OSType and a value.
       for (let i = 0; i < count; i++) list.push(readValue(r, depth + 1))
       return { t: 'list', items: list }
     }

@@ -124,7 +124,7 @@ async function decodeLevel(
     const row = (i / nCols) | 0
     const x = col * XCF_TILE_SIZE
     const y = row * XCF_TILE_SIZE
-    // Edge tiles are SMALLER than 64×64 — the single most common third-party bug.
+    // Edge tiles are SMALLER than 64×64 - the single most common third-party bug.
     const tw = Math.min(XCF_TILE_SIZE, width - x)
     const th = Math.min(XCF_TILE_SIZE, height - y)
     if (tw <= 0 || th <= 0) continue

@@ -1,4 +1,4 @@
-// Layer editor command registry — the single place where a menu entry id is
+// Layer editor command registry - the single place where a menu entry id is
 // bound to real behaviour.
 //
 // Menu DEFINITIONS (`menuDefs.ts`, `contextMenus.ts`) are pure data: they only
@@ -54,7 +54,7 @@ const NUM_OPS: Record<string, (a: number, b: number) => boolean> = {
  * Tiny boolean expression compiler over the flag vocabulary.
  * Grammar: `or := and ('||' and)*`, `and := unary ('&&' unary)*`,
  * `unary := '!' unary | primary`, `primary := '(' or ')' | ident [op number]`.
- * No property access, no calls, no `eval` — it only reads the flags record.
+ * No property access, no calls, no `eval` - it only reads the flags record.
  */
 export function compilePredicate(expr: string): Predicate {
   const src = expr.trim()
@@ -157,7 +157,7 @@ export interface CommandDefinition<C extends MenuContext = MenuContext> {
   labelKey?: string
   /** French fallback passed as `defaultValue` while the key is untranslated. */
   labelFallback?: string
-  /** Dynamic label — wins over `labelKey`. This is how a label stops lying:
+  /** Dynamic label - wins over `labelKey`. This is how a label stops lying:
    *  "Ajouter un masque" / "Supprimer le masque" are decided from state. */
   label?: (ctx: C) => string
   /** Canonical accelerator; a menu entry may still display its own. */
@@ -288,7 +288,7 @@ export class CommandRegistry<C extends MenuContext = MenuContext> {
     return this
   }
 
-  /** Bulk form — `registerAll({ 'layer.new': { run, labelKey }, … })`. */
+  /** Bulk form - `registerAll({ 'layer.new': { run, labelKey }, … })`. */
   registerAll(defs: Record<MenuItemId, CommandDefinition<C>>): this {
     for (const [id, def] of Object.entries(defs)) this.commands.set(id, def)
     return this

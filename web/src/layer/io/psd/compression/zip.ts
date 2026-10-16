@@ -2,7 +2,7 @@
  * PSD/PSB zlib (ZIP) compression, on top of the native Compression Streams API.
  *
  * The surrounding format handling was derived from the GIMP PSD plug-in
- * (file-psd), Copyright 2007 John Marshall, GPLv3+ — the `PSD_COMP_ZIP` branch
+ * (file-psd), Copyright 2007 John Marshall, GPLv3+ - the `PSD_COMP_ZIP` branch
  * of psd-load.c (~l. 5306-5342). Independent TypeScript re-implementation; no
  * GIMP source was copied. Kubuno is AGPLv3.
  *
@@ -17,7 +17,7 @@ type ZlibFormat = 'deflate' | 'deflate-raw'
 /**
  * ⚠️ In the Compression Streams spec, `'deflate'` means zlib (RFC 1950) and
  * `'deflate-raw'` means bare deflate (RFC 1951). PSD stores zlib streams, so
- * `'deflate'` is the correct choice — this is the classic mistake.
+ * `'deflate'` is the correct choice - this is the classic mistake.
  */
 const ZLIB: ZlibFormat = 'deflate'
 const RAW: ZlibFormat = 'deflate-raw'
@@ -42,7 +42,7 @@ function looksLikeZlib(src: Uint8Array): boolean {
  * Inflates a zlib stream, stopping as soon as `expectedLen` bytes are produced.
  *
  * The output buffer is pre-allocated at exactly `expectedLen`, which is derived
- * from the channel geometry and never from the file's own length fields — that
+ * from the channel geometry and never from the file's own length fields - that
  * is the zip-bomb protection: a 4 GB expansion simply gets truncated.
  *
  * Falls back to raw deflate when the payload does not carry a zlib header and

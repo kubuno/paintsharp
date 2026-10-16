@@ -19,7 +19,7 @@ const NO_LOCKS: LayerLocks = {
  * Locks as they actually apply, ancestors included.
  *
  * A locked GROUP propagates `all` and `position` down; the other locks do not
- * propagate (a group with locked pixels does not stop you painting a child —
+ * propagate (a group with locked pixels does not stop you painting a child -
  * Photoshop parity).
  */
 export function effectiveLocks(tree: readonly Layer[], id: LayerId): LayerLocks {
@@ -52,7 +52,7 @@ export function can(tree: readonly Layer[], id: LayerId, cap: LockCapability): b
     case 'move':
     case 'transform': return !l.position
     case 'reparent': return !l.nesting
-    // Masks stay editable under a pixel lock — Photoshop parity.
+    // Masks stay editable under a pixel lock - Photoshop parity.
     case 'delete': case 'reorder': case 'rename': case 'changeProps': case 'editMask':
       return true
   }

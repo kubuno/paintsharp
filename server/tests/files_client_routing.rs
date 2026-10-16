@@ -9,7 +9,7 @@
 //! exist (404 as soon as a file was read or written).
 //!
 //! The test starts a stand-in core on a free port, configures the module the way
-//! the core's supervisor does (`KUBUNO_CORE_URL` only — it never sets a files
+//! the core's supervisor does (`KUBUNO_CORE_URL` only - it never sets a files
 //! URL) and checks that the client built from that configuration lands on the
 //! relay, with the module's secret.
 

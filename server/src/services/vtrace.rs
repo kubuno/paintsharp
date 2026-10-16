@@ -2,7 +2,7 @@
 //!
 //! The clustering/curve-fitting pipeline below is vendored from VTracer
 //! (https://github.com/visioncortex/vtracer, © Tsang Hao Fung, MIT/Apache-2.0)
-//! so this module only depends on the `visioncortex` crate — the `vtracer`
+//! so this module only depends on the `visioncortex` crate - the `vtracer`
 //! wrapper crate drags in clap 2 and image 0.23, which we don't want. File I/O
 //! and CLI parts were dropped; the SVG serialisation was reworked to emit a
 //! plain <svg> body the frontend importer turns into editable shapes.
@@ -28,7 +28,7 @@ pub enum Hierarchical {
     Cutout,
 }
 
-/// Converter config — same knobs and defaults as VTracer's.
+/// Converter config - same knobs and defaults as VTracer's.
 #[derive(Debug, Clone)]
 pub struct Config {
     pub color_mode: ColorMode,

@@ -12,7 +12,7 @@
 //     early exit rather than a full min/max scan.
 //  3. TRANSPARENCY ON UNCHANGED PIXELS inside that rectangle, with the frame
 //     drawn 'over'. Long runs of one index make LZW (or deflate) build long
-//     strings very quickly — the win far exceeds the mere area reduction.
+//     strings very quickly - the win far exceeds the mere area reduction.
 //
 //  4. ARBITRATION when transparency is not enough. "Keep what was there" and
 //     "be transparent" are the same encoding, so a format with only binary
@@ -161,7 +161,7 @@ function buildRect(rect: Rect, target: RgbaImage, state: RgbaImage, diffTranspar
         t[src + 2] === s[src + 2] &&
         t[src + 3] === s[src + 3]
       ) {
-        continue // stays 0,0,0,0 — "keep what is below"
+        continue // stays 0,0,0,0 - "keep what is below"
       }
       out[dst] = t[src]
       out[dst + 1] = t[src + 1]
@@ -222,7 +222,7 @@ export function diffRect(a: RgbaImage, b: RgbaImage, w: number, h: number): Rect
   return { x: left, y: top, w: right - left + 1, h: bottom - top + 1 }
 }
 
-/** Bounding box of pixels that must LOSE opacity — the case 'over' cannot express. */
+/** Bounding box of pixels that must LOSE opacity - the case 'over' cannot express. */
 function erasureBox(state: RgbaImage, target: RgbaImage, w: number, h: number): Rect | null {
   const s = state.data
   const t = target.data

@@ -2,7 +2,7 @@
 //
 // A pass does ONE thing to ONE register, for ONE tile. It never allocates a
 // document-sized surface, never reads back synchronously, and never looks at
-// the layer tree — it only sees the op it was handed.
+// the layer tree - it only sees the op it was handed.
 
 import type {
   GLDeviceLike,
@@ -35,7 +35,7 @@ export const newPassStats = (): PassStats => ({
  * The pair is what makes non-separable blend modes possible in WebGL2: there is
  * no `EXT_shader_framebuffer_fetch`, so a mode that must READ the backdrop has
  * to read one texture and write another. The point of the tiling stage is that
- * this ping-pong now costs 256x256 instead of a full document — 512 KiB instead
+ * this ping-pong now costs 256x256 instead of a full document - 512 KiB instead
  * of 64 MiB in 4K, per level of group nesting.
  *
  * The second half of a pair is allocated lazily: a register that only ever sees
@@ -69,7 +69,7 @@ export class RegisterFile {
     return t
   }
 
-  /** Promote the scratch half to current. O(1) — it is a pointer swap. */
+  /** Promote the scratch half to current. O(1) - it is a pointer swap. */
   swap(i: Reg): void {
     const f = this.front[i]
     this.front[i] = this.back[i]
@@ -104,7 +104,7 @@ export interface PassContext {
   dither: boolean
   /**
    * Space in which B(Cb, Cs) is evaluated. Composition stays linear either way
-   * — see the arbitration note at the top of `graph/shaders.ts`.
+   * - see the arbitration note at the top of `graph/shaders.ts`.
    */
   blendSpace: BlendSpace
   /**

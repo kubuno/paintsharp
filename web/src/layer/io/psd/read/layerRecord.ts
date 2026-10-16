@@ -3,8 +3,8 @@
  * (spec §4.1, §4.6, §4.7, §4.8, §5.1).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * licensed under the GNU General Public License v3 or later — `read_layer_info()`
- * in psd-load.c and `get_layer_resource_header()` in psd-layer-res-load.c — and
+ * licensed under the GNU General Public License v3 or later - `read_layer_info()`
+ * in psd-load.c and `get_layer_resource_header()` in psd-layer-res-load.c - and
  * from Adobe's public "Photoshop File Formats Specification".
  *
  * This is an independent TypeScript re-implementation; no GIMP source code was
@@ -120,7 +120,7 @@ function normaliseRect(rect: PsdRect, ctx: ReadCtx): PsdRect {
  *
  * We do NOT branch on `length === 20 / 36`: like GIMP we subtract progressively,
  * which survives the non-conformant files that exist in the wild. The `rem >= 18`
- * test for the "real mask" block is a documented heuristic — with every
+ * test for the "real mask" block is a documented heuristic - with every
  * parameter flag set, the parameter block would also exceed 18 bytes.
  */
 export function readLayerMask(r: ByteReader, ctx: ReadCtx): PsdMask | null {

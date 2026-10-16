@@ -171,7 +171,7 @@ export interface BaseElement {
   // rebuilt automatically from its source on every change.
   symOf?:  string
   symIdx?: number
-  // Legacy flat grouping — migrated to `parentId` + a `group` element on load.
+  // Legacy flat grouping - migrated to `parentId` + a `group` element on load.
   groupId?: string
   // Hierarchical layers: id of the containing `group` element (omitted = root).
   parentId?: string | null
@@ -184,7 +184,7 @@ export interface GroupElement extends BaseElement {
   // Layers-panel UI state: whether the folder is collapsed.
   collapsed?: boolean
   // Clipping mask (Illustrator semantics): the group's TOPMOST child is the
-  // mask — it is not painted, and everything else in the group is clipped to
+  // mask - it is not painted, and everything else in the group is clipped to
   // its shape(s).
   clipped?:  boolean
 }
@@ -205,7 +205,7 @@ export interface SymmetryElement extends BaseElement {
 export interface RectElement extends BaseElement {
   type:         'rect'
   cornerRadius: number
-  // Independent per-corner radii [TL, TR, BR, BL] — overrides cornerRadius.
+  // Independent per-corner radii [TL, TR, BR, BL] - overrides cornerRadius.
   corners?:     [number, number, number, number]
 }
 
@@ -303,7 +303,7 @@ export interface LayerStructureItem {
   // groups
   expanded?: boolean
   children?: LayerStructureItem[]
-  // Pixels (PNG data URL) — contenu raster persisté dans le fichier .kblay.
+  // Pixels (PNG data URL) - contenu raster persisté dans le fichier .kblay.
   data?:      string
   mask_data?: string
 }

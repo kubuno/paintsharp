@@ -1,4 +1,4 @@
-// Pixelate family — mosaic, colour halftone, halftone pattern, fragment.
+// Pixelate family - mosaic, colour halftone, halftone pattern, fragment.
 //
 // The shared machinery is a CELL AVERAGE pass: the layer is rendered into a
 // ceil(w/cell) × ceil(h/cell) target where every texel is the alpha-weighted
@@ -8,7 +8,7 @@
 // Sampling note: the cell average loops at most 16 samples per axis. For a cell
 // of 16 px or less (the default is 12) the average is EXACT; above that it is a
 // regular 16×16 stratified estimate, which is invisible for a mosaic and keeps
-// the shader cost bounded — the CPU version was O(cell²) per cell.
+// the shader cost bounded - the CPU version was O(cell²) per cell.
 
 import { fragmentShader } from './glsl/common'
 import type { GpuPass, ParamValues } from './types'

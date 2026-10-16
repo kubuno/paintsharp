@@ -254,7 +254,7 @@ function indicesToRgba(
     let d = y * w * 4
     for (let x = 0; x < w; x++, s++, d += 4) {
       const idx = indices[s]
-      // A transparent index outside the palette is still transparent — that is
+      // A transparent index outside the palette is still transparent - that is
       // what browsers do, and throwing here would reject valid-looking files.
       if (idx === transparentIndex) continue
       if (idx < palSize && palette) {

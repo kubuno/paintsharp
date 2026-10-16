@@ -1,7 +1,7 @@
 // Multi-stage filters built by chaining passes that already exist.
 //
 // The legacy catalogue implemented these by calling one CPU filter on the
-// output of another — each stage allocating a full RGBA copy of the layer.
+// output of another - each stage allocating a full RGBA copy of the layer.
 // Here they are pass lists: the intermediates stay on the GPU, in the texture
 // pool, and never cross the bus.
 //

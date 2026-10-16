@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Format registry — SHARED, FROZEN CONTRACT (spec 05 §7).
+// Format registry - SHARED, FROZEN CONTRACT (spec 05 §7).
 //
 // Three specs write against this file: 05 (fixed raster), 06 (animated formats) and
 // 07 (exotic formats). Its shape is the coordination point between them, so it is
-// complete from day one — including the members this module does not use yet — and must
+// complete from day one - including the members this module does not use yet - and must
 // not be reshaped afterwards. Additions are allowed only as new *optional* members.
 //
 // Golden rule: this file and every descriptor import NO codec statically. A descriptor
@@ -36,7 +36,7 @@ export interface ByteSource {
   readonly size: number
   /** Cached, coalesced range reads. `end` is exclusive. */
   slice(start: number, end: number): Promise<Uint8Array>
-  /** Whole content — only for formats that genuinely need it. */
+  /** Whole content - only for formats that genuinely need it. */
   all(): Promise<Uint8Array>
 }
 
@@ -44,7 +44,7 @@ export interface IoContext {
   /** 0..1; the UI shows a determinate progress bar. Called at most ~30×/s. */
   onProgress?(fraction: number, stage?: string): void
   readonly signal?: AbortSignal
-  /** Non-fatal problems. Never throw for these — collect and report. */
+  /** Non-fatal problems. Never throw for these - collect and report. */
   warn(w: IoWarning): void
 }
 
@@ -152,10 +152,10 @@ export interface FormatDescriptor<O extends FormatOptions = FormatOptions> {
    *
    * Returns a CONFIDENCE, not a boolean: several descriptors legitimately match the same
    * signature (TIFF vs CR2 vs DNG vs NEF). Convention (§7.2):
-   *   1.0 — exclusive signature (`\x89PNG`, `#?RADIANCE`)
-   *   0.9 — shared signature where we are the more specific claimant (CR2/NEF: extra tags checked)
-   *   0.6 — shared signature where we are the generic fallback (plain TIFF)
-   *   0.0 — no match
+   *   1.0 - exclusive signature (`\x89PNG`, `#?RADIANCE`)
+   *   0.9 - shared signature where we are the more specific claimant (CR2/NEF: extra tags checked)
+   *   0.6 - shared signature where we are the generic fallback (plain TIFF)
+   *   0.0 - no match
    * The registry keeps the maximum; ties are broken by the extension.
    */
   sniff(head: Uint8Array, filename?: string): number
@@ -170,7 +170,7 @@ export interface FormatDescriptor<O extends FormatOptions = FormatOptions> {
   /** Full decode. Runs inside a worker. */
   read?(source: ByteSource, opts: ReadOptions, ctx: IoContext): Promise<DecodedFile>
 
-  /** Encode. Runs inside a worker. Returns a Blob — never a data URL (§8.1). */
+  /** Encode. Runs inside a worker. Returns a Blob - never a data URL (§8.1). */
   write?(input: EncodeInput, opts: O, ctx: IoContext): Promise<Blob>
 
   /** Declarative description of the export dialog (§9). */

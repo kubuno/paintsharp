@@ -1,8 +1,8 @@
 /*
- * PSD/PSB Image Data writer — the flattened composite (spec §8.6).
+ * PSD/PSB Image Data writer - the flattened composite (spec §8.6).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * GPLv3+ — `save_data()` in psd-export.c — and from Adobe's public "Photoshop
+ * GPLv3+ - `save_data()` in psd-export.c - and from Adobe's public "Photoshop
  * File Formats Specification". Independent TypeScript re-implementation; no
  * GIMP source was copied. Kubuno is AGPLv3.
  */
@@ -61,7 +61,7 @@ export function isFullyOpaque(pixels: Uint8Array, width: number, height: number)
 /**
  * CPU fallback composite.
  *
- * Used only when the caller supplies none — the editor normally hands over the
+ * Used only when the caller supplies none - the editor normally hands over the
  * WebGL composite, which already honours the 24 blend modes, fill opacity,
  * masks and clipping. This fallback is deliberately simple: bottom-up
  * source-over with layer opacity, ignoring blend modes and clipping. It exists

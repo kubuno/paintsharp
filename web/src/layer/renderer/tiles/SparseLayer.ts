@@ -64,7 +64,7 @@ export interface SparseLayerStats {
   tiles: number
   emptyTiles: number
   residentBytes: number
-  /** What a document-sized texture would cost — the number we are beating. */
+  /** What a document-sized texture would cost - the number we are beating. */
   denseBytes: number
   /** residentBytes / denseBytes. */
   ratio: number
@@ -124,7 +124,7 @@ export class SparseLayer {
     return this.tilesById.size * this.bytesPerTile
   }
 
-  /** VRAM a document-sized texture would take — the baseline sparsity beats. */
+  /** VRAM a document-sized texture would take - the baseline sparsity beats. */
   get denseBytes(): number {
     const bpt = this.bytesPerTile / (this.tileSize * this.tileSize)
     return this.docWidth * this.docHeight * bpt
@@ -191,7 +191,7 @@ export class SparseLayer {
   // ── Growth ────────────────────────────────────────────────────────────────
 
   /**
-   * Allocate the tile at (tx,ty) if needed — this is the automatic extension
+   * Allocate the tile at (tx,ty) if needed - this is the automatic extension
    * path: painting outside the currently allocated area simply creates tiles.
    * Indices are clamped to the packed-id range (14 bits per axis).
    */
@@ -240,7 +240,7 @@ export class SparseLayer {
 
   /**
    * Write `pixels` into `rect` (document space), splitting the upload per tile.
-   * `pixels === null` uploads nothing and only allocates — used when the pixels
+   * `pixels === null` uploads nothing and only allocates - used when the pixels
    * will be produced on the GPU by a later pass.
    *
    * When `opts.transparent` is set, tiles fully covered by `rect` are flagged as

@@ -3,7 +3,7 @@
 // EXIF parsing and serialisation (spec 05 §6.2).
 //
 // The crucial fact: an EXIF block IS a complete little TIFF file (`II`/`MM` header plus
-// chained IFDs). The IFD reader written for the TIFF decoder is therefore reused as-is —
+// chained IFDs). The IFD reader written for the TIFF decoder is therefore reused as-is -
 // that is the whole architectural argument for this layer: the IFD walk exists once.
 
 import { IfdReader, readTiffHeader, tagNumber, type Ifd } from '../formats/tiff/ifd'
@@ -69,7 +69,7 @@ function toExifIfd(ifd: Ifd): ExifIfd {
 
 /**
  * Parses a standalone EXIF block (JPEG APP1 payload, PNG `eXIf` chunk, WebP `EXIF`
- * chunk). Returns `null` for anything that is not a readable TIFF structure — EXIF is
+ * chunk). Returns `null` for anything that is not a readable TIFF structure - EXIF is
  * decorative, so a broken block must never abort an import.
  */
 export function parseExif(block: Uint8Array): ExifData | null {
@@ -161,7 +161,7 @@ export function exifString(ifd: ExifIfd | undefined, tag: number): string | unde
 }
 
 /**
- * EXIF orientation, 1..8. Returns 1 when absent or out of range — an invalid value must
+ * EXIF orientation, 1..8. Returns 1 when absent or out of range - an invalid value must
  * never rotate a picture in an unpredictable way.
  */
 export function exifOrientation(data: ExifData | undefined): number {
@@ -201,7 +201,7 @@ export interface SerializeExifOptions {
   readonly stripThumbnail?: boolean
   /** Privacy default: GPS is removed unless explicitly kept (spec 05 §6.7). */
   readonly keepGps?: boolean
-  /** Tags to overwrite in IFD0 — `Orientation: 1` after baking the rotation in. */
+  /** Tags to overwrite in IFD0 - `Orientation: 1` after baking the rotation in. */
   readonly overrideIfd0?: ReadonlyMap<number, number>
   /** Prepends `Exif\0\0`, as JPEG APP1 requires. TIFF/PNG want it off. */
   readonly withPrefix?: boolean

@@ -33,7 +33,7 @@ export interface FlatEntry {
   parentId: LayerId | null
 }
 
-/** Depth-first, top-of-stack first — i.e. the order the panel displays. */
+/** Depth-first, top-of-stack first - i.e. the order the panel displays. */
 export function flatten(tree: readonly Layer[]): FlatEntry[] {
   const out: FlatEntry[] = []
   const walkList = (list: readonly Layer[], prefix: number[], depth: number, parentId: LayerId | null) => {
@@ -252,7 +252,7 @@ export interface ClippingRun {
  *
  * The whole run composites as ONE unit: the aggregate is clipped to the base's
  * alpha and then blended with the BASE's blend mode and opacity. Blending each
- * clipped layer individually — what the current editor does — gives a different
+ * clipped layer individually - what the current editor does - gives a different
  * result as soon as the base is not in Normal (gap E11).
  */
 export function clippingRuns(siblings: readonly Layer[]): ClippingRun[] {
@@ -361,7 +361,7 @@ export function nextDefaultName(tree: readonly Layer[], prefix: string): string 
   return `${prefix} ${max + 1}`
 }
 
-/** `"<name> copie"`, then `"<name> copie 2"`, ... — never colliding. */
+/** `"<name> copie"`, then `"<name> copie 2"`, ... - never colliding. */
 export function copyName(tree: readonly Layer[], name: string): string {
   const taken = new Set<string>()
   walk(tree, l => { taken.add(l.name) })

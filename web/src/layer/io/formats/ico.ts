@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// ICO / CUR decoder and encoder (spec 05 §3.3) — multi-image by nature.
+// ICO / CUR decoder and encoder (spec 05 §3.3) - multi-image by nature.
 //
 // `ImageDecoder` refuses `image/x-icon` outright (measured). `<img>` does display .ico
 // files, but it picks ONE sub-image by an opaque heuristic and exposes neither the other
-// sizes, nor the bit depths, nor the AND mask. Unusable — hence a full decoder.
+// sizes, nor the bit depths, nor the AND mask. Unusable - hence a full decoder.
 //
 // The per-entry PNG-vs-BMP detection, the doubled `biHeight` and the AND-mask rules are
 // derived from GIMP's ICO plug-in (plug-ins/file-ico/ico-load.c, ico-export.c). GIMP is
@@ -212,7 +212,7 @@ export interface IcoEncodeOptions {
 
 /**
  * Writes an ICO/CUR from already-sized pages. Resampling to the size set is the caller's
- * job (spec 05 §8.4) — the encoder never invents pixels.
+ * job (spec 05 §8.4) - the encoder never invents pixels.
  */
 export async function encodeIco(
   pages: readonly RasterImage[],

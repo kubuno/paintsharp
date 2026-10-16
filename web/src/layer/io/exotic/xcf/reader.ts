@@ -12,7 +12,7 @@
 import { ByteReader } from '../../formats/reader'
 import { ImportError } from '../errors'
 
-/** GIMP's MAX_XCF_STRING_LEN — a length field above this means the file is corrupt. */
+/** GIMP's MAX_XCF_STRING_LEN - a length field above this means the file is corrupt. */
 export const MAX_XCF_STRING_LEN = 16 * 1024 * 1024
 
 /**

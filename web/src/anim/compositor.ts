@@ -15,7 +15,7 @@
 //  4. GIF disposal 0 ("unspecified") behaves exactly like 1 ("do not dispose").
 //     Reading it as "restore to background" is a very common bug.
 //  5. Every emitted frame must be a COPY of the canvas. Emitting the canvas
-//     itself makes all frames alias one buffer — the single most frequent bug
+//     itself makes all frames alias one buffer - the single most frequent bug
 //     in home-grown decoders, and it looks correct until you keep two frames.
 //  6. The 'previous' snapshot is taken before EACH frame, never cached across
 //     frames: two consecutive 'previous' frames must each restore their own
@@ -24,7 +24,7 @@
 //     behaviour), not an error.
 //  8. A frame rectangle may overrun the logical screen in malformed files: clip
 //     it, never grow the canvas. And emitted frames are always logical-screen
-//     sized — the offset is absorbed by compositing, never leaked to callers.
+//     sized - the offset is absorbed by compositing, never leaked to callers.
 //
 // Plus the rule the APNG spec states and GIF leaves implicit: 'previous' on the
 // very first frame behaves as 'background'. Identical outcome here anyway,
@@ -131,7 +131,7 @@ export function drawFrame(canvas: RgbaImage, frame: AnimFrame, clipped: Rect): v
  * full-size buffers are ever live (canvas, snapshot, emitted copy), so a
  * 200-frame 1080p animation costs ~25 MB here instead of 1.66 GB.
  *
- * The caller decides what to keep — that decision does not belong to a codec.
+ * The caller decides what to keep - that decision does not belong to a codec.
  */
 export function* compositeIter(doc: AnimDoc): Generator<RgbaImage, void, undefined> {
   const w = Math.max(1, doc.width | 0)
@@ -173,7 +173,7 @@ export function* compositeIter(doc: AnimDoc): Generator<RgbaImage, void, undefin
   }
 }
 
-/** Convenience wrapper. Materialises every frame — mind the memory (§6.5). */
+/** Convenience wrapper. Materialises every frame - mind the memory (§6.5). */
 export function composite(doc: AnimDoc): RgbaImage[] {
   return [...compositeIter(doc)]
 }

@@ -1,7 +1,7 @@
-// Blur family — a real separable Gaussian, plus box, directional, radial and
+// Blur family - a real separable Gaussian, plus box, directional, radial and
 // average (reduction) blurs.
 //
-// What this replaces: `layerFilters.boxBlur3` — three box iterations on CPU
+// What this replaces: `layerFilters.boxBlur3` - three box iterations on CPU
 // Float32Arrays, 512 MiB of transient allocation on a 4000×4000 document, and
 // `r = max(1, round(radius/3))` which silently ignores any radius below 4.5 px.
 // Three boxes only converge to a Gaussian asymptotically; the error is visible
@@ -169,7 +169,7 @@ void main() { fragColor = texture(uSrc, vUv); }
 export const UPSAMPLE_FRAG = DOWNSAMPLE_FRAG
 
 /**
- * Radial blur — spin (rotation) and zoom (scale) about the layer centre.
+ * Radial blur - spin (rotation) and zoom (scale) about the layer centre.
  * Ports `layerFilters.radialBlur` (12 point samples on CPU) with the same
  * geometry, plus: adaptive sample count and a hashed offset dither that removes
  * the concentric banding visible at low sample counts.

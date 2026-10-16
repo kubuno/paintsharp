@@ -1,4 +1,4 @@
-// The rendering façade — étage 1.
+// The rendering façade - étage 1.
 //
 // ZERO REACT. Zero DOM beyond the canvas it was handed. No HTTP, no `layerApi`,
 // no undo/redo, no `.kblay`, no i18n, no `@ui`, no tools, no keyboard. The
@@ -6,7 +6,7 @@
 // plus invalidation rectangles.
 //
 //
-// WHY THIS FILE EXISTS — goulet G5
+// WHY THIS FILE EXISTS - goulet G5
 // --------------------------------
 // Today the GPU layer calls `setThumbNonce` from inside `writeTex`. Painting a
 // stroke therefore re-renders the entire React editor at the input rate:
@@ -22,7 +22,7 @@
 // This façade enforces it structurally:
 //
 //   * the engine owns ONE rAF loop and nothing else in the app may schedule a
-//     frame — N invalidations between two frames cost exactly one frame;
+//     frame - N invalidations between two frames cost exactly one frame;
 //   * the only outward channel is an event bus (`on(type, cb)`), and the events
 //     that a naive subscriber could turn into a `setState` are RATE-CAPPED by
 //     the engine itself: `'thumbnails'` is debounced 150 ms and capped at 4 per
@@ -87,7 +87,7 @@ export interface FrameStats {
   registerSwaps: number
   hardwareBlends: number
   gpuBytesResident: number
-  /** > 0 means a frame was missed. The honest metric — never smoothed. */
+  /** > 0 means a frame was missed. The honest metric - never smoothed. */
   budgetOverrunMs: number
 }
 
@@ -108,7 +108,7 @@ export interface RendererOptions {
   /**
    * Space in which the blend function is evaluated. Default: Photoshop parity
    * (`'srgb-encoded'`). `'linear'` gives the physically-correct rendering of
-   * spec 09 §4.1 — the switch exists for a future HDR mode and is live in both
+   * spec 09 §4.1 - the switch exists for a future HDR mode and is live in both
    * directions. Alpha composition is linear either way.
    */
   blendSpace?: BlendSpace
@@ -117,14 +117,14 @@ export interface RendererOptions {
   maxTilesPerFrame?: number
   /** Thumbnail debounce, ms. Default 150. */
   thumbnailDebounceMs?: number
-  /** Thumbnails refreshed per frame. Default 4 — the G5 rate cap. */
+  /** Thumbnails refreshed per frame. Default 4 - the G5 rate cap. */
   thumbnailsPerFrame?: number
   /** Start the rAF loop on creation. Off in tests, which drive `render()`. */
   autoStart?: boolean
 }
 
 export interface RendererDeps {
-  /** Étage 4. Returns null when WebGL2 is unavailable — never throws for that. */
+  /** Étage 4. Returns null when WebGL2 is unavailable - never throws for that. */
   createDevice(canvas: HTMLCanvasElement): GLDeviceLike | null
   /** Étage 2. */
   createDirtyRegion(width: number, height: number): DirtyRegionLike
@@ -262,7 +262,7 @@ export class Renderer {
     this.schedule()
   }
 
-  /** Structural update only — cheaper than `setDocument`, keeps tiles warm. */
+  /** Structural update only - cheaper than `setDocument`, keeps tiles warm. */
   setLayerTree(tree: LayerNode[]): void {
     if (this.disposed) return
     this.doc = { ...this.doc, tree }
@@ -295,7 +295,7 @@ export class Renderer {
   // ── Pixels ────────────────────────────────────────────────────────────────
 
   /**
-   * Upload pixels into a layer. Marks the rect dirty — and NOTHING else. The
+   * Upload pixels into a layer. Marks the rect dirty - and NOTHING else. The
    * frame comes from the rAF loop, which is the whole of the G1 fix: today this
    * call chain ends in a synchronous full recomposite.
    */
@@ -344,7 +344,7 @@ export class Renderer {
     return this.graph.buildTile(key, dirty)
   }
 
-  /** Resolves when every dirty tile has been rebuilt — the test hook. */
+  /** Resolves when every dirty tile has been rebuilt - the test hook. */
   settled(): Promise<void> {
     if (this.disposed || !this.dirty.isDirty()) return Promise.resolve()
     return new Promise<void>((resolve) => {
@@ -574,7 +574,7 @@ export class Renderer {
   /**
    * The G5 rate cap, in one place. Debounced 150 ms and capped at N per frame,
    * so a subscriber that naively calls `setState` on `'thumbnails'` still
-   * cannot produce 60 renders a second — the engine will not emit that often.
+   * cannot produce 60 renders a second - the engine will not emit that often.
    */
   private pumpThumbnails(t: number): void {
     if (this.thumbDirty.size === 0 || this.thumbInFlight) return
@@ -613,7 +613,7 @@ export class Renderer {
   // ── Context loss ──────────────────────────────────────────────────────────
 
   private readonly onContextLost = (e: Event): void => {
-    // Without `preventDefault()` the context is never restored — this listener
+    // Without `preventDefault()` the context is never restored - this listener
     // is missing entirely today (defect F11).
     e.preventDefault()
     this.emit({ type: 'context-lost' })

@@ -2,12 +2,12 @@
 //
 // SVG rasterisation, shared between the Paintsharp sub-modules (spec 07 §7.1-7.2).
 //
-// Placement note: Apex, PdfWriter and Layer are sub-modules of ONE module — one git
+// Placement note: Apex, PdfWriter and Layer are sub-modules of ONE module - one git
 // repository, one `package.json`, one build, one `entry.ts`, one port. The "never import
 // across modules" rule of CLAUDE.md §7 governs boundaries between REPOSITORIES; sharing
 // inside `paintsharp/frontend/src/` is ordinary internal reuse, and duplicating this file
 // is exactly the anti-pattern that rule exists to prevent. What stays forbidden is
-// reaching into another sub-module's components, state or routes — hence this neutral
+// reaching into another sub-module's components, state or routes - hence this neutral
 // `shared/` home rather than an import of `ApexEditorPage.tsx`.
 //
 // The rasteriser is the browser itself: no library is needed, and an SVG drawn through
@@ -42,7 +42,7 @@ export class SvgParseError extends Error {
   }
 }
 
-/** Used when a document declares neither size nor viewBox — nothing better exists. */
+/** Used when a document declares neither size nor viewBox - nothing better exists. */
 const FALLBACK_SIZE = 1024
 
 /**
@@ -97,7 +97,7 @@ function parseViewBox(raw: string | null): { width: number; height: number } | u
  *
  * `createImageBitmap(svgBlob)` is NOT used: several engines (Safari in particular) reject
  * SVG there. `new Image()` + `decode()` + `drawImage` is the path that works everywhere,
- * at the cost of requiring a DOM — which is fine, since rasterisation is a main-thread
+ * at the cost of requiring a DOM - which is fine, since rasterisation is a main-thread
  * operation anyway.
  */
 export async function rasterizeSvg(

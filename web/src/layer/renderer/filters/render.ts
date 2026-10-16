@@ -1,4 +1,4 @@
-// Render family — procedural generators (clouds, fibers, lens flare).
+// Render family - procedural generators (clouds, fibers, lens flare).
 //
 // These filters SYNTHESISE pixels, so there is no CPU reference to match bit
 // for bit: the legacy versions seed a JS LCG and fill a lattice in raster

@@ -16,7 +16,7 @@ export interface Chromaticities {
   readonly wy: number
 }
 
-/** CIE XYZ triplet (D50-relative in ICC, D65 elsewhere — the carrier says which). */
+/** CIE XYZ triplet (D50-relative in ICC, D65 elsewhere - the carrier says which). */
 export interface XYZ {
   readonly x: number
   readonly y: number
@@ -70,7 +70,7 @@ export interface IccProfile {
 }
 
 /**
- * TIFF/EXIF field types (shared with the TIFF IFD reader — spec 05 §4.1).
+ * TIFF/EXIF field types (shared with the TIFF IFD reader - spec 05 §4.1).
  * A frozen object rather than a `const enum`: esbuild/Vite cannot inline cross-module
  * const enums under isolated-modules transpilation.
  */

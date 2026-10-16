@@ -1,5 +1,5 @@
 /*
- * Adobe descriptor serialiser (spec §6.5) — the exact mirror of read.ts.
+ * Adobe descriptor serialiser (spec §6.5) - the exact mirror of read.ts.
  *
  * Derived from Adobe's public "Photoshop File Formats Specification" and from
  * the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall, GPLv3+.

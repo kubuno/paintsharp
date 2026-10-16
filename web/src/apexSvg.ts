@@ -3,11 +3,11 @@
  *
  * Apex works on an internal `VectorPageData` model (rect/ellipse/path/text +
  * fills/strokes/gradients). These functions convert that model from/to standard
- * SVG, so `.svg` files can be opened, edited and saved again — Apex's canvas
+ * SVG, so `.svg` files can be opened, edited and saved again - Apex's canvas
  * renderer already maps 1:1 onto the SVG primitives.
  *
- * Known model ceilings (not parser gaps): Apex has no transform matrix — an
- * element is an axis-aligned bbox plus a rotation scalar — so shear/skew from an
+ * Known model ceilings (not parser gaps): Apex has no transform matrix - an
+ * element is an axis-aligned bbox plus a rotation scalar - so shear/skew from an
  * imported matrix() bakes into the bbox. There is no clip/mask/pattern/filter
  * primitive, so those tags are dropped on import.
  */
@@ -92,7 +92,7 @@ function strokeAttrs(s: StrokeStyle | null): string {
 }
 
 // Apex stores canvas composite names, which are also the CSS mix-blend-mode
-// keywords — except 'source-over', canvas's word for "no blending".
+// keywords - except 'source-over', canvas's word for "no blending".
 function blendAttr(el: BaseElement): string {
   const b = el.blend
   if (!b || b === 'normal' || b === 'source-over') return ''
@@ -271,7 +271,7 @@ function gradToFill(g: Element, grads: GradMap): FillStyle | null {
   if (tag === 'radialgradient') return { type: 'radial-gradient', stops }
   if (tag !== 'lineargradient') return null
   // Percentages, plain fractions and userSpaceOnUse lengths all give a usable
-  // direction — only the angle survives into the model anyway.
+  // direction - only the angle survives into the model anyway.
   const len = (v: string | null, d: number) => {
     if (v == null) return d
     const n = v.trim().endsWith('%') ? parseFloat(v) / 100 : parseFloat(v)
@@ -369,7 +369,7 @@ function attrOrStyle(el: Element, name: string, sm: Record<string, string>): str
   return sm[name] ?? el.getAttribute(name)
 }
 
-// Text width via real font metrics — the old `fontSize · length · 0.5` guess
+// Text width via real font metrics - the old `fontSize · length · 0.5` guess
 // misplaced right/centre-anchored imports by half a word.
 let _measureCtx: CanvasRenderingContext2D | null = null
 function measureLine(text: string, fontSize: number, family: string, weight: number, italic: boolean): number {
@@ -550,7 +550,7 @@ function parsePathD(d: string): { points: PathPoint[]; closed: boolean } {
       cx = x; cy = y
     } else if (C === 'Z') {
       // Many exporters (ours included) draw the closing segment explicitly and
-      // THEN close — leaving a duplicate of the subpath's first anchor. Fold it
+      // THEN close - leaving a duplicate of the subpath's first anchor. Fold it
       // back in (its incoming handle moves onto the start anchor), otherwise a
       // round-trip grows every closed subpath by one anchor.
       const first = pts[subIdx], last = pts[pts.length - 1]
@@ -566,14 +566,14 @@ function parsePathD(d: string): { points: PathPoint[]; closed: boolean } {
 }
 
 // True when a transform maps the axes onto themselves (translate/scale/flip only).
-// If it doesn't — rotation, skew — a rect or ellipse can no longer be expressed in
+// If it doesn't - rotation, skew - a rect or ellipse can no longer be expressed in
 // Apex's axis-aligned bbox model, so the caller emits an exact path instead.
 function axisAligned(tf: (p: { x: number; y: number }) => { x: number; y: number }): boolean {
   const o = tf({ x: 0, y: 0 }), ux = tf({ x: 1, y: 0 }), uy = tf({ x: 0, y: 1 })
   return Math.abs(ux.y - o.y) < 1e-6 && Math.abs(uy.x - o.x) < 1e-6
 }
 
-// Circle/ellipse as four cubic quadrants — the classic kappa approximation.
+// Circle/ellipse as four cubic quadrants - the classic kappa approximation.
 const KAPPA = 0.5522847498307936
 function ellipsePoints(cx: number, cy: number, rx: number, ry: number): PathPoint[] {
   const kx = rx * KAPPA, ky = ry * KAPPA

@@ -111,7 +111,7 @@ pub fn build(state: AppState) -> Router {
         .route("/health", get(health::health))
         .nest("/", authed)
         // Imported fonts (FontEditor) and other rich documents can weigh several
-        // MB of JSON — raise axum's 2 MB default body cap.
+        // MB of JSON - raise axum's 2 MB default body cap.
         .layer(DefaultBodyLimit::max(64 * 1024 * 1024))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())

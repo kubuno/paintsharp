@@ -1,7 +1,7 @@
-// Native TrueType (.ttf) writer for FontEditor projects — no dependency.
+// Native TrueType (.ttf) writer for FontEditor projects - no dependency.
 // Converts the editor's cubic Bézier contours to quadratic ones (adaptive
 // splitting) and emits the sfnt tables: cmap(4), glyf, head, hhea, hmtx, loca,
-// maxp, name, OS/2, post — plus an old-style `kern` table when the project has
+// maxp, name, OS/2, post - plus an old-style `kern` table when the project has
 // kerning pairs (something the CFF/OTF export path cannot carry).
 import type { FontContour, FontData } from './api'
 import { flattenContour, normalizeWindings, reverseContour, segmentControls } from './fontGeometry'
@@ -70,7 +70,7 @@ function contourToQuadPoints(contour: FontContour, tol: number): QPoint[] {
     const quads = cubicToQuads([a.x, a.y], c1, c2, [b.x, b.y], tol)
     for (let q = 0; q < quads.length; q++) {
       pts.push({ x: Math.round(quads[q].cx), y: Math.round(quads[q].cy), on: false })
-      // The last quad's end point IS the next anchor — pushed by the next loop turn.
+      // The last quad's end point IS the next anchor - pushed by the next loop turn.
       if (q < quads.length - 1) pts.push({ x: Math.round(quads[q].x), y: Math.round(quads[q].y), on: true })
     }
   }
@@ -122,7 +122,7 @@ interface TtfGlyph {
 }
 
 function prepGlyph(unicode: number, advance: number, cubic: FontContour[], tol: number): TtfGlyph {
-  // TrueType winding: outer contours CLOCKWISE (y-up) — the inverse of CFF.
+  // TrueType winding: outer contours CLOCKWISE (y-up) - the inverse of CFF.
   const contours = normalizeWindings(cubic.filter(c => c.length >= 2))
     .map(reverseContour)
     .map(c => contourToQuadPoints(c, tol))
@@ -415,7 +415,7 @@ export function buildTtf(data: FontData): ArrayBuffer {
     { tag: 'post', data: post.bytes() },
   ]
 
-  // kern — only pairs whose two glyphs made it into the font.
+  // kern - only pairs whose two glyphs made it into the font.
   const kernPairs = (data.kerning ?? [])
     .filter(k => gidOf.has(k.left) && gidOf.has(k.right) && Math.round(k.value) !== 0)
     .map(k => ({ l: gidOf.get(k.left)!, r: gidOf.get(k.right)!, v: Math.round(k.value) }))

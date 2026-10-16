@@ -1,7 +1,7 @@
 // F09 "stamp" and F10 "history" tool families: clone stamp, pattern stamp,
 // history brush and art history brush.
 //
-// ATTRIBUTION — the clone stamp's source/offset semantics are modelled on GIMP
+// ATTRIBUTION - the clone stamp's source/offset semantics are modelled on GIMP
 // (GNU Image Manipulation Program), `app/paint/gimpclone.c` and
 // `app/paint/gimpsourcecore.c`, GPLv3+, © Spencer Kimball, Peter Mattis and the
 // GIMP contributors. The dab scattering of the art history brush follows the
@@ -15,7 +15,7 @@
 // so spacing, hardness, opacity/flow, selection, locks, history and preview are
 // written once.
 //
-// PAINTING MODEL — a stroke never writes to the layer while it is in progress:
+// PAINTING MODEL - a stroke never writes to the layer while it is in progress:
 // dabs accumulate into an off-document "paint" buffer (straight RGBA whose alpha
 // is the stroke coverage) that is shown live through `ctx.setPreview`. At
 // pointer-up the buffer is composited over the layer in ONE pass, with the
@@ -56,7 +56,7 @@ function hexToRgb(hex: string, def: Rgb): Rgb {
   return def
 }
 
-/** Deterministic PRNG (Mulberry32) — reproducible strokes make the tool testable. */
+/** Deterministic PRNG (Mulberry32) - reproducible strokes make the tool testable. */
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0
   return () => {
@@ -68,7 +68,7 @@ function mulberry32(seed: number): () => number {
   }
 }
 
-/** Positive modulo — JS `%` keeps the sign of the dividend, tiling does not want that. */
+/** Positive modulo - JS `%` keeps the sign of the dividend, tiling does not want that. */
 const pmod = (v: number, m: number): number => ((v % m) + m) % m
 
 interface BBox { x0: number; y0: number; x1: number; y1: number }
@@ -83,7 +83,7 @@ interface BBox { x0: number; y0: number; x1: number; y1: number }
  * foreground/background instead of being hardcoded.
  *
  * The four built-ins below are placeholders until a real pattern library (loaded
- * from `.pat` files or the document's own pattern set) exists — `registerPattern`
+ * from `.pat` files or the document's own pattern set) exists - `registerPattern`
  * is the seam it will plug into, and nothing else in this file knows the list.
  */
 export interface PatternDef {
@@ -259,7 +259,7 @@ export const STAMP_STRINGS = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * LIMITATION — `ToolContext` gives no read access to the undo stack, so the
+ * LIMITATION - `ToolContext` gives no read access to the undo stack, so the
  * history brushes cannot travel through the document's real history the way
  * Photoshop's history palette does. What they do instead is: the first time a
  * stroke starts on a layer, the layer's pixels are snapshotted, and every later
@@ -269,7 +269,7 @@ export const STAMP_STRINGS = {
  *
  * The snapshot is refreshed when the document geometry changes (it would no
  * longer line up) and can be re-armed on demand by the editor through
- * `captureHistorySnapshot` / `clearHistorySnapshots` — which is where a real
+ * `captureHistorySnapshot` / `clearHistorySnapshots` - which is where a real
  * history-state picker would plug in later.
  */
 interface Snapshot { px: Uint8Array; w: number; h: number }
@@ -313,7 +313,7 @@ type Sampler = (x: number, y: number, out: Uint8Array) => boolean
 type PaintMode =
   /** Coverage grows toward the opacity ceiling; the colour is position-fixed. */
   | 'constant'
-  /** Each dab composites over the previous ones — used by the art history brush. */
+  /** Each dab composites over the previous ones - used by the art history brush. */
   | 'incremental'
 
 interface StrokeInit {
@@ -332,7 +332,7 @@ class Stroke {
   readonly layerId: string
   private readonly docW: number
   private readonly docH: number
-  /** Layer pixels as of pointer-down — the undo payload, and the commit base. */
+  /** Layer pixels as of pointer-down - the undo payload, and the commit base. */
   readonly orig: Uint8Array
   /** Accumulated paint, straight RGBA; alpha is the stroke coverage. */
   private readonly paint: Uint8Array
@@ -350,7 +350,7 @@ class Stroke {
   private lastX = 0
   private lastY = 0
   private carry = 0
-  /** Scratch RGBA handed to the sampler — avoids one allocation per pixel. */
+  /** Scratch RGBA handed to the sampler - avoids one allocation per pixel. */
   private readonly rgba = new Uint8Array(4)
   /** Off-document canvas mirroring `paint`, used only for the overlay preview. */
   private previewCanvas: HTMLCanvasElement | null = null
@@ -405,7 +405,7 @@ class Stroke {
     if (d <= inner) return 1
     if (r - inner <= 1e-6) return 1
     const t = 1 - (d - inner) / (r - inner)
-    return t * t * (3 - 2 * t)      // smoothstep — softer than a linear ramp
+    return t * t * (3 - 2 * t)      // smoothstep - softer than a linear ramp
   }
 
   /** Stamps a single dab centred on (cx, cy). `scale` weights its alpha, 0..1. */
@@ -574,7 +574,7 @@ class Stroke {
     const w = x1 - x0, h = y1 - y0
     if (w <= 0 || h <= 0) return false
 
-    // History BEFORE any pixel is written — `orig` was read at pointer-down and
+    // History BEFORE any pixel is written - `orig` was read at pointer-down and
     // the layer has not been touched since, so the payload is the pre-stroke state.
     ctx.pushUndoRect(this.layerId, this.orig, { x0, y0, x1, y1 })
 
@@ -639,7 +639,7 @@ function makePreview(ctx: ToolContext, spec: PreviewSpec): (g: CanvasRenderingCo
       g.save()
       g.transform(m[0], m[1], m[2], m[3], m[4], m[5])
       g.imageSmoothingEnabled = scale < 1
-      try { g.drawImage(spec.stroke, 0, 0) } catch { /* canvas not ready — skip this frame */ }
+      try { g.drawImage(spec.stroke, 0, 0) } catch { /* canvas not ready - skip this frame */ }
       g.restore()
     }
 
@@ -686,9 +686,9 @@ function makePreview(ctx: ToolContext, spec: PreviewSpec): (g: CanvasRenderingCo
  *  - Alt+click stores the source anchor and re-arms `firstStroke`.
  *  - ALIGNED (`options.cloneAligned`, the default): the offset is computed at
  *    the FIRST stroke after the anchor was set and then never changes, so every
- *    later stroke keeps cloning the same region — GIMP's `GIMP_SOURCE_ALIGN_YES`.
+ *    later stroke keeps cloning the same region - GIMP's `GIMP_SOURCE_ALIGN_YES`.
  *  - NON-ALIGNED: the offset is recomputed at each pointer-down, so every stroke
- *    restarts from the anchor — GIMP's `GIMP_SOURCE_ALIGN_NO` (which restores
+ *    restarts from the anchor - GIMP's `GIMP_SOURCE_ALIGN_NO` (which restores
  *    `orig_src` at the end of each stroke; recomputing at the start is the same
  *    thing seen from the other side).
  */
@@ -743,7 +743,7 @@ function refresh(ctx: ToolContext, cursor: { x: number; y: number } | null): voi
 
 const cloneStamp: ToolHandler = {
   onDown(ctx, p) {
-    // Alt+click sets the source and paints nothing — same gate as GIMP's
+    // Alt+click sets the source and paints nothing - same gate as GIMP's
     // `set_source` branch in `gimp_source_core_paint`.
     if (p.altKey) {
       clone.anchor = { x: Math.floor(p.x), y: Math.floor(p.y) }
@@ -921,7 +921,7 @@ const historyBrush: ToolHandler = {
 /**
  * Style presets. `len` scales the configured stroke length, `curl` is how much a
  * flick bends per dab (radians) and `jitter` how far the flick's starting point
- * wanders off the pointer path — the scattering idea comes from GIMP's
+ * wanders off the pointer path - the scattering idea comes from GIMP's
  * `gimp_paintbrush_paint` jitter, retuned for short painterly touches.
  */
 const ART_STYLES: Record<ArtStyle, { len: number; curl: number; jitter: number }> = {
@@ -968,7 +968,7 @@ function artFlick(ctx: ToolContext, st: ArtState, stroke: Stroke, x: number, y: 
   if (ca === 0) return                       // nothing recorded there → no touch
 
   // Tolerance: only pixels whose CURRENT colour is far enough from the snapshot
-  // get repainted. Photoshop's rule — with a high tolerance an untouched layer
+  // get repainted. Photoshop's rule - with a high tolerance an untouched layer
   // shows nothing, because nothing differs from the source state yet.
   const tol2 = st.tol2
   const orig = st.orig
@@ -1051,7 +1051,7 @@ registerTool('pattern-stamp', patternStamp)
 registerTool('history-brush', historyBrush)
 registerTool('art-history-brush', artHistoryBrush)
 
-/** Test/integration surface — the editor never needs these to run the tools. */
+/** Test/integration surface - the editor never needs these to run the tools. */
 export const __stampInternals = { cloneStamp, patternStamp, historyBrush, artHistoryBrush }
 
 // `ToolPointer` is part of the public shape of the handlers above; re-exporting

@@ -19,7 +19,7 @@ export interface SniffInput {
   readonly head: Uint8Array
   /** Last 18 bytes, for the TGA footer. Optional. */
   readonly tail?: Uint8Array
-  /** File name — used ONLY to disambiguate byte-identical containers. */
+  /** File name - used ONLY to disambiguate byte-identical containers. */
   readonly name?: string
   readonly size?: number
 }
@@ -54,7 +54,7 @@ function result(id: SniffedFormatId, container: ContainerKind, confidence = 1): 
 }
 
 // ---------------------------------------------------------------------------
-// Individual signatures — each is exported so a FormatDescriptor can reuse it.
+// Individual signatures - each is exported so a FormatDescriptor can reuse it.
 // ---------------------------------------------------------------------------
 
 const PNG_SIG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
@@ -316,7 +316,7 @@ export function tgaConfidence(input: SniffInput): number {
 }
 
 // ---------------------------------------------------------------------------
-// TIFF family disambiguation (spec 07 §1.3) — a *bounded* IFD0 scan.
+// TIFF family disambiguation (spec 07 §1.3) - a *bounded* IFD0 scan.
 // ---------------------------------------------------------------------------
 
 const TAG_MAKE = 0x010f
@@ -425,7 +425,7 @@ const RAW_TIFF_EXTENSIONS: Readonly<Record<string, SniffedFormatId>> = {
 
 /**
  * Decides which member of the TIFF family a `II*\0` / `MM\0*` file belongs to.
- * Returns 'tiff' for an ordinary picture — the only one this module decodes.
+ * Returns 'tiff' for an ordinary picture - the only one this module decodes.
  */
 export function classifyTiffFamily(input: SniffInput): SniffResult {
   const head = input.head

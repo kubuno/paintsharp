@@ -17,8 +17,8 @@
 //     frame; tiles that stopped being dirty in the meantime are skipped.
 //
 //  3. THE SCHEDULER NEVER TALKS TO REACT. It has no imports beyond this folder,
-//     emits no events during a gesture, and `onSettled` — its only outward
-//     notification — is deferred until `endGesture()`. The spec threshold is
+//     emits no events during a gesture, and `onSettled` - its only outward
+//     notification - is deferred until `endGesture()`. The spec threshold is
 //     "0 React render during a stroke"; deferring the single notification the
 //     scheduler can produce is how this stage upholds it.
 
@@ -102,7 +102,7 @@ export interface SchedulerRunResult {
   /** Tiles left in the queue. */
   remaining: number
   elapsedMs: number
-  /** How far past the budget the last tile pushed us — the honest metric. */
+  /** How far past the budget the last tile pushed us - the honest metric. */
   overrunMs: number
   stoppedBy: StopReason
 }
@@ -160,10 +160,10 @@ export class TileScheduler {
   /**
    * Build the ordered work list.
    *
-   *   class 0 — visible & dirty at the display level: what the user is looking at
-   *   class 1 — visible & dirty at coarser levels: cheap stand-ins, drawn blurry
-   *   class 2 — the ring around the viewport: anticipates panning
-   *   class 3 — everything else: idle-time work
+   *   class 0 - visible & dirty at the display level: what the user is looking at
+   *   class 1 - visible & dirty at coarser levels: cheap stand-ins, drawn blurry
+   *   class 2 - the ring around the viewport: anticipates panning
+   *   class 3 - everything else: idle-time work
    *
    * Within a class, tiles are ordered by distance to the centre of the viewport,
    * so a stroke in the middle of the screen converges from the middle outwards.
@@ -189,20 +189,20 @@ export class TileScheduler {
     // class 0
     push(req.source.dirtyTilesAt(req.level, req.visible))
 
-    // class 1 — coarse stand-ins for the same visible area
+    // class 1 - coarse stand-ins for the same visible area
     const coarse = req.coarseLevels ?? 2
     for (let l = req.level + 1; l <= Math.min(req.source.levelCount - 1, req.level + coarse); l++) {
       push(req.source.dirtyTilesAt(l, req.visible))
     }
 
-    // class 2 — one-tile ring around the viewport
+    // class 2 - one-tile ring around the viewport
     const ring = req.ring ?? 1
     if (ring > 0) {
       const margin = ring * tileSpan(req.level)
       push(req.source.dirtyTilesAt(req.level, rectInflate(req.visible, margin)))
     }
 
-    // class 3 — the rest of the document, idle work
+    // class 3 - the rest of the document, idle work
     if (req.includeOffscreen !== false && out.length < cap) {
       push(req.source.dirtyTilesAt(req.level))
     }
@@ -213,7 +213,7 @@ export class TileScheduler {
   /**
    * Run the plan under `budget`. Resumes the previous queue when the view has
    * not changed, re-plans otherwise. Returns what happened, including whether
-   * the budget forced a stop — the number the diagnostics panel reports.
+   * the budget forced a stop - the number the diagnostics panel reports.
    */
   run(req: PlanRequest, build: TileBuilder, budget: RenderBudget = DEFAULT_RENDER_BUDGET): SchedulerRunResult {
     this.framesRun++

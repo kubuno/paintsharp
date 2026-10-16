@@ -1,4 +1,4 @@
-// LayerQuickPaint — a small, self-contained 2D-canvas painter "provided by Layer".
+// LayerQuickPaint - a small, self-contained 2D-canvas painter "provided by Layer".
 //
 // It is deliberately lightweight (no WebGL, no document model): a transparent
 // raster surface with brush / eraser / colour / size / clear / undo, meant to be

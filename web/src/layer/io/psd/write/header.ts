@@ -2,7 +2,7 @@
  * PSD/PSB header writer (spec §8.2 step 1).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * GPLv3+ — `save_header()` in psd-export.c — and from Adobe's public "Photoshop
+ * GPLv3+ - `save_header()` in psd-export.c - and from Adobe's public "Photoshop
  * File Formats Specification". Independent TypeScript re-implementation; no
  * GIMP source was copied. Kubuno is AGPLv3.
  */

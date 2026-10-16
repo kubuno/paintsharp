@@ -2,7 +2,7 @@
  * PSD/PSB string primitives: Pascal strings and UTF-16BE Unicode strings.
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * GPLv3+ — `fread_pascal_string()` / `fread_unicode_string()` in psd-util.c —
+ * GPLv3+ - `fread_pascal_string()` / `fread_unicode_string()` in psd-util.c -
  * and from Adobe's public "Photoshop File Formats Specification". Independent
  * TypeScript re-implementation; no GIMP source was copied. Kubuno is AGPLv3.
  */
@@ -35,14 +35,14 @@ export function decodeLegacyText(bytes: Uint8Array): string {
     try {
       return utf8Strict.decode(bytes)
     } catch {
-      /* not UTF-8 — fall through */
+      /* not UTF-8 - fall through */
     }
   }
   if (macRoman) {
     try {
       return macRoman.decode(bytes)
     } catch {
-      /* unavailable encoding — fall through */
+      /* unavailable encoding - fall through */
     }
   }
   if (latin1) {
@@ -98,7 +98,7 @@ export function pascalStringLength(s: string, modLen: ModLen): number {
 
 /**
  * Unicode string: `uint32` UTF-16 UNIT count (not bytes) then big-endian units.
- * Photoshop sometimes counts a terminating U+0000 — we strip it. Surrogate
+ * Photoshop sometimes counts a terminating U+0000 - we strip it. Surrogate
  * pairs are preserved verbatim.
  *
  * `maxUnits` guards against a forged count: it is clamped to what the reader

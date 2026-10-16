@@ -5,7 +5,7 @@
 // Deliberately NOT routed through Apex's `svgToPageData()`: that model covers only what
 // Apex can edit (paths, shapes, simple text) and would silently drop filters, gradient
 // meshes, masks and patterns. Rasterising the source as written is strictly more
-// faithful. The Apex bridge goes the other way — `rasterizeApexPage` below takes a
+// faithful. The Apex bridge goes the other way - `rasterizeApexPage` below takes a
 // `pageDataToSvg()` string, which is where the reuse genuinely pays.
 
 import { missingFontFamilies, rasterizeSvg, SvgParseError } from '../../../shared/svgRaster'

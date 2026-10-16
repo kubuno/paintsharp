@@ -1,4 +1,4 @@
-// Vertex editor — mesh object operations (join, CSG booleans, weld, normals,
+// Vertex editor - mesh object operations (join, CSG booleans, weld, normals,
 // transform baking). Kept separate from the page component: everything here is
 // pure geometry work on serializable scene data, no React.
 import * as THREE from 'three'

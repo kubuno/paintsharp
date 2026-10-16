@@ -20,7 +20,7 @@ export interface NewLayerDocParams {
 
 interface Preset {
   id:    string
-  label: string  // formats/marques — non traduits
+  label: string  // formats/marques - non traduits
   w:     number
   h:     number
   unit:  Unit

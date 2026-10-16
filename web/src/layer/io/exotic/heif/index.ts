@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// HEIC/HEIF import — native paths only.
+// HEIC/HEIF import - native paths only.
 //
-// Scope, stated plainly: no HEVC decoder is bundled. On Apple platforms — which is where
-// HEIC files are produced — the system decoder handles them and the import is lossless
+// Scope, stated plainly: no HEVC decoder is bundled. On Apple platforms - which is where
+// HEIC files are produced - the system decoder handles them and the import is lossless
 // in practice. Everywhere else the user gets a clear, actionable message rather than a
 // crash or a blank canvas. Adding libheif in WebAssembly would settle the copyright
 // question and leave the HEVC patent question open; that trade is not ours to make

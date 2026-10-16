@@ -1,4 +1,4 @@
-// Sharpen family — ONE parameterised unsharp mask, reused by every entry.
+// Sharpen family - ONE parameterised unsharp mask, reused by every entry.
 //
 // The legacy code had three copies of the same maths: `unsharpMask`, the two
 // frozen instances `sharpen`/`sharpenMore`, and a third copy inside
@@ -17,7 +17,7 @@
 // New vs the legacy version: a THRESHOLD parameter (Photoshop has one, the
 // legacy filter did not), so flat areas and film grain are left alone.
 // Reference for the threshold semantics: GEGL `unsharp-mask` / GIMP's
-// "Sharpen (Unsharp Mask)" (GPLv3) — reimplemented in GLSL here.
+// "Sharpen (Unsharp Mask)" (GPLv3) - reimplemented in GLSL here.
 
 import { blurPasses } from './blur'
 import { fragmentShader } from './glsl/common'

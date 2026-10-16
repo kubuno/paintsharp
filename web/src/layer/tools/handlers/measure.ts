@@ -1,8 +1,8 @@
 // Measurement, sampling, annotation and slicing tools.
 //
 // Six handlers share this file because they share one thing the rest of the
-// editor does not own: a set of NON-DESTRUCTIVE overlays — sampler points, a
-// compass, notes, slice rectangles — that outlive a single gesture and must be
+// editor does not own: a set of NON-DESTRUCTIVE overlays - sampler points, a
+// compass, notes, slice rectangles - that outlive a single gesture and must be
 // redrawn on every overlay repaint. They live in module state and are painted
 // through `ToolContext.setPreview`, which is re-run by the editor on each
 // repaint; nothing here reaches into the editor.
@@ -40,7 +40,7 @@ const f2 = (n: number): string => n.toFixed(2)
 
 const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v)
 
-/** Pointer position clamped to the document — a measurement outside it is meaningless. */
+/** Pointer position clamped to the document - a measurement outside it is meaningless. */
 function docPoint(ctx: ToolContext, p: ToolPointer): Pt {
   return { x: clamp(p.x, 0, ctx.docW), y: clamp(p.y, 0, ctx.docH) }
 }
@@ -52,7 +52,7 @@ function docPoint(ctx: ToolContext, p: ToolPointer): Pt {
 const vecAngleDeg = (dx: number, dy: number): number => -Math.atan2(dy, dx) * DEG
 
 /**
- * Angle from `a` to `b`, signed, in degrees — `atan2(cross, dot)`, the form
+ * Angle from `a` to `b`, signed, in degrees - `atan2(cross, dot)`, the form
  * GIMP's compass uses because it stays well conditioned near 0° and 180°.
  */
 function angleBetweenDeg(a: Pt, b: Pt): number {
@@ -74,7 +74,7 @@ function snapAngle(from: Pt, to: Pt, stepDeg: number): Pt {
 
 // ── Shared painting ─────────────────────────────────────────────────────────
 //
-// Everything is stroked twice — a dark halo, then a light core — so overlays
+// Everything is stroked twice - a dark halo, then a light core - so overlays
 // stay readable over white paper as well as over a dark photograph. That is the
 // convention the editor's own cursors already follow.
 
@@ -127,7 +127,7 @@ function label(
   c.fillText(text, x, y)
 }
 
-/** A small filled disc with a numbered core — sampler points, notes, slices. */
+/** A small filled disc with a numbered core - sampler points, notes, slices. */
 function badge(c: CanvasRenderingContext2D, x: number, y: number, n: number, tint: string): void {
   c.beginPath()
   c.arc(x, y, 8, 0, Math.PI * 2)
@@ -220,7 +220,7 @@ function readPixel(ctx: ToolContext, at: Pt): Rgba | null {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 1. Colour sampler — up to four persistent probes
+// 1. Colour sampler - up to four persistent probes
 // ════════════════════════════════════════════════════════════════════════════
 
 interface SamplerPoint extends Pt { rgba: Rgba | null }
@@ -238,7 +238,7 @@ function samplerStatus(ctx: ToolContext): void {
   if (samplers.length === 0) { ctx.setStatus(null); return }
   const parts = samplers.map((s, i) => {
     const c = s.rgba
-    return c ? `#${i + 1} ${c.r},${c.g},${c.b}` : `#${i + 1} —`
+    return c ? `#${i + 1} ${c.r},${c.g},${c.b}` : `#${i + 1} -`
   })
   ctx.setStatus(`${parts.join('  ·  ')}  (${samplers.length}/${MAX_SAMPLERS})`)
 }
@@ -262,7 +262,7 @@ const paintSamplers: Painter = c => {
     const v = s.rgba
     const text = v
       ? (v.a < 255 ? `${v.r} ${v.g} ${v.b} / ${v.a}` : `${v.r} ${v.g} ${v.b}`)
-      : '—'
+      : '-'
     // A colour chip makes the readout legible without decoding the digits.
     if (v) {
       c.fillStyle = `rgb(${v.r},${v.g},${v.b})`
@@ -277,7 +277,7 @@ const paintSamplers: Painter = c => {
 
 /**
  * Screen position of a probe. Kept as a function of the LAST context so the
- * painter — which receives only a canvas — can still project. Refreshed on every
+ * painter - which receives only a canvas - can still project. Refreshed on every
  * pointer event, and on install, which is enough: the overlay is repainted after
  * any view change anyway.
  */
@@ -291,7 +291,7 @@ function useProjector(ctx: ToolContext): void {
 
 /**
  * Probe list for the toolbox: `sampler-clear` and the `sampler-count` readout of
- * `toolDefs.ts` map straight onto it. Clearing does not repaint by itself — the
+ * `toolDefs.ts` map straight onto it. Clearing does not repaint by itself - the
  * caller owns `repaintOverlay()`.
  */
 export const samplerApi = {
@@ -358,7 +358,7 @@ const colorSampler: ToolHandler = {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 2. Ruler — distance, angle, and the angle between two lines
+// 2. Ruler - distance, angle, and the angle between two lines
 // ════════════════════════════════════════════════════════════════════════════
 //
 // Follows GIMP's compass: point 0 is the VERTEX, point 1 the end of the first
@@ -536,7 +536,7 @@ const ruler: ToolHandler = {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 3. Note — numbered annotation pins
+// 3. Note - numbered annotation pins
 // ════════════════════════════════════════════════════════════════════════════
 
 export interface NoteRecord {
@@ -562,7 +562,7 @@ const noteIndex = (id: number): number => notes.findIndex(n => n.id === id)
 /**
  * Editing surface for a future note panel.
  *
- * LIMITATION — the editor has no text field for notes yet, so a pin created here
+ * LIMITATION - the editor has no text field for notes yet, so a pin created here
  * carries an EMPTY text: the tool stores it and paints the pin plus its number,
  * nothing more. When a panel lands (a `PromptDialog`, or a docked inspector) it
  * only has to import this object: `list()` to render, `selectedId()` to know
@@ -628,7 +628,7 @@ function noteStatus(ctx: ToolContext): void {
   const i = noteIndex(selectedNote)
   if (i < 0) { ctx.setStatus(null); return }
   const n = notes[i]
-  ctx.setStatus(`✎ ${i + 1}/${notes.length}${n.text ? ` — ${n.text.split('\n')[0].slice(0, 64)}` : ''}`)
+  ctx.setStatus(`✎ ${i + 1}/${notes.length}${n.text ? ` - ${n.text.split('\n')[0].slice(0, 64)}` : ''}`)
 }
 
 const note: ToolHandler = {
@@ -693,7 +693,7 @@ const note: ToolHandler = {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 4. Perspective crop — projective rectification of a quadrilateral
+// 4. Perspective crop - projective rectification of a quadrilateral
 // ════════════════════════════════════════════════════════════════════════════
 
 /** Row-major 3×3: [a b c, d e f, g h 1]. */
@@ -813,7 +813,7 @@ export function planRectify(pts: readonly Pt[], maxSide = 16384): QuadRectifyPla
   if (!Number.isFinite(area) || area < 1e-6) return 'degenerate'
 
   // 3. Convexity: every turn of the ring must have the same sign. A folded quad
-  //    maps two output regions onto one source region — nonsense to resample.
+  //    maps two output regions onto one source region - nonsense to resample.
   let sign = 0
   for (let i = 0; i < 4; i++) {
     const a = ring[i]
@@ -851,9 +851,9 @@ export function planRectify(pts: readonly Pt[], maxSide = 16384): QuadRectifyPla
 }
 
 /**
- * Bilinear tap on straight RGBA. Interpolation runs on PREMULTIPLIED values —
+ * Bilinear tap on straight RGBA. Interpolation runs on PREMULTIPLIED values -
  * blending straight colours across a transparent edge drags that edge's
- * arbitrary RGB into the result — and is un-premultiplied on the way out.
+ * arbitrary RGB into the result - and is un-premultiplied on the way out.
  * Samples outside the source contribute nothing, so the border fades to
  * transparent instead of smearing.
  */
@@ -980,7 +980,7 @@ function cropStatus(ctx: ToolContext): void {
 /**
  * Applies the rectification to the active layer.
  *
- * LIMITATION — `ToolContext` cannot resize the document, so the rectified image
+ * LIMITATION - `ToolContext` cannot resize the document, so the rectified image
  * is written at the origin of the ACTIVE layer and anything past the document
  * border is dropped; the other layers are untouched. A true perspective crop
  * (resize the canvas, transform every layer) needs a document-level operation
@@ -1090,7 +1090,7 @@ const cropPerspective: ToolHandler = {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 5 & 6. Slices — draw them, then select / move / resize / delete them
+// 5 & 6. Slices - draw them, then select / move / resize / delete them
 // ════════════════════════════════════════════════════════════════════════════
 
 interface SliceRect { id: number; x: number; y: number; w: number; h: number }
@@ -1130,7 +1130,7 @@ const normalise = (r: SliceRect): SliceRect => ({
 
 const sliceIndex = (id: number): number => slices.findIndex(s => s.id === id)
 
-/** Topmost slice under a document point — later slices sit on top. */
+/** Topmost slice under a document point - later slices sit on top. */
 function sliceAt(at: Pt): number {
   for (let i = slices.length - 1; i >= 0; i--) {
     const s = slices[i]

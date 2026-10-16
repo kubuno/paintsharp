@@ -1,4 +1,4 @@
-// Tile geometry primitives for the Layer renderer (stage 2 — tiling).
+// Tile geometry primitives for the Layer renderer (stage 2 - tiling).
 //
 // Two grids, deliberately different sizes:
 //   - CHUNK_SIZE (32) is the *invalidation* grid. A brush dab only ever dirties a

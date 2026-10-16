@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Format-specific preview locations (spec 07 §5.4) — pass 1 of three.
+// Format-specific preview locations (spec 07 §5.4) - pass 1 of three.
 //
 // Everything here is an OPTIMISATION over the generic IFD sweep and the byte scan: when
 // a path fails, or when a manufacturer moves the preview in a new body, the later passes
@@ -89,7 +89,7 @@ function rw2(bytes: Uint8Array, sweep: IfdSweep, out: PreviewCandidate[]): void 
  *
  * ⚠️ The classic trap is that those offsets are RELATIVE TO THE START OF THE MAKERNOTE,
  * not to the file. Both interpretations are tried, and each is validated against an
- * actual SOI marker before being accepted — which is the only defence available without
+ * actual SOI marker before being accepted - which is the only defence available without
  * a real ORF to test on (see the report: this path is UNVERIFIED).
  */
 function orf(bytes: Uint8Array, sweep: IfdSweep, out: PreviewCandidate[]): void {
@@ -105,7 +105,7 @@ function orf(bytes: Uint8Array, sweep: IfdSweep, out: PreviewCandidate[]): void 
 }
 
 /**
- * Fujifilm RAF — the one reserve this specification flagged (§5.4).
+ * Fujifilm RAF - the one reserve this specification flagged (§5.4).
  *
  * Header layout per the dcraw convention: 16 bytes `FUJIFILMCCD-RAW`, 4 bytes format
  * version, 8 bytes camera id, 32 bytes camera string, then at offset 84 a big-endian
@@ -125,7 +125,7 @@ function raf(bytes: Uint8Array, out: PreviewCandidate[]): void {
 }
 
 /**
- * Canon CR3 — ISO-BMFF. The preview sits in a `PRVW` box inside Canon's private `uuid`
+ * Canon CR3 - ISO-BMFF. The preview sits in a `PRVW` box inside Canon's private `uuid`
  * box (85c0b687-820f-11e0-8111-f4ce462b6a48), with `THMB` holding the thumbnail. Both
  * carry a small, undocumented preamble before the SOI, so the SOI is searched for
  * instead of assumed at a fixed offset.
@@ -189,7 +189,7 @@ export function perFormatCandidates(
 }
 
 /**
- * Pass 2 — generic IFD sweep. Every IFD is inspected for the two standard ways of
+ * Pass 2 - generic IFD sweep. Every IFD is inspected for the two standard ways of
  * carrying a JPEG, in the order the specification lists them.
  */
 export function ifdCandidates(bytes: Uint8Array, sweep: IfdSweep): PreviewCandidate[] {

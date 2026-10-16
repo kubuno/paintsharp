@@ -1,9 +1,9 @@
 /*
- * PSD/PSB writer orchestration — section order and length mechanics (spec §8.2).
+ * PSD/PSB writer orchestration - section order and length mechanics (spec §8.2).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * licensed under the GNU General Public License v3 or later — `save_header()`,
- * `save_resources()`, `save_layer_and_mask()`, `save_data()` in psd-export.c —
+ * licensed under the GNU General Public License v3 or later - `save_header()`,
+ * `save_resources()`, `save_layer_and_mask()`, `save_data()` in psd-export.c -
  * and from Adobe's public "Photoshop File Formats Specification".
  *
  * This is an independent TypeScript re-implementation; no GIMP source code was
@@ -30,7 +30,7 @@ import { cpuComposite, isFullyOpaque, writeImageData } from './imageData.ts'
  * Serialises a document to PSD or PSB.
  *
  * Always writes RGB / 8 bits: it is what every tool reads, and it matches the
- * Kubuno internal model exactly. Layers keep their own rectangles — the writer
+ * Kubuno internal model exactly. Layers keep their own rectangles - the writer
  * never materialises a document-sized buffer per layer.
  */
 export async function writePsd(doc: PsdDocument, options: WriteOptions = {}): Promise<ArrayBuffer> {

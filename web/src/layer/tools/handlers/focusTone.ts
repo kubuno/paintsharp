@@ -1,8 +1,8 @@
 // Local-retouch brushes: blur, sharpen, smudge (F13 "focus") and dodge, burn,
 // sponge (F14 "tone").
 //
-// The six tools share one skeleton — a spaced-dab brush stroke that mutates an
-// in-memory mirror of the layer and flushes the touched rectangle back — and
+// The six tools share one skeleton - a spaced-dab brush stroke that mutates an
+// in-memory mirror of the layer and flushes the touched rectangle back - and
 // differ only by the per-dab pixel operator. Nothing here reaches into the
 // editor: every capability arrives through `ToolContext`.
 //
@@ -13,10 +13,10 @@
 // Copyright (C) 1995 Spencer Kimball, Peter Mattis and the GIMP developers and
 // is released under the GNU General Public License v3 or later. The source
 // files this code follows are:
-//   app/paint/gimpconvolve.c          — convolve matrix + MIN/MAX_BLUR rates
-//   app/paint/gimpsmudge.c            — the accumulator model
-//   app/paint/gimpdodgeburn.c         — dodge/burn paint core
-//   app/gegl/gimp-gegl-loops.cc       — gimp_gegl_convolve(), gimp_gegl_dodgeburn(),
+//   app/paint/gimpconvolve.c          - convolve matrix + MIN/MAX_BLUR rates
+//   app/paint/gimpsmudge.c            - the accumulator model
+//   app/paint/gimpdodgeburn.c         - dodge/burn paint core
+//   app/gegl/gimp-gegl-loops.cc       - gimp_gegl_convolve(), gimp_gegl_dodgeburn(),
 //                                       gimp_gegl_smudge_with_paint()
 // Kubuno is licensed under the AGPLv3, which is compatible with the GPLv3 for
 // this derivation. The sponge has no GIMP counterpart and is our own HSL
@@ -114,8 +114,8 @@ function hslToRgb(h: number, s: number, l: number, out: Float64Array): void {
 // tool cannot depend on the editor's state shape. The options bar persists its
 // values under the key below (`TOOL_VALUES_PREF_KEY` in `layer/tools/types.ts`,
 // duplicated here as a literal on purpose: reading a string is not a coupling,
-// importing the toolbox model would be). When nothing is stored — which is the
-// case until the editor wires persistence up — the declared defaults from
+// importing the toolbox model would be). When nothing is stored - which is the
+// case until the editor wires persistence up - the declared defaults from
 // `toolDefs.ts` apply, and Alt still flips the tool the Photoshop way.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -157,13 +157,13 @@ const optStr = <T extends string>(bag: OptionBag, id: string, def: T, allowed: r
   return typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : def
 }
 
-/** Blend of the effect with the original pixels — mirrors `FOCUS_MODE_CHOICES`. */
+/** Blend of the effect with the original pixels - mirrors `FOCUS_MODE_CHOICES`. */
 type FocusMode = 'normal' | 'lighten' | 'darken' | 'hue' | 'saturation' | 'color' | 'luminosity'
 const FOCUS_MODES: readonly FocusMode[] = [
   'normal', 'lighten', 'darken', 'hue', 'saturation', 'color', 'luminosity',
 ]
 
-/** Tonal range a dodge/burn dab acts on — mirrors `GimpTransferMode`. */
+/** Tonal range a dodge/burn dab acts on - mirrors `GimpTransferMode`. */
 type ToneRange = 'shadows' | 'midtones' | 'highlights'
 const TONE_RANGES: readonly ToneRange[] = ['shadows', 'midtones', 'highlights']
 
@@ -181,13 +181,13 @@ interface DabRect { x: number; y: number; w: number; h: number; cx: number; cy: 
 
 interface Stroke {
   layerId: string
-  /** Pre-stroke pixels of the whole layer — the history snapshot, never mutated. */
+  /** Pre-stroke pixels of the whole layer - the history snapshot, never mutated. */
   base: Uint8Array
   /** Live mirror the dabs mutate; flushed back rectangle by rectangle. */
   buf: Uint8Array
   w: number
   h: number
-  /** Union of every dab of the stroke — what undo will cost. */
+  /** Union of every dab of the stroke - what undo will cost. */
   bbox: BBox | null
   /** Region written since the last flush. */
   dirty: BBox | null
@@ -204,7 +204,7 @@ interface Stroke {
   /**
    * Stroke ceiling. Incremental tools (blur, sharpen, smudge) fold it into each
    * dab; constant ones (dodge, burn, sponge) use it as the maximum a single
-   * stroke may reach — Photoshop's flow/opacity split.
+   * stroke may reach - Photoshop's flow/opacity split.
    */
   opacity: number
   lockAlpha: boolean
@@ -366,8 +366,8 @@ function flush(ctx: ToolContext, s: Stroke): void {
 }
 
 /**
- * Commits the stroke. History holds the PRE-STROKE pixels — captured in
- * `beginStroke` before a single byte was written — cropped to the rectangle the
+ * Commits the stroke. History holds the PRE-STROKE pixels - captured in
+ * `beginStroke` before a single byte was written - cropped to the rectangle the
  * stroke really touched, so a dab in a corner never costs a full-document
  * snapshot. This mirrors how the editor commits its own brush strokes.
  */
@@ -458,7 +458,7 @@ function writeMixed(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Blur / sharpen — port of GIMP's convolve tool
+// Blur / sharpen - port of GIMP's convolve tool
 // ─────────────────────────────────────────────────────────────────────────────
 
 // gimpconvolve.c: the centre weight of the 3×3 matrix is interpolated between
@@ -503,7 +503,7 @@ function convolveApply(st: ConvState, s: Stroke, r: DabRect, cov: Float32Array):
   const need = sw * sh * 4
   if (st.src.length < need) st.src = new Float32Array(need)
   const src = st.src
-  // Straight linear-light RGBA — GIMP convolves in linear too, and blurring in
+  // Straight linear-light RGBA - GIMP convolves in linear too, and blurring in
   // gamma space visibly darkens the mid-tones of a bright/dark transition.
   for (let y = 0; y < sh; y++) {
     let o = y * sw * 4
@@ -579,7 +579,7 @@ function convolveApply(st: ConvState, s: Stroke, r: DabRect, cov: Float32Array):
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Smudge — port of GIMP's accumulator model
+// Smudge - port of GIMP's accumulator model
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SmudgeState {
@@ -642,7 +642,7 @@ function primeSmudge(st: SmudgeState, s: Stroke, cx: number, cy: number): void {
 function smudgeApply(st: SmudgeState, s: Stroke, r: DabRect, cov: Float32Array): void {
   if (!st.primed) primeSmudge(st, s, r.cx, r.cy)
   // The accumulator is indexed in brush-local coordinates, so its content
-  // follows the pointer — that travelling colour IS the smear.
+  // follows the pointer - that travelling colour IS the smear.
   const ox = Math.round(r.cx) - st.half
   const oy = Math.round(r.cy) - st.half
   const acc = st.accum
@@ -695,7 +695,7 @@ function smudgeApply(st: SmudgeState, s: Stroke, r: DabRect, cov: Float32Array):
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Dodge / burn — port of gimp_gegl_dodgeburn()
+// Dodge / burn - port of gimp_gegl_dodgeburn()
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ToneState {
@@ -705,15 +705,15 @@ interface ToneState {
   factor: number
   /** Keep hue and saturation, move luminance only (Photoshop's Protect Tones). */
   protectTones: boolean
-  /** Coverage reached so far — see `constantCoverage()`. */
+  /** Coverage reached so far - see `constantCoverage()`. */
   cover: Uint8Array
 }
 
 /**
  * GIMP's GIMP_PAINT_CONSTANT application mode, which is what dodge, burn and
  * sponge use (`gimp_dodge_burn_motion` reads `gimp_paint_core_get_orig_image`).
- * Instead of stacking one transfer function on top of the previous result —
- * which would drive a whole stroke to pure white in a few dabs — each pixel
+ * Instead of stacking one transfer function on top of the previous result -
+ * which would drive a whole stroke to pure white in a few dabs - each pixel
  * remembers how much of the stroke it has received, and the effect is always
  * recomputed from the PRE-STROKE pixels at that coverage. Flow builds the
  * coverage up, opacity caps it, and a second stroke starts over from there.
@@ -798,7 +798,7 @@ function toneApply(st: ToneState, s: Stroke, r: DabRect, cov: Float32Array): voi
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sponge — saturation brush (no GIMP counterpart)
+// Sponge - saturation brush (no GIMP counterpart)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface SpongeState {
@@ -807,7 +807,7 @@ interface SpongeState {
   rate: number
   /** Protect already saturated pixels from clipping. */
   vibrance: boolean
-  /** Coverage reached so far — the sponge builds up like dodge and burn. */
+  /** Coverage reached so far - the sponge builds up like dodge and burn. */
   cover: Uint8Array
 }
 
@@ -836,7 +836,7 @@ function spongeApply(st: SpongeState, s: Stroke, r: DabRect, cov: Float32Array):
       if (st.saturate && sat < ACHROMATIC) continue
       let step = st.rate
       // Hue and lightness are carried over untouched, so the colour never
-      // drifts — only its distance to the grey axis changes.
+      // drifts - only its distance to the grey axis changes.
       let ns: number
       if (st.saturate) {
         if (st.vibrance) step *= 1 - sat

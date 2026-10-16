@@ -3,8 +3,8 @@
  *
  * The decoding/encoding algorithms implemented here were derived from the GIMP
  * PSD plug-in (file-psd), Copyright 2007 John Marshall, licensed under the GNU
- * General Public License v3 or later — `decode_packbits()` and
- * `encode_packbits()` in psd-util.c — and from Adobe's public "Photoshop File
+ * General Public License v3 or later - `decode_packbits()` and
+ * `encode_packbits()` in psd-util.c - and from Adobe's public "Photoshop File
  * Formats Specification".
  *
  * This is an independent TypeScript re-implementation; no GIMP source code was

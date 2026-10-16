@@ -109,7 +109,7 @@ function pressureWidths(samples: RawSample[], size: number): number[] {
   return sm.map(p => size * Math.max(0.06, Math.min(1, p)))
 }
 
-// Mouse/touch: fast strokes thin out, slow strokes swell — a natural ink feel
+// Mouse/touch: fast strokes thin out, slow strokes swell - a natural ink feel
 // without a pressure device. `dynamics` ∈ [0,1] controls how much speed
 // affects width (0 = constant width).
 export function speedWidths(samples: RawSample[], size: number, dynamics: number, zoom: number): number[] {

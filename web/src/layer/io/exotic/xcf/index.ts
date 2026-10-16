@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// XCF (GIMP) reader — orchestration.
+// XCF (GIMP) reader - orchestration.
 //
 // XCF decoding logic derived from the GIMP source code (app/xcf/xcf-load.c,
 // app/xcf/xcf-read.c, app/xcf/xcf-private.h, app/xcf/xcf.c, pdb/enums.pl),
 // Copyright (C) 1995 Spencer Kimball and Peter Mattis and the GIMP contributors,
 // licensed GPL-3.0-or-later. Reimplemented in TypeScript for Kubuno
 // (AGPL-3.0-or-later); no line of GIMP's code is copied. XCF has no normative published
-// specification — GIMP's source IS the specification.
+// specification - GIMP's source IS the specification.
 //
 // WRITING XCF IS DELIBERATELY OUT OF SCOPE (spec 07 §4.12): a partial writer produces
 // files GIMP opens crookedly, and Layer already exports PNG/JPEG/WebP/TIFF plus its
@@ -63,7 +63,7 @@ interface ImageInfo {
  * Decodes a whole XCF file into the neutral pivot model.
  *
  * Never throws a bare `Error`: everything surfaces as a typed `ImportError`. A partially
- * corrupt file opens truncated, with warnings, rather than failing — matching GIMP's own
+ * corrupt file opens truncated, with warnings, rather than failing - matching GIMP's own
  * `n_broken_layers` tolerance.
  */
 export async function decodeXcf(
@@ -194,7 +194,7 @@ async function decodeXcfInner(bytes: Uint8Array, opts: DecodeOptions): Promise<I
 
 function readImageProps(r: XcfReader, header: XcfHeader, warn: ImportWarningSink): ImageInfo {
   // GIMP initialises the compression to NONE before parsing, so a file WITHOUT
-  // PROP_COMPRESSION is uncompressed — not RLE, whatever intuition suggests.
+  // PROP_COMPRESSION is uncompressed - not RLE, whatever intuition suggests.
   const info: ImageInfo = { compression: COMPRESS.NONE, channelCount: 0, pathCount: 0 }
 
   readPropList(r, warn, (p: XcfProp) => {
@@ -393,7 +393,7 @@ async function readLayer(
   const maskOffset = r.offset()
 
   // Non-destructive filter chain (v >= 20): a run of pointers terminated by 0. Layer has
-  // no equivalent, and the stored pixels are UNFILTERED — a real visual loss to report.
+  // no equivalent, and the stored pixels are UNFILTERED - a real visual loss to report.
   let effects = 0
   if (header.version >= 20) {
     for (let i = 0; i < 256; i++) {

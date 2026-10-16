@@ -55,8 +55,8 @@ function newId() { return uid() }
 
 // ── Main component ────────────────────────────────────────────────────────────
 // Embedded mode: the SAME raster editor mounted inside another app (Keyframe draws
-// a cel). Server doc loading/saving is bypassed — seeded from a PNG in memory and
-// every edit reported through onCommit — so all of Layer's tools stay available.
+// a cel). Server doc loading/saving is bypassed - seeded from a PNG in memory and
+// every edit reported through onCommit - so all of Layer's tools stay available.
 export interface LayerEmbed {
   width:    number
   height:   number
@@ -80,7 +80,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     enabled:  !!docId,
   })
 
-  // ── Editable title (standard WorkspaceShell) — synced from the document ───────
+  // ── Editable title (standard WorkspaceShell) - synced from the document ───────
   const [titleDraft, setTitleDraft] = useState('')
   useEffect(() => { if (doc?.title != null) setTitleDraft(doc.title) }, [doc?.title])
 
@@ -120,7 +120,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   const [brushPreset,  setBrushPreset] = useState<string>(DEFAULT_BRUSH.id)
   const [brushSelOpen, setBrushSelOpen] = useState(false)
   const [brushStudioOpen, setBrushStudioOpen] = useState(false)
-  // Live-editable brush dynamics (Brush Studio) — seeded from the selected preset.
+  // Live-editable brush dynamics (Brush Studio) - seeded from the selected preset.
   const [brushDyn,     setBrushDyn]    = useState<BrushDyn>(() => extractDyn(DEFAULT_BRUSH))
   // Track whether the user manually changed the size (so a preset won't clobber it).
   const sizeTouched    = useRef(false)
@@ -143,9 +143,9 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       return next
     })
   }
-  /** X — exchange foreground and background, as Photoshop does. */
+  /** X - exchange foreground and background, as Photoshop does. */
   const swapColors = () => { setFgColor(bgColor); setBgColor(fgColor) }
-  /** D — restore the black / white defaults. */
+  /** D - restore the black / white defaults. */
   const resetColors = () => { setFgColor('#000000'); setBgColor('#ffffff') }
   const [viewState,    setViewState]   = useState({ zoom: 0.4, panX: 60, panY: 60 })
   const [viewRot,      setViewRot]     = useState(0) // canvas rotation in radians
@@ -193,7 +193,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   const [adjGray,     setAdjGray]     = useState(false)
   // Original pixels snapshot for the layer currently being adjusted.
   const adjBaseRef    = useRef<{ id: string; px: Uint8Array } | null>(null)
-  // Filters (blur / sharpen / noise) — same non-destructive preview model.
+  // Filters (blur / sharpen / noise) - same non-destructive preview model.
   const [filter,      setFilter]      = useState<Filter>(FILTER_ZERO)
   const filtBaseRef   = useRef<{ id: string; px: Uint8Array } | null>(null)
 
@@ -250,7 +250,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   const brushRef = useRef<BrushPreset>(DEFAULT_BRUSH)
   // The live brush = preset identity + edited hardness + edited dynamics. Merging
   // here (rather than reading the raw preset) is what makes the Brush Studio's
-  // sliders — including hardness — actually affect painting.
+  // sliders - including hardness - actually affect painting.
   useEffect(() => {
     const preset = BRUSH_PRESETS.find(b => b.id === brushPreset) ?? DEFAULT_BRUSH
     brushRef.current = { ...preset, hardness: brushHard, ...brushDyn }
@@ -318,11 +318,11 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
 
   // Undo/Redo stacks. Entries snapshot only the touched sub-rectangle of a layer
   // (a brush stroke stores its bounding box, not the whole document), bounded by
-  // a total byte budget instead of a tiny fixed depth — cheap strokes go deep,
+  // a total byte budget instead of a tiny fixed depth - cheap strokes go deep,
   // whole-layer ops (fills, filters) evict older history sooner.
   // A pixel entry is a dirty rect inside one layer, expressed in the geometry
   // that was current when it was recorded. A doc entry is a whole-document
-  // snapshot, needed because crop / rotate / resize change that very geometry —
+  // snapshot, needed because crop / rotate / resize change that very geometry -
   // without it those operations could not be undone at all, and the stack had to
   // be thrown away (which is exactly what used to happen).
   type PxEntry  = { kind: 'px'; id: string; x: number; y: number; w: number; h: number; px: Uint8Array }
@@ -340,7 +340,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   const UNDO_MAX_ENTRIES = 60
   const UNDO_MAX_BYTES   = 384 * 1024 * 1024
 
-  // Internal clipboard (copy/cut/paste as new layer) — doc-size RGBA.
+  // Internal clipboard (copy/cut/paste as new layer) - doc-size RGBA.
   const clipboardRef = useRef<{ w: number; h: number; px: Uint8Array } | null>(null)
   // Last dropped selection (for "Reselect").
   const lastSelMask  = useRef<Uint8Array | null>(null)
@@ -489,14 +489,14 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   }, [layers]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // View-only changes (pan / zoom / rotation) never touch the pixels, so they
-  // skip the expensive tree compositing and just re-blit the last composite —
+  // skip the expensive tree compositing and just re-blit the last composite -
   // coalesced to one redraw per frame (see scheduleDisplay).
   useEffect(() => {
     scheduleDisplay() // re-blit + overlay, aligned with pan/zoom/rotation
   }, [viewState, viewRot]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Structural changes (load, add/delete/reorder…) refresh thumbnails. Keyed on
-  // `layers` ONLY — never viewState — so panning/zooming triggers no readbacks.
+  // `layers` ONLY - never viewState - so panning/zooming triggers no readbacks.
   useEffect(() => { setThumbNonce(v => v + 1) }, [layers])
 
   // Sync overlay size
@@ -505,7 +505,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     if (!ov) return
     // The backing store must follow the device pixel ratio, exactly like the WebGL
     // canvas does. Sizing it in CSS pixels made the browser upscale the whole
-    // overlay — cursor, marching ants, crop frame and guides all came out soft.
+    // overlay - cursor, marching ants, crop frame and guides all came out soft.
     // Drawing code keeps working in CSS pixels: `overlayCtx()` applies the scale.
     const sync = () => {
       const dpr = window.devicePixelRatio || 1
@@ -602,7 +602,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     setThumbNonce(v => v + 1)   // discrete edit → refresh thumbnails
   }
 
-  // Sub-rectangle texture read/write — the workhorses of dirty-rect undo. A brush
+  // Sub-rectangle texture read/write - the workhorses of dirty-rect undo. A brush
   // stroke's history entry is only as big as the stroke, not the document.
   function readTexRect(id: string, x: number, y: number, w: number, h: number): Uint8Array | null {
     const gl = glRef.current
@@ -643,7 +643,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   // A raster layer's pixels are serialised to PNG (data URL) and stored in
   // `layers_structure`. Reads and writes go through read/writeTex; serialisation
   // is symmetric, so the round-trip is exact (the internal PNG may be flipped
-  // vertically — harmless, since save and load share the same path).
+  // vertically - harmless, since save and load share the same path).
   function texToPng(id: string): string | undefined {
     // Version-keyed cache: autosave serialises the whole tree, but only layers
     // whose pixels changed since the previous save pay the PNG encode again.
@@ -662,7 +662,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   }
 
   // `at` carries the layer's own origin when the PNG holds only its tight
-  // rectangle — that is how importers (PSD, XCF…) avoid storing one
+  // rectangle - that is how importers (PSD, XCF…) avoid storing one
   // document-sized bitmap per layer. Legacy documents have no origin and their
   // PNG *is* document-sized, so they keep the historical stretch-to-fit path:
   // that also absorbs a document resized after the pixels were written.
@@ -730,7 +730,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
 
   // Display-only pass: re-blit the already-composited document with the current
   // pan / zoom / rotation. This is the ONLY work that has to run when just the
-  // view moves — the (potentially expensive) layer-tree compositing done by
+  // view moves - the (potentially expensive) layer-tree compositing done by
   // renderComposite() is skipped entirely, which keeps panning and zooming smooth
   // even on documents with many layers or groups.
   function renderDisplay() {
@@ -761,7 +761,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fb[src].tex)
     // The display shader only reads the mip chain below 25% zoom (above that it
     // supersamples LOD 0), so mips are rebuilt lazily: only when the view is that
-    // far out AND the composite changed since the last rebuild — and while a
+    // far out AND the composite changed since the last rebuild - and while a
     // stroke is in progress at most every 150 ms (a full-doc generateMipmap per
     // brush-dab frame was the single biggest paint-time cost on large documents).
     if (vs.zoom * dpr < 0.25) {
@@ -789,7 +789,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
 
   // Coalesce view-only redraws (pan/zoom/rotate) to one per animation frame: a
   // high-refresh stylus or mouse can emit several pointermove events per frame,
-  // each committing a new viewState — without this each would blit the document
+  // each committing a new viewState - without this each would blit the document
   // and repaint the overlay again for the same frame.
   function scheduleDisplay() {
     if (displayRaf.current != null) return
@@ -823,8 +823,8 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     // Dirty-rect compositing: while a stroke is in progress, every pass (clears
     // included) is scissored to the region stamped this frame. Outside that
     // rectangle each ping-pong attachment still holds the previous frame's value
-    // for the same pass — valid because the pass chain is identical across the
-    // stroke — so per-frame cost is O(brush area) instead of O(document area).
+    // for the same pass - valid because the pass chain is identical across the
+    // stroke - so per-frame cost is O(brush area) instead of O(document area).
     const sc = compositeScissor.current
     if (sc) {
       const sx = Math.max(0, Math.floor(sc.x0)), sy = Math.max(0, Math.floor(sc.y0))
@@ -944,7 +944,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     setRedoCount(0)
   }
 
-  // Full-layer snapshot — for operations that may touch the whole layer
+  // Full-layer snapshot - for operations that may touch the whole layer
   // (fill, filters, adjustments, transforms, text…).
   function pushUndo(targetId?: string) {
     const id = targetId ?? activeRef.current
@@ -1112,7 +1112,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const base = adjBaseRef.current
     if (!base || base.id !== id) { resetAdjust(); return }
     if (!adjustDirty) { resetAdjust(); return }
-    // pushUndo records the *current* (preview) pixels — restore base first so undo
+    // pushUndo records the *current* (preview) pixels - restore base first so undo
     // captures the original, then write the final result.
     const result = applyAdjustments(base.px, adjust, adjInvert, adjGray)
     const orig = new Uint8Array(base.px.length); orig.set(base.px)
@@ -1463,7 +1463,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     if (prev) { for (let i = 0; i < m.length; i++) m[i] = 255 - prev[i] } else m.fill(255)
     setSelectionMask(m)
   }
-  // Selection from the active layer's alpha (graded — soft edges select softly).
+  // Selection from the active layer's alpha (graded - soft edges select softly).
   function selectFromAlpha() {
     const id = activeRef.current; if (!id) return
     const px = readTex(id); if (!px) return
@@ -1657,7 +1657,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
 
   /**
    * Single repaint path for the overlay. It goes through `drawCursor` so the
-   * cursor is redrawn along with the guides — repainting them separately used to
+   * cursor is redrawn along with the guides - repainting them separately used to
    * erase the cursor until the next pointer move, which is why it kept vanishing.
    */
   function redrawOverlay() { repaintOverlay() }
@@ -1875,7 +1875,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   // ── Brush cursor overlay ──────────────────────────────────────────────────
   /**
    * Clears the overlay and returns a context whose units are CSS pixels while the
-   * backing store stays at device resolution — that is what keeps thin strokes
+   * backing store stays at device resolution - that is what keeps thin strokes
    * crisp on HiDPI screens.
    */
   function overlayCtx(): CanvasRenderingContext2D | null {
@@ -1918,7 +1918,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const t = toolRef.current
     if (t === 'hand' || t === 'eyedrop' || t === 'zoom' || t === 'rotate') return
 
-    // Every cursor is stroked twice — a dark halo then a light core — so it stays
+    // Every cursor is stroked twice - a dark halo then a light core - so it stays
     // readable over white paper as well as over a dark image. A single white
     // crosshair simply vanished on a light document.
     // Odd-width strokes are snapped to the half-pixel grid: on a 1× screen an
@@ -2034,7 +2034,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   // The first frame of a stroke recomposites the whole document (the pass chain
   // gains the stroke-preview pass, so the ping-pong baseline must be rebuilt in
   // full); every subsequent frame scissors the recomposite to just the region
-  // stamped that frame — the rest of the document is untouched and retained.
+  // stamped that frame - the rest of the document is untouched and retained.
   function scheduleStrokeFlush() {
     if (strokeRaf.current != null) return
     strokeRaf.current = requestAnimationFrame(() => {
@@ -2051,7 +2051,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
 
   // Multi-entry dab-sprite cache, keyed by quantized (radius, hardness, color). A
   // stylus varies the radius on every sample, so a single-entry cache would rebuild
-  // the radial gradient for every dab — the Map keeps one sprite per radius bucket
+  // the radial gradient for every dab - the Map keeps one sprite per radius bucket
   // and `drawImage` scales it to the exact size, so size variation stays smooth.
   const dabSpriteCache = useRef<Map<string, HTMLCanvasElement>>(new Map())
 
@@ -2153,7 +2153,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   // Stamp dabs onto the offscreen stroke canvas. With `clear`, the canvas and the
   // incremental cursor are reset (stroke start). Otherwise only the dabs for the
   // points added since the last call are stamped, so each pointermove costs
-  // O(new points) rather than O(stroke length) — this is what keeps long, fast
+  // O(new points) rather than O(stroke length) - this is what keeps long, fast
   // stylus strokes smooth instead of getting heavier as the stroke grows.
   // `final` includes the very last path segment: live stamping stays one segment
   // behind the newest point so the Catmull-Rom curve through it is stamped only
@@ -2212,7 +2212,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     // Walk only the segments added since the previous stamp. Each segment is a
     // Catmull-Rom arc through its neighbours (falls back to a chord at the ends),
     // subdivided into a short polyline that the dab spacer walks with its
-    // arc-length carry — so the painted line is a smooth curve, not chords.
+    // arc-length carry - so the painted line is a smooth curve, not chords.
     const last = final ? pts.length - 1 : pts.length - 2
     for (let i = lastDabIdx.current + 1; i <= last; i++) {
       const p0 = pts[i - 2] ?? pts[i - 1], p1 = pts[i - 1], p2 = pts[i], p3 = pts[i + 1] ?? pts[i]
@@ -2265,7 +2265,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     return Math.max(0, Math.min(1, tilt / 90))
   }
 
-  // Pure pressure mapping for one sample — safe to call per coalesced event.
+  // Pure pressure mapping for one sample - safe to call per coalesced event.
   // sx/sy are screen px, used only for the finger/mouse velocity fallback.
   function samplePressure(
     pointerType: string, rawPressure: number, sx: number, sy: number, now: number,
@@ -2347,7 +2347,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   // "Pulled-string" model: the brush trails the cursor on a string whose length
   // grows with the stabilizer setting. The brush only advances when the cursor is
   // farther away than that length, so jitter inside the slack is absorbed and the
-  // resulting path is far smoother than a per-sample average — yet corners stay
+  // resulting path is far smoother than a per-sample average - yet corners stay
   // crisp because the brush is pulled straight toward the cursor, never overshoots.
   // The length is expressed in *screen* pixels (converted to doc space via zoom)
   // so the lag feels identical at every zoom level. Returns the new brush point,
@@ -2511,7 +2511,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     const sc = strokeCanvasRef.current, ms = maskStroke.current, mb = maskBase.current
     if (!sc || !ms || !mb) return
     const { w, h } = docSize.current
-    // Only the stroke's bounding box needs re-blending — each frame restarts from
+    // Only the stroke's bounding box needs re-blending - each frame restarts from
     // the base snapshot, so the region is the whole stroke so far, not the doc.
     const b = strokeBBox.current
     const bx0 = b ? Math.max(0, Math.floor(b.x0)) : 0
@@ -2686,7 +2686,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       if (touchPts.current.size >= 2) { e.preventDefault(); beginGesture(); return }
     }
 
-    // Zoom tool — handled before the left-button-only guard so right click works.
+    // Zoom tool - handled before the left-button-only guard so right click works.
     // Click: left = in, right = out. Drag: up/right = in, down/left = out (scrubby).
     if (toolRef.current === 'zoom' && (e.button === 0 || e.button === 2)) {
       e.preventDefault()
@@ -2698,7 +2698,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     }
 
     if (e.button !== 0) return
-    // Only one pointer draws at a time — a second finger/palm landing mid-stroke
+    // Only one pointer draws at a time - a second finger/palm landing mid-stroke
     // must not hijack the active pointer.
     if (activePtrId.current !== null) return
 
@@ -2969,7 +2969,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   }
 
   // Wheel: Ctrl/⌘+scroll zooms about the cursor (also what trackpad pinch sends),
-  // plain scroll pans. Attached natively with { passive: false } — React's
+  // plain scroll pans. Attached natively with { passive: false } - React's
   // delegated wheel listener can be passive, in which case preventDefault() is
   // ignored and Ctrl+wheel would zoom the whole browser page instead.
   useEffect(() => {
@@ -3022,7 +3022,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
       if (mod &&  e.shiftKey && k === 'd') { e.preventDefault(); reselect(); return }
       if (mod && !e.shiftKey && k === 'd') { e.preventDefault(); deselect(); return }
 
-      // Fill foreground (Alt+Backspace) — Photoshop muscle memory.
+      // Fill foreground (Alt+Backspace) - Photoshop muscle memory.
       if (e.altKey && e.key === 'Backspace') { e.preventDefault(); fillSelection(false); return }
 
       // Delete: clear the selection content when one is active, else delete the layer.
@@ -3155,7 +3155,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   }
 
   /**
-   * Adds an adjustment layer above the active one. It carries no pixels — the
+   * Adds an adjustment layer above the active one. It carries no pixels - the
    * compositor applies it to everything below, which is what "non-destructive"
    * means here.
    */
@@ -3277,7 +3277,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
   }
 
   // A layer can merge down when the node directly below it (same list) is also a
-  // raster leaf — the result is baked into that lower layer.
+  // raster leaf - the result is baked into that lower layer.
   function canMergeDown(id: string): boolean {
     const loc = locate(layersRef.current, id); if (!loc) return false
     const upper = loc.list[loc.index], lower = loc.list[loc.index + 1]
@@ -3387,7 +3387,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     // 0. Snapshot the whole document BEFORE anything changes. This is what makes
     //    crop / rotate / flip undoable: pixel entries are expressed in the old
     //    geometry, so restoring that geometry is a prerequisite for replaying
-    //    them — which is why the stack no longer has to be discarded.
+    //    them - which is why the stack no longer has to be discarded.
     const beforeState = captureDocState()
 
     // 1. Read every texture (layer colours AND masks) and transform it on CPU.
@@ -3582,7 +3582,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
     writeTex(nid, px)
   }
 
-  // Ctrl+J — duplicate the layer, or "layer via copy" when a selection is active.
+  // Ctrl+J - duplicate the layer, or "layer via copy" when a selection is active.
   function layerViaCopy() {
     if (selMask.current) {
       const keep = clipboardRef.current          // don't clobber the user's clipboard
@@ -3642,7 +3642,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
         const mem = soloMemory.current.map; soloMemory.current = null
         return restore(prev, mem)
       }
-      // (re)isolate — snapshot original visibility only on the first solo.
+      // (re)isolate - snapshot original visibility only on the first solo.
       const map = soloMemory.current?.map ?? (() => { const m = new Map<string, boolean>(); allNodes(prev).forEach(n => m.set(n.id, n.visible)); return m })()
       const keep = new Set<string>()
       const findPath = (list: LayerStructureItem[], anc: string[]): boolean => {
@@ -3923,7 +3923,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
             // Full Photoshop-style gallery, grouped (headers disabled). Filters with
             // tunable parameters open a floating dialog (…); the rest apply in one click.
             ...FILTER_GROUPS.flatMap(g => [
-              { label: `— ${t(g.nameKey)} —`, disabled: true } as const,
+              { label: `- ${t(g.nameKey)} -`, disabled: true } as const,
               ...g.filters.map(f => ({
                 label: f.params.length ? `${t(f.nameKey)}…` : t(f.nameKey),
                 onClick: () => openFilter(f),
@@ -4009,7 +4009,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
               flyout (long press, right click, or the corner triangle). Entries the
               editor cannot perform yet are greyed rather than hidden. */}
           {/* `flex:1` + `minHeight:0` so the rail measures the column it actually
-              has, not its own content — otherwise it collapses families away as if
+              has, not its own content - otherwise it collapses families away as if
               the viewport were tiny. It doubles as the spacer above the swatches. */}
           <ToolRail
             t={t}
@@ -4219,7 +4219,7 @@ export default function LayerEditorPage({ embed }: { embed?: LayerEmbed } = {}) 
 // MenuItem/MenuBar/Navigator/OptNum live in ui/ (imported above).
 
 // Live layer thumbnail: redraws the layer's real pixels whenever `version` bumps
-// (driven by texture writes / structural changes — no polling). Raster only;
+// (driven by texture writes / structural changes - no polling). Raster only;
 // other kinds use a glyph supplied by the parent.
 function LayerThumb({ paint, id, version }: { paint: (c: HTMLCanvasElement, id: string) => void; id: string; version: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -4497,7 +4497,7 @@ function LayersPanel({
 
   /** Bottom action bar button; `todo` marks a slot whose feature is not wired yet. */
   const ActBtn = ({ title, onClick, children, disabled, todo }: { title: string; onClick?: () => void; children: React.ReactNode; disabled?: boolean; todo?: boolean }) => (
-    <button onClick={onClick} title={todo ? `${title} — ${t('layer_soon')}` : title} disabled={disabled || todo}
+    <button onClick={onClick} title={todo ? `${title} - ${t('layer_soon')}` : title} disabled={disabled || todo}
             className="p-1 rounded hover:bg-white/10 disabled:opacity-25">
       {children}
     </button>
@@ -4532,7 +4532,7 @@ function LayersPanel({
             <KindBtn on={kinds.has('text')}       title={t('layer_kind_text')}       onClick={() => toggleKind('text')}       disabled={!filterOn}><Type size={12} style={{ color:C2.text }} /></KindBtn>
             <KindBtn on={kinds.has('group')}      title={t('layer_kind_group')}      onClick={() => toggleKind('group')}      disabled={!filterOn}><FolderClosed size={12} style={{ color:C2.text }} /></KindBtn>
           </div>
-          {/* Master switch — keeps the chosen kinds while showing everything. */}
+          {/* Master switch - keeps the chosen kinds while showing everything. */}
           <span className="ml-1 flex-shrink-0" title={t('layer_filter_toggle')}>
             <Toggle size="sm" checked={filterOn} onChange={e => setFilterOn(e.target.checked)}
                     aria-label={t('layer_filter_toggle')} />

@@ -104,7 +104,7 @@ export class ByteWriter {
 
   /**
    * ASCII bytes. When `exactLength` is given the string is truncated or padded
-   * with spaces — blend keys such as `'mul '` rely on the space padding.
+   * with spaces - blend keys such as `'mul '` rely on the space padding.
    */
   ascii(s: string, exactLength?: number): void {
     const n = exactLength ?? s.length

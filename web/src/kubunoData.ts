@@ -1,5 +1,5 @@
 /**
- * Cross-module data sharing over the clipboard (JSON envelopes) — producer side.
+ * Cross-module data sharing over the clipboard (JSON envelopes) - producer side.
  *
  * VENDORED from core `@kubuno/sdk` (`DataTransferRegistry`): replace the local
  * copy with `import { … } from '@kubuno/sdk'` once `@kubuno/sdk >= 0.1.3` is

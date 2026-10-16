@@ -1,4 +1,4 @@
-// Adjustment layer — a colour operator on the accumulator.
+// Adjustment layer - a colour operator on the accumulator.
 //
 // Two invariants, both violated by the current implementation:
 //
@@ -8,7 +8,7 @@
 //      original and clips it to 8 bits on every parameter tweak.
 //   2. ALPHA IS PRESERVED EXACTLY (`clip-to-backdrop`, `ar = ab`). An
 //      adjustment can change colour where colour already exists, and nothing
-//      else — so it is a strict no-op over empty canvas rather than a grey
+//      else - so it is a strict no-op over empty canvas rather than a grey
 //      rectangle.
 //
 // Scope follows the tree, not the pass: an adjustment inside an ISOLATED group

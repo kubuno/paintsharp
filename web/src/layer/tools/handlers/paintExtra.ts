@@ -1,7 +1,7 @@
 // Complementary paint tools and the special erasers: pencil, colour replacement,
 // mixer brush, background eraser and magic eraser.
 //
-// Everything here talks to the editor through `ToolContext` only — no React, no
+// Everything here talks to the editor through `ToolContext` only - no React, no
 // GL, no import from `LayerEditorPage`. Pixels are STRAIGHT (non-premultiplied)
 // RGBA, which is what `readTex`/`writeTex` exchange, and document row `y` maps
 // directly to texture row `y`.
@@ -14,7 +14,7 @@
 //         Paint = (1-flow)·Accum + flow·BrushColour .
 //     The mixer brush below is that model plus a colour reservoir.
 //   * contiguous region growth ........ app/core/gimppickable-contiguous-region.cc
-//     (re-implemented with an explicit stack — never recursive).
+//     (re-implemented with an explicit stack - never recursive).
 // Kubuno is AGPLv3, which is compatible with reusing those GPLv3 designs.
 import type { LayerStructureItem } from '../../../api'
 import { registerTool } from './registry'
@@ -49,11 +49,11 @@ export interface ColorReplaceOptions {
 }
 
 export interface MixerBrushOptions {
-  /** 0..100 % — share of the canvas colour taken into the brush at every dab. */
+  /** 0..100 % - share of the canvas colour taken into the brush at every dab. */
   wet: number
-  /** 0..100 % — share of the reservoir colour in the paint that is laid down. */
+  /** 0..100 % - share of the reservoir colour in the paint that is laid down. */
   load: number
-  /** 0..100 % — how much of that paint replaces the canvas at every dab. */
+  /** 0..100 % - how much of that paint replaces the canvas at every dab. */
   mix: number
   /** Reservoir colour (`#rrggbb`), or null to load the foreground colour. */
   reservoir: string | null
@@ -73,7 +73,7 @@ export interface MagicEraserOptions {
   tolerance: number
   contiguous: boolean
   antialias: boolean
-  /** 0..100 % — how much alpha a single click removes. */
+  /** 0..100 % - how much alpha a single click removes. */
   opacity: number
 }
 
@@ -175,7 +175,7 @@ function setSat(c: Triple, s: number): Triple {
 
 /**
  * Largest per-channel difference between a pixel and a reference RGBA, alpha
- * included — that is what keeps a transparent pixel out of an opaque reference's
+ * included - that is what keeps a transparent pixel out of an opaque reference's
  * tolerance, and it is the metric GIMP uses in "composite" mode.
  */
 export function colorDist(px: Uint8Array, i: number, ref: RGBA): number {
@@ -234,7 +234,7 @@ interface Stroke {
   docH: number
   /** Live pixels; also the buffer every dab reads its "canvas" colour from. */
   px: Uint8Array
-  /** Pre-stroke copy, captured BEFORE the first write — history and undo of a cancel. */
+  /** Pre-stroke copy, captured BEFORE the first write - history and undo of a cancel. */
   before: Uint8Array
   /**
    * Per-pixel coverage already laid down by this stroke, 0..65535. Flow builds up
@@ -317,10 +317,10 @@ function dabBox(st: Stroke, cx: number, cy: number): Box {
 function coverage(st: Stroke, cx: number, cy: number, px: number, py: number): number {
   const dx = px - cx, dy = py - cy
   const d = Math.sqrt(dx * dx + dy * dy)
-  // Pencil: inside or outside, nothing between — no anti-aliased rim at all.
+  // Pencil: inside or outside, nothing between - no anti-aliased rim at all.
   if (st.hard) return d <= st.radius ? 1 : 0
   // Every other brush keeps at least one pixel of falloff even at hardness 100 %,
-  // exactly like the editor's own dab sprite — that rim IS the anti-aliasing.
+  // exactly like the editor's own dab sprite - that rim IS the anti-aliasing.
   const inner = Math.min(st.radius * st.solid, Math.max(0, st.radius - 1))
   if (d <= inner) return 1
   if (d >= st.radius) return 0
@@ -385,7 +385,7 @@ type DabPixel = (i: number, a: number) => void
 /**
  * Stamps one dab. `prepare` runs once per dab (sampling, region matching, mixing…)
  * and may veto it; `accept` filters pixels BEFORE they consume any of the stroke's
- * opacity budget — a pixel a tool skips must stay paintable later on; `apply`
+ * opacity budget - a pixel a tool skips must stay paintable later on; `apply`
  * runs on every pixel that made it through.
  */
 function stampDab(
@@ -456,7 +456,7 @@ function strokeTo(st: Stroke, x: number, y: number): void {
     at += step
   }
   // `at - step` is the position of the last dab, or a negative number when none
-  // was stamped — in which case the carry simply keeps growing.
+  // was stamped - in which case the carry simply keeps growing.
   st.carry = Math.max(0, len - (at - step))
   st.last = { x, y }
 }
@@ -572,7 +572,7 @@ export function matchRegion(
     const nx = n % w, ny = (n - nx) / w
     const i = ((box.y0 + ny) * docW + box.x0 + nx) * 4
     if (colorDist(px, i, ref) > tol) {
-      mask[n] = 1 // visited and rejected — 1 never reads as coverage
+      mask[n] = 1 // visited and rejected - 1 never reads as coverage
       return
     }
     mask[n] = 255
@@ -613,7 +613,7 @@ function brushRing(ctx: ToolContext, x: number, y: number, sizeDoc: number, cros
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1 — Pencil
+// 1 - Pencil
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface PencilState { st: Stroke; r: number; g: number; b: number }
@@ -668,7 +668,7 @@ const pencil: ToolHandler = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2 — Colour replacement
+// 2 - Colour replacement
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ReplaceState {
@@ -777,7 +777,7 @@ const colorReplace: ToolHandler = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3 — Mixer brush
+// 3 - Mixer brush
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface MixerState {
@@ -832,7 +832,7 @@ function mixerDab(state: MixerState, cx: number, cy: number): void {
         state.acc = [state.res[0], state.res[1], state.res[2]]
       }
       const acc = state.acc
-      // …and Paint = load·Reservoir + (1-load)·Accum — the reservoir is what makes
+      // …and Paint = load·Reservoir + (1-load)·Accum - the reservoir is what makes
       // this a mixer brush rather than a smudge.
       paint = [
         state.res[0] * load + acc[0] * (1 - load),
@@ -890,7 +890,7 @@ const mixerBrush: ToolHandler = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4 — Background eraser
+// 4 - Background eraser
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface BgEraserState {
@@ -983,7 +983,7 @@ const bgEraser: ToolHandler = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5 — Magic eraser
+// 5 - Magic eraser
 // ─────────────────────────────────────────────────────────────────────────────
 
 const magicEraser: ToolHandler = {

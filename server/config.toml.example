@@ -1,4 +1,4 @@
-# ─── Kubuno Paintsharp — Configuration ─────────────────────────────────────────────
+# ─── Kubuno Paintsharp - Configuration ─────────────────────────────────────────────
 # Suite créative : Layer (raster) · Apex (vectoriel) · Motion (vidéo)
 #                  Vertex (3D) · Keyframe (animation 2D)
 #
@@ -13,7 +13,7 @@ port = 3106
 [core]
 # URL du core Kubuno (pour l'enregistrement du module)
 url             = "http://127.0.0.1:8080"
-# Secret partagé — doit correspondre à server.internal_secret dans le core
+# Secret partagé - doit correspondre à server.internal_secret dans le core
 internal_secret = "change_me"
 
 # ── Base de données ───────────────────────────────────────────────────────────

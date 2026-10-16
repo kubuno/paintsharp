@@ -108,11 +108,11 @@ export default function PdfWriterEditorPage() {
   const dragSnappedRef = useRef(false) // historique : snapshot une fois au 1er mouvement
   // Positions d'origine des éléments sélectionnés (pour un déplacement groupé).
   const dragOrigRef = useRef<Map<string, { x: number; y: number; points?: [number, number][] }>>(new Map())
-  // Menu contextuel (clic droit) sur un objet — rendu via MenuDropdown de @ui.
+  // Menu contextuel (clic droit) sur un objet - rendu via MenuDropdown de @ui.
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; id: string } | null>(null)
   // Menu des niveaux de zoom (façon Acrobat).
   const [zoomMenu, setZoomMenu] = useState<{ x: number; y: number } | null>(null)
-  // OCR (reconnaissance de texte) — dialogue d'options + état d'avancement.
+  // OCR (reconnaissance de texte) - dialogue d'options + état d'avancement.
   const [ocrDialog, setOcrDialog]   = useState(false)
   const [ocrLang, setOcrLang]       = useState<OcrLang>('fra+eng')
   const [ocrScope, setOcrScope]     = useState<'page' | 'doc'>('page')
@@ -154,7 +154,7 @@ export default function PdfWriterEditorPage() {
 
   // Outil en cours de tracé (freehand)
   const [drawing, setDrawing]           = useState(false)
-  // Points de l'encre en cours — en ref (pas de re-render par point : tracé fluide).
+  // Points de l'encre en cours - en ref (pas de re-render par point : tracé fluide).
   const freehandRef = useRef<[number, number][]>([])
 
   // Outil en cours de tracé (shapes / markup)
@@ -200,7 +200,7 @@ export default function PdfWriterEditorPage() {
     enabled:  !!id,
   })
 
-  // ── Titre éditable (standard WorkspaceShell) — synchronisé depuis le document ─
+  // ── Titre éditable (standard WorkspaceShell) - synchronisé depuis le document ─
   const [titleDraft, setTitleDraft] = useState('')
   useEffect(() => { if (docData?.title != null) setTitleDraft(docData.title) }, [docData?.title])
   const renameMut = useMutation({
@@ -370,7 +370,7 @@ export default function PdfWriterEditorPage() {
       pageRef.current = page
       // Logical viewport (CSS px) drives the overlay/coordinate space; the canvas
       // backing store is oversampled by the device pixel ratio so text stays crisp
-      // at any zoom — like Acrobat's rendering. The DB rotation is applied on top
+      // at any zoom - like Acrobat's rendering. The DB rotation is applied on top
       // of the page's intrinsic /Rotate.
       const rot    = (((page.rotate + dbRot) % 360) + 360) % 360
       const dpr    = Math.min(window.devicePixelRatio || 1, 3)
@@ -390,7 +390,7 @@ export default function PdfWriterEditorPage() {
     return () => { cancelled = true }
   }, [pdfDoc, currentPage, scale, isExtracted, srcIdx, dbRot, hasSourcePage])
 
-  // Dimensions de page (points) — issues de la page serveur, sinon A4 par défaut.
+  // Dimensions de page (points) - issues de la page serveur, sinon A4 par défaut.
   // La rotation 90/270 échange largeur et hauteur AFFICHÉES (espace annotations).
   const basePageW = pageData?.width  ?? 595
   const basePageH = pageData?.height ?? 842
@@ -399,7 +399,7 @@ export default function PdfWriterEditorPage() {
   const pageH = rotSwap ? basePageW : basePageH
 
   // ── Rendu d'une page VIERGE quand il n'y a pas de page source ───────────────
-  // (document créé sans import — ou page ajoutée après import : l'API source ne
+  // (document créé sans import - ou page ajoutée après import : l'API source ne
   //  la contient pas ; on dessine alors une vraie page blanche dimensionnée.)
   useLayoutEffect(() => {
     if ((pdfDoc && !isExtracted && hasSourcePage) || loading || !canvasRef.current) return
@@ -958,7 +958,7 @@ export default function PdfWriterEditorPage() {
   // Lance l'OCR : portée page courante ou document entier ; mode « texte
   // éditable » (fond blanc qui remplace visuellement le scan) ou « couche
   // invisible » (texte transparent superposé → document recherchable, aspect
-  // intact — l'équivalent de « image + texte caché » d'Acrobat).
+  // intact - l'équivalent de « image + texte caché » d'Acrobat).
   const runOcr = useCallback(async (opts: { lang: OcrLang; scope: 'page' | 'doc'; mode: 'editable' | 'invisible' }) => {
     setOcrDialog(false)
     if (!pdfDoc || ocrRunning) return
@@ -977,7 +977,7 @@ export default function PdfWriterEditorPage() {
       const nb = targets.length
       for (let i = 0; i < nb; i++) {
         const tgt = targets[i]
-        const pagePrefix = nb > 1 ? `${t('pdf_page', { defaultValue: 'Page' })} ${i + 1}/${nb} — ` : ''
+        const pagePrefix = nb > 1 ? `${t('pdf_page', { defaultValue: 'Page' })} ${i + 1}/${nb} - ` : ''
         const page = await pdfDoc.getPage(tgt.src + 1)
         // Cible ~2000 px de large pour une bonne précision sans exploser la mémoire.
         const ocrScale = Math.min(3, Math.max(1.6, 2000 / (tgt.w || 595)))
@@ -1466,7 +1466,7 @@ export default function PdfWriterEditorPage() {
         const a = ann as import('./api').TextAnnotation
         if (a.invisible) {
           // Couche OCR invisible : sélectionnable (cadre en pointillés au survol de
-          // la sélection) mais transparente — le scan reste visible dessous.
+          // la sélection) mais transparente - le scan reste visible dessous.
           return (
             <rect
               key={ann.id}
@@ -1483,7 +1483,7 @@ export default function PdfWriterEditorPage() {
             {/* Le cadre de sélection + poignées est rendu par renderResizeHandles (évite le doublon).
                 Pas de filtre drop-shadow ici → pas de halo bleu derrière le texte. */}
             {a.scaleX != null ? (
-              // Texte EXTRAIT : rendu en SVG <text> (bien plus léger que foreignObject —
+              // Texte EXTRAIT : rendu en SVG <text> (bien plus léger que foreignObject -
               // crucial sur les pages denses) ; étiré horizontalement via une matrice
               // pour coller à la largeur d'origine, ancré à gauche sur px(a.x).
               <text
@@ -1681,7 +1681,7 @@ export default function PdfWriterEditorPage() {
           )
         }
         // SVG path (coordonnées du pad de signature) : mis à l'échelle pour tenir
-        // dans la boîte posée, centré, ratio conservé — cohérent avec l'export.
+        // dans la boîte posée, centré, ratio conservé - cohérent avec l'export.
         const b = svgPathBounds(a.signatureData)
         const s = b ? Math.min(px(a.width) / b.w, px(a.height) / b.h) : 1
         const tx = b ? px(a.x) - b.x * s + (px(a.width) - b.w * s) / 2 : px(a.x)
@@ -2306,7 +2306,7 @@ export default function PdfWriterEditorPage() {
               </div>
             )}
 
-            {/* Page courante — gestion */}
+            {/* Page courante - gestion */}
             <div className="px-3 py-2 border-b border-[#212121]">
               <p className="text-[11px] text-[#8e8e8e] mb-1.5">{t('pdf_current_page')}</p>
               <div className="flex flex-col gap-1">
@@ -2574,9 +2574,9 @@ export default function PdfWriterEditorPage() {
         </Button>
         </>}
         toolRail={<>
-          {/* Outil Main (pan) — comme Acrobat ; barre d'espace = pan temporaire. */}
+          {/* Outil Main (pan) - comme Acrobat ; barre d'espace = pan temporaire. */}
           <button
-            title={t('pdf_tool_hand', { defaultValue: 'Main (déplacer la vue) — barre d’espace' })}
+            title={t('pdf_tool_hand', { defaultValue: 'Main (déplacer la vue) - barre d’espace' })}
             onClick={() => setHandTool(h => !h)}
             className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
               handTool ? 'bg-[#5a9bdc33] text-[#5a9bdc]' : 'text-[#8e8e8e] hover:bg-[#454545]'}`}
@@ -2775,7 +2775,7 @@ export default function PdfWriterEditorPage() {
         </DockArea>
       </EditorShell>
 
-      {/* ── Menu contextuel d'un objet (clic droit) — MenuDropdown de @ui ── */}
+      {/* ── Menu contextuel d'un objet (clic droit) - MenuDropdown de @ui ── */}
       {ctxMenu && (() => {
         const a = annotations.find(x => x.id === ctxMenu.id)
         if (!a) return null

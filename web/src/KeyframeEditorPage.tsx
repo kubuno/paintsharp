@@ -18,7 +18,7 @@ import { pageDataToSvg } from './apexSvg'
 import { exportFramesToMp4, webCodecsAvailable } from './frameExport'
 
 // The frame-by-frame editors are the REAL Apex / Layer editors mounted in embedded
-// mode (full-screen) — so every feature they gain is instantly available here.
+// mode (full-screen) - so every feature they gain is instantly available here.
 const ApexEditor  = lazy(() => import('./ApexEditorPage'))
 const LayerEditor = lazy(() => import('./LayerEditorPage'))
 
@@ -395,7 +395,7 @@ function TransportBar({
           onFocus={e => e.target.select()}
         />
         <span style={{ color: '#5a5a5a' }}>/ {totalFrames}</span>
-        <span style={{ color: '#5a5a5a' }} className="mx-0.5">—</span>
+        <span style={{ color: '#5a5a5a' }} className="mx-0.5">-</span>
         <span style={{ color: '#9e9e9e' }} className="font-mono">{curTime}s</span>
         <span style={{ color: '#5a5a5a' }}>/ {T}s</span>
       </div>
@@ -816,7 +816,7 @@ export default function KeyframeEditorPage() {
 
   const qc = useQueryClient()
 
-  // ── Titre éditable (standard WorkspaceShell) — synchronisé depuis l'animation ─
+  // ── Titre éditable (standard WorkspaceShell) - synchronisé depuis l'animation ─
   // NB : les animations n'ont pas de champ `is_starred` (modèle/API sans favoris)
   // → pas d'étoile pour Keyframe (comme Motion).
   const [titleDraft, setTitleDraft] = useState('')
@@ -839,7 +839,7 @@ export default function KeyframeEditorPage() {
   const [animData, setAnimData] = useState<AnimData | null>(null)
   const [comp, setComp]         = useState({ width: 720, height: 480, fps: 24, duration_frames: 120, background: '#1a1a2e', pixelRatio: 1 })
 
-  // Autosave fiable (debounce + flush au démontage/fermeture) — complète les
+  // Autosave fiable (debounce + flush au démontage/fermeture) - complète les
   // sauvegardes event-driven existantes pour ne rien perdre.
   useDebouncedAutosave(animData, !!id && !!animData, (d) => { if (d) saveMut.mutate(d) })
 
@@ -1358,7 +1358,7 @@ export default function KeyframeEditorPage() {
     })
   }, [autoKey, frame])
 
-  // Écrit plusieurs propriétés numériques (auto-key aware) sans sauvegarder —
+  // Écrit plusieurs propriétés numériques (auto-key aware) sans sauvegarder -
   // pour le redimensionnement (scaleX/scaleY + positionX/positionY).
   const setLayerNums = useCallback((layerId: string, props: Partial<Record<keyof AnimLayer['properties'], number>>) => {
     setAnimData(prev => {
@@ -1574,7 +1574,7 @@ export default function KeyframeEditorPage() {
   }
 
   // Inline frame-by-frame editor: the REAL Apex/Layer editor embedded over the
-  // Keyframe stage region — Keyframe's topbar, transport, tool rail and timeline
+  // Keyframe stage region - Keyframe's topbar, transport, tool rail and timeline
   // stay visible so you draw the current frame in context.
   const drawEmbed = (() => {
     if (!drawState) return null

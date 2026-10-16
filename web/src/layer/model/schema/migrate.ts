@@ -1,7 +1,7 @@
 // The migration cascade, applied to RAW nodes before they are typed.
 //
 // One-way and idempotent: `migrateNode(migrateNode(n))` equals `migrateNode(n)`.
-// Migrations are never skipped and never removed — a document written in 2026
+// Migrations are never skipped and never removed - a document written in 2026
 // must still open in 2036.
 //
 // A migration NEVER deletes a field it does not understand: `data` /
@@ -114,7 +114,7 @@ function migrateV1toV2(n: RawNode, ctx: MigrationCtx): RawNode {
 
   // 5. Pixels leave the tree. The surface id is derived from the layer id so
   //    that the (later) extraction pass is idempotent. `data` / `mask_data`
-  //    stay in the node until the TileStore has confirmed the write — belt and
+  //    stay in the node until the TileStore has confirmed the write - belt and
   //    braces, per spec 11.6 phase 0.
   if (out.kind === 'raster' && id) {
     out.surface = { surfaceId: legacySurfaceId(id), bounds: { ...ctx.docBounds }, version: 0 }
@@ -177,7 +177,7 @@ export function migrateNode(n: RawNode, ctx: MigrationCtx): RawNode {
   return out
 }
 
-/** True when the node needs work — used to decide whether a rewrite is due. */
+/** True when the node needs work - used to decide whether a rewrite is due. */
 export function nodeNeedsUpgrade(n: RawNode): boolean {
   const v = typeof n.schemaVersion === 'number' ? n.schemaVersion : 0
   return v < NODE_SCHEMA_VERSION

@@ -78,9 +78,9 @@ export interface PsdRawBlock {
  * `offset`/`dataLength` so a 500 MB file yields its full layer tree in a few
  * milliseconds (spec §9.2). The decoded buffer is cached after the first call.
  *
- * The returned bytes are the channel's samples in FILE layout — one byte per
+ * The returned bytes are the channel's samples in FILE layout - one byte per
  * sample at depth 8, two big-endian bytes at depth 16, four big-endian bytes at
- * depth 32, MSB-first packed rows at depth 1 — sized for the channel's OWN
+ * depth 32, MSB-first packed rows at depth 1 - sized for the channel's OWN
  * rectangle (the layer rect, or the mask rect for ids -2 and -3), never for the
  * document.
  */
@@ -96,7 +96,7 @@ export interface PsdMask {
   readonly rect: PsdRect
   readonly defaultColor: number
   readonly flags: number
-  /** `(flags & 0x02) !== 0` — the mask exists but is switched off. */
+  /** `(flags & 0x02) !== 0` - the mask exists but is switched off. */
   readonly disabled: boolean
   readonly relative: boolean
   readonly fromRender: boolean
@@ -120,7 +120,7 @@ export type PsdLayerKind =
 export interface PsdLayer {
   readonly kind: PsdLayerKind
   readonly name: string
-  /** `lyid` — stable Photoshop layer id, or null when absent. */
+  /** `lyid` - stable Photoshop layer id, or null when absent. */
   readonly id: number | null
   /**
    * The layer's OWN rectangle. Pixels are always decoded at this size and are

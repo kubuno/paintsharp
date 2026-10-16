@@ -103,7 +103,7 @@ function domStillStrict(): StillDecoder {
 /**
  * AVIF is read-only and depends entirely on `ImageDecoder`; we never write it.
  * Frames come back already composited, so they are reported as full-canvas,
- * 'none'/'source' — the honest description of what the platform gave us.
+ * 'none'/'source' - the honest description of what the platform gave us.
  */
 async function decodeAvif(bytes: Uint8Array): Promise<AnimDoc> {
   if (!(await canDecodeNatively('image/avif'))) {
@@ -152,7 +152,7 @@ async function decodeAvif(bytes: Uint8Array): Promise<AnimDoc> {
   }
 }
 
-/** Container metadata only — no pixels decoded. Cheap; used for import budgeting. */
+/** Container metadata only - no pixels decoded. Cheap; used for import budgeting. */
 export async function probeAnimation(input: Blob | ArrayBuffer | Uint8Array): Promise<AnimInfo> {
   const bytes = await toBytes(input)
   const format = sniffFormat(bytes)

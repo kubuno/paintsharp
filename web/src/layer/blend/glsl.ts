@@ -1,11 +1,11 @@
 // GLSL ES 3.00 twin of `./formulas.ts`, as composable string fragments ready to
 // be injected into a compositing fragment shader.
 //
-// Attribution: same as `./formulas.ts` — algorithms derived from GIMP
+// Attribution: same as `./formulas.ts` - algorithms derived from GIMP
 // `app/operations/layer-modes/*` (GPLv3+), cross-checked against PDF 1.7
 // §11.3.5 for the cases where Photoshop diverges. Kubuno is AGPLv3.
 //
-// PRECISION PITFALLS — read before wiring this into a shader
+// PRECISION PITFALLS - read before wiring this into a shader
 // ----------------------------------------------------------
 //  1. `precision highp float;` is MANDATORY. In mediump (10-bit mantissa)
 //     `safeDiv(1 - Cb, Cs)` with Cs ≈ 0.002 loses all precision and color-burn
@@ -13,13 +13,13 @@
 //     `GL_FRAGMENT_PRECISION_HIGH` and fall back to a CPU path.
 //  2. NaN is contagious: one NaN pixel survives `generateMipmap`, blur passes
 //     and PNG encoding. Every division goes through `safeDiv` or a
-//     `max(x, EPS)` guard. `isnan()` is unreliable across drivers — prefer a
+//     `max(x, EPS)` guard. `isnan()` is unreliable across drivers - prefer a
 //     final `clamp(cr, -64.0, 64.0)`, which also flushes NaN on most drivers.
 //  3. Un-premultiplying near zero: `cb / ab` with ab = 1/65504 explodes. The
 //     quotient is clamped to [0, UNPREMUL_MAX = 64].
 //  4. Values outside [0,1] are intentional: linear-dodge/burn/light, subtract
 //     and divide leave the range by construction. Do NOT clamp inside B; clamp
-//     at the 8-bit write-out. With an RGBA8 fallback the result differs — that
+//     at the 8-bit write-out. With an RGBA8 fallback the result differs - that
 //     is a documented limitation of the fallback.
 //  5. `step()` and exact equality: `step(0.5, s)` includes s == 0.5, while
 //     GIMP tests `s > 0.5`. At s == 0.5 both branches coincide for hard-light,
@@ -97,7 +97,7 @@ vec3 bPinLight(vec3 b, vec3 s) {
 
 /**
  * Non-separable (HSY) primitives. LUMA is BT.601 on sRGB-encoded values, per
- * PDF 1.7 §11.3.5.3 and Photoshop — NOT the BT.709 linear-light coefficients
+ * PDF 1.7 §11.3.5.3 and Photoshop - NOT the BT.709 linear-light coefficients
  * GIMP pulls from babl.
  */
 export const GLSL_NON_SEPARABLE = `
@@ -208,7 +208,7 @@ export function glslModeDefines(): string {
 /**
  * Runtime dispatch over `uMode`. Generated, so adding a mode to the table adds
  * it to the shader. Cheap at run time (uniform control flow) but slow to
- * compile — see `blendModeChunk()` for the one-variant-per-mode alternative.
+ * compile - see `blendModeChunk()` for the one-variant-per-mode alternative.
  */
 export function glslBlendDispatch(fnName = 'blendMode'): string {
   const body = BLEND_MODES
@@ -267,7 +267,7 @@ BlendPixel blendComposite(int mode, int compOp, vec3 cbP, float ab, vec3 csP, fl
 
 /**
  * Everything a compositing shader needs, minus the `#version`/`precision`
- * header and the `main()` — concatenate in this order.
+ * header and the `main()` - concatenate in this order.
  *
  * @param mode when given, emits a branch-free single-mode `blendMode()`.
  */

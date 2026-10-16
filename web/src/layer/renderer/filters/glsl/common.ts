@@ -37,9 +37,9 @@ vec3 linearToSrgb(vec3 c) {
 /** Premultiplied -> straight. Guarded: alpha 0 carries no colour information. */
 vec3 unpremul(vec4 p) { return p.a > 0.0 ? p.rgb / p.a : vec3(0.0); }
 vec4 premul(vec3 c, float a) { return vec4(c * a, a); }
-/** Rec.709 luminance — the correct weights for LINEAR light. */
+/** Rec.709 luminance - the correct weights for LINEAR light. */
 float luminance709(vec3 lin) { return dot(lin, vec3(0.2126, 0.7152, 0.0722)); }
-/** NTSC luma — only correct on NON-LINEAR (encoded) values. Legacy parity. */
+/** NTSC luma - only correct on NON-LINEAR (encoded) values. Legacy parity. */
 float luma601(vec3 enc) { return dot(enc, vec3(0.299, 0.587, 0.114)); }
 float maxc(vec3 c) { return max(c.r, max(c.g, c.b)); }
 float minc(vec3 c) { return min(c.r, min(c.g, c.b)); }
@@ -77,7 +77,7 @@ vec3 oklabToLinear(vec3 lab) {
 `
 
 /**
- * Integer hash noise. Deterministic and reproducible from (pixel, seed) alone —
+ * Integer hash noise. Deterministic and reproducible from (pixel, seed) alone -
  * unlike `Math.random()` in the legacy CPU path, which makes undo replay
  * impossible. Based on the PCG output permutation (Melissa O'Neill, Apache-2.0
  * idea, integer-only reimplementation).
@@ -117,7 +117,7 @@ float valueNoise(vec2 pos, float cell, uint seed) {
 /**
  * Edge-clamped sampling.
  *
- * TEXEL-CENTRE RULE — the single most common source of "my port is one pixel
+ * TEXEL-CENTRE RULE - the single most common source of "my port is one pixel
  * blurry": a fragment covering output pixel x has `vUv * uSize == x + 0.5`.
  * A filter ported from a CPU loop indexes INTEGER pixels, so it must start from
  * `pixelCoord()` (the floor) and fetch at `px + 0.5` texels. Feeding `vUv*uSize`

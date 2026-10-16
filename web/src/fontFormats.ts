@@ -1,6 +1,6 @@
 // Multi-format import/export for FontEditor.
 //
-//   Import : TTF, OTF, WOFF (opentype.js) — WOFF2, EOT, SVG font (fonteditor-core)
+//   Import : TTF, OTF, WOFF (opentype.js) - WOFF2, EOT, SVG font (fonteditor-core)
 //   Export : OTF (opentype.js) · TTF (native writer, carries `kern`) ·
 //            WOFF/WOFF2/EOT/SVG (converted from the TTF build via fonteditor-core)
 //
@@ -33,7 +33,7 @@ async function loadConverter(needWoff2: boolean) {
   const core = await import('fonteditor-core')
   if (needWoff2 && !core.woff2.isInited()) {
     // The wasm is imported by relative path (the package `exports` map does not
-    // expose it). In the browser init() REQUIRES a URL string — its emscripten
+    // expose it). In the browser init() REQUIRES a URL string - its emscripten
     // locateFile fetches it itself (a buffer would hang the never-rejecting init).
     const { default: wasmUrl } = await import('../node_modules/fonteditor-core/woff2/woff2.wasm?url')
     await core.woff2.init(wasmUrl)

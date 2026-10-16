@@ -171,7 +171,7 @@ pub async fn delete_video_project(
     Extension(user): Extension<PaintsharpUser>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
-    // See scenes::delete — the Drive file must go with the row.
+    // See scenes::delete - the Drive file must go with the row.
     if let Some(file_id) = crate::services::store::delete_trashed_returning_file_id(
         &state.db, "paintsharp.video_projects", id, user.id,
     )
@@ -405,7 +405,7 @@ pub async fn list_render_jobs(
 #[derive(serde::Deserialize)]
 pub struct OpenByFileDto { pub file_id: uuid::Uuid }
 
-/// Ouvre l'entité liée à un fichier (.kb*) — utilisé par StartPage / « ouvrir avec ».
+/// Ouvre l'entité liée à un fichier (.kb*) - utilisé par StartPage / « ouvrir avec ».
 pub async fn open_by_file(
     State(state): State<AppState>,
     Extension(user): Extension<PaintsharpUser>,

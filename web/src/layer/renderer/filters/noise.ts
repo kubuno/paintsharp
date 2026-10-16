@@ -1,4 +1,4 @@
-// Noise family — deterministic, hash-based, one pass.
+// Noise family - deterministic, hash-based, one pass.
 //
 // The legacy CPU noise came in two flavours, both wrong in a different way:
 //   - `imaging/filters.applyFilters` used `Math.random()`, so replaying an undo
@@ -6,7 +6,7 @@
 //   - `layerFilters.addNoise` used a seeded LCG, but consumed one or three
 //     draws per pixel and SKIPPED fully transparent pixels, so the sequence
 //     depends on the alpha channel and cannot be reproduced by any parallel
-//     implementation (GPU or worker) — it is inherently serial.
+//     implementation (GPU or worker) - it is inherently serial.
 //
 // The replacement hashes (pixel coordinate, seed) with a PCG output
 // permutation: order-independent, so the GPU pass and the future worker/WASM

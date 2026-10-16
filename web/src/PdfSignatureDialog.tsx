@@ -1,4 +1,4 @@
-// Professional signature dialog for PdfWriter — Acrobat-style: draw a smoothed
+// Professional signature dialog for PdfWriter - Acrobat-style: draw a smoothed
 // ink signature, type one in a cursive font, or import an image (with optional
 // white-background removal). Saved signatures are listed with live previews.
 import { useEffect, useRef, useState } from 'react'

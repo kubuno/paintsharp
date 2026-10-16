@@ -1,4 +1,4 @@
-// Declarative definition of the Layer editor menu bar — 9 menus, pure data.
+// Declarative definition of the Layer editor menu bar - 9 menus, pure data.
 //
 // Entries only ever name a COMMAND ID (`cmd`) or a PROVIDER ID (`provider` /
 // `dyn`); no function ever appears here. The editor binds the behaviour in its
@@ -73,7 +73,7 @@ export const ARRANGE_ITEMS: MenuSpec[] = [
 ]
 
 /** Layer mask sub-menu. Ajouter / Supprimer are two distinct, mutually greyed
- *  entries — the current single toggling entry keeps the "Ajouter un masque"
+ *  entries - the current single toggling entry keeps the "Ajouter un masque"
  *  label even when clicking removes the mask (spec §12.2, gap #5). */
 export const MASK_ITEMS: MenuSpec[] = [
   { cmd: 'layer.mask.add',       key: 'layer_mask_add',                  fr: 'Ajouter (tout faire apparaître)', p: 'P0' },
@@ -259,7 +259,7 @@ const IMAGE_MENU: MenuSpec[] = [
   { sub: 'image.mode',  key: 'layer_menu_image_mode',  fr: 'Mode colorimétrique', on: 'doc', provider: MENU_PROVIDERS.colorMode, p: 'P2' },
   { sub: 'image.depth', key: 'layer_menu_image_depth', fr: 'Profondeur',          on: 'doc', provider: MENU_PROVIDERS.bitDepth,  p: 'P2' },
   SEP,
-  // ARBITRAGE Ctrl+Maj+E — the spec assigns it to Aplatir (§4) AND to Fusionner
+  // ARBITRAGE Ctrl+Maj+E - the spec assigns it to Aplatir (§4) AND to Fusionner
   // les calques visibles (§5). It goes to merge-visible, the conventional
   // binding users expect; Aplatir keeps no accelerator in either menu.
   { cmd: 'image.flatten',   key: 'layer_flatten',                 fr: "Aplatir l'image", on: 'nLeaves > 1', p: 'P0' },
@@ -315,7 +315,7 @@ const LAYER_MENU: MenuSpec[] = [
   { cmd: 'layer.merge_down',    key: 'layer_merge_down',                fr: 'Fusionner avec le calque inférieur', sc: 'Ctrl+E', p: 'P0' },
   { cmd: 'layer.merge_visible', key: 'layer_menu_layer_merge_visible',  fr: 'Fusionner les calques visibles',     sc: 'Ctrl+Maj+E', on: 'nVisible > 1', p: 'P0' },
   { cmd: 'layer.stamp_visible', key: 'layer_menu_layer_stamp_visible',  fr: 'Estampiller les calques visibles',   sc: 'Ctrl+Alt+Maj+E', on: 'nVisible > 1', p: 'P1' },
-  // Alias of Image ▸ Aplatir l'image — same id, no duplicate accelerator.
+  // Alias of Image ▸ Aplatir l'image - same id, no duplicate accelerator.
   { cmd: 'image.flatten',       key: 'layer_flatten',                   fr: "Aplatir l'image", on: 'nLeaves > 1', p: 'P0' },
   SEP,
   { sub: 'layer.rasterize', key: 'layer_menu_layer_rasterize', fr: 'Pixelliser', on: 'L && !L.raster', provider: MENU_PROVIDERS.rasterize, p: 'P2' },
@@ -359,7 +359,7 @@ const FILTER_MENU: MenuSpec[] = [
   SEP,
   // The ~55-filter catalogue already exists (`layerFilters.ts`); only its
   // PRESENTATION changes: 10 submenus instead of one flat 65-line list with
-  // disabled pseudo-headers. No new translation — `filt_group_*` / `filt_*` are
+  // disabled pseudo-headers. No new translation - `filt_group_*` / `filt_*` are
   // already shipped in all 13 languages.
   ...FILTER_GROUPS.map<MenuSpec>(g => ({
     sub: `filter.group.${g.id}`,

@@ -1,6 +1,6 @@
 // Deflate/Inflate through the platform's `CompressionStream` / `DecompressionStream`.
 //
-// Measured available (spec 05 §2.5) with 'deflate' (zlib wrapper — exactly PNG's IDAT
+// Measured available (spec 05 §2.5) with 'deflate' (zlib wrapper - exactly PNG's IDAT
 // and TIFF's Adobe Deflate), 'deflate-raw' and 'gzip'. This is why the whole layer needs
 // neither `pako` (~45 KiB) nor `fflate` (~30 KiB).
 //
@@ -28,7 +28,7 @@ async function runStream(
   const input = new Blob([src.slice().buffer as ArrayBuffer]).stream()
   // `CompressionStream.writable` is typed `WritableStream<BufferSource>`, which TypeScript
   // will not unify with `ReadableStream<Uint8Array>.pipeThrough`. The runtime contract is
-  // exact — Uint8Array is a BufferSource — so the pair is re-stated here.
+  // exact - Uint8Array is a BufferSource - so the pair is re-stated here.
   const out = input.pipeThrough(stream as unknown as ReadableWritablePair<Uint8Array, Uint8Array>)
   const reader = out.getReader()
   const parts: Uint8Array[] = []
@@ -60,7 +60,7 @@ async function runStream(
 /**
  * Inflates a zlib (`deflate`) stream. Some TIFF and PNG writers emit a raw deflate
  * stream without the two-byte zlib header, so a failure is retried as `deflate-raw`
- * before giving up — that single retry fixes a whole class of "broken" files.
+ * before giving up - that single retry fixes a whole class of "broken" files.
  *
  * `expectedBytes` is the decoder's own estimate of the output size; it only tightens the
  * anti-zip-bomb ceiling and is never used as an allocation size.

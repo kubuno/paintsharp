@@ -1,6 +1,6 @@
 // Browser-native decode and encode paths (spec 05 §2, §3.2).
 //
-// WHAT THE NATIVE PATH COSTS — measured on Chrome 150, and the reason every use of it
+// WHAT THE NATIVE PATH COSTS - measured on Chrome 150, and the reason every use of it
 // below is gated by a header pre-scan:
 //
 //   * Bit depth > 8 is LOST. The 2D canvas is strictly 8 bits per channel:
@@ -18,7 +18,7 @@
 //   * Channels beyond RGBA are LOST, palettes are flattened, CMYK/Lab are non-deterministic.
 //   * Premultiplication loses precision on low alphas, hence `premultiplyAlpha: 'none'`.
 //
-// ENCODING — only PNG, JPEG and WebP are honoured. Any other MIME silently returns a PNG,
+// ENCODING - only PNG, JPEG and WebP are honoured. Any other MIME silently returns a PNG,
 // with no error at all, so every encode here verifies `blob.type` and refuses a mismatch.
 
 import { EMPTY_METADATA } from '../metadata/types'
@@ -169,7 +169,7 @@ export function createJpegBlockDecoder(): (
  *   * JPEG: 4:2:0 at every quality below 1.0; exactly 1.0 switches to 4:4:4. There is no
  *     way to ask for 4:2:2, progressive, custom quantisation tables or restart intervals.
  *   * WebP: exactly 1.0 is LOSSLESS (VP8L) and is often SMALLER than 0.99 on synthetic
- *     content — counter-intuitive, and worth surfacing in the UI.
+ *     content - counter-intuitive, and worth surfacing in the UI.
  *   * PNG: `quality` is ignored outright; the compression level is not reachable.
  */
 export const NATIVE_QUALITY_NOTES = {

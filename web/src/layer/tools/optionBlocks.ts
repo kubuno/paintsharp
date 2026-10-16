@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import type { OptionBlockId, ToolOption, ToolValues } from './types'
 
-// ── BLOC A — selection mode, carried by every selection tool ─────────────────
+// ── BLOC A - selection mode, carried by every selection tool ─────────────────
 
 /** The four boolean combinations, driven by Shift / Alt as well. */
 export const SELECTION_MODE_CHOICES = [
@@ -34,7 +34,7 @@ const SELECTION: ToolOption[] = [
   { kind: 'action', id: 'refine-edge', labelKey: 'layer_topt_refine_edge', priority: 2, run: 'refine-edge' },
 ]
 
-// ── BLOC B — brush core, carried by every stamping tool ──────────────────────
+// ── BLOC B - brush core, carried by every stamping tool ──────────────────────
 
 export const SYMMETRY_CHOICES = [
   { value: 'none',       labelKey: 'layer_topt_symmetry_none' },
@@ -77,7 +77,7 @@ const BRUSH_CORE: ToolOption[] = [
   },
 ]
 
-// ── BLOC C — pixel sampling, carried by wand / bucket / healing / stamps ─────
+// ── BLOC C - pixel sampling, carried by wand / bucket / healing / stamps ─────
 
 export const SAMPLE_SOURCE_CHOICES = [
   { value: 'active',      labelKey: 'layer_topt_sample_source_active' },
@@ -98,7 +98,7 @@ const SAMPLING: ToolOption[] = [
   },
 ]
 
-// ── BLOC D — vector shape styling, carried by shapes and the pen ─────────────
+// ── BLOC D - vector shape styling, carried by shapes and the pen ─────────────
 
 export const SHAPE_OUTPUT_CHOICES = [
   { value: 'shape',  labelKey: 'layer_topt_shape_output_shape',  icon: Shapes },
@@ -169,7 +169,7 @@ const SHAPE_STYLE: ToolOption[] = [
   { kind: 'toggle', id: 'antialias', labelKey: 'layer_topt_antialias', priority: 2, def: true },
 ]
 
-// ── BLOC E — geometry shared by crop / artboard / content-aware move ─────────
+// ── BLOC E - geometry shared by crop / artboard / content-aware move ─────────
 
 export const RATIO_CHOICES = [
   { value: 'free',     labelKey: 'layer_topt_ratio_free' },

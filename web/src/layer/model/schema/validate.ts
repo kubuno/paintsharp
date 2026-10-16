@@ -1,7 +1,7 @@
 // Structural invariants.
 //
 // `validateTree` is a REPAIR pass, not a gate: it never rejects a document, it
-// fixes what it can and reports what it fixed. It is idempotent — running it
+// fixes what it can and reports what it fixed. It is idempotent - running it
 // twice changes nothing the second time, which is what lets it run on every
 // load and after every import without drifting.
 

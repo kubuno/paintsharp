@@ -1,7 +1,7 @@
 // XMP packets (spec 05 §6.4).
 //
 // No RDF model is implemented. The original packet is kept VERBATIM and only the
-// properties the user edits are rewritten in place — regenerating the XML would drop the
+// properties the user edits are rewritten in place - regenerating the XML would drop the
 // proprietary extensions Lightroom and Capture One rely on.
 //
 // Reading uses the platform `DOMParser` when there is one (browser, worker); in a plain

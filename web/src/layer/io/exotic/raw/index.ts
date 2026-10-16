@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Camera RAW import — orchestration.
+// Camera RAW import - orchestration.
 //
 // Scope is the embedded JPEG preview and nothing else (see `preview.ts` for why). The
-// user is told so with a warning rather than a dialog: "camera preview — the raw sensor
+// user is told so with a warning rather than a dialog: "camera preview - the raw sensor
 // data is not developed".
 
 import { bitmapToRgba, decodeBlobToBitmap, singleLayerDocument, stripExtension } from '../bitmap'

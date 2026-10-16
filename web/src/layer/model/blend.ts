@@ -2,7 +2,7 @@
 //
 // `BLEND_INT` maps a mode key to the integer the compositing fragment shader
 // switches on (`uMode`). Extracted verbatim from LayerEditorPage during the
-// layer/ refactor — no behavioural change.
+// layer/ refactor - no behavioural change.
 import type { TFunction } from 'i18next'
 
 export const BLEND_INT: Record<string, number> = {

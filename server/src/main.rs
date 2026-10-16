@@ -258,11 +258,11 @@ async fn main() -> Result<()> {
                 match http2.post(&url).header("X-Internal-Secret", secret.as_str()).send().await {
                     Ok(r) if r.status().is_success() => {}
                     Ok(r) if r.status() == reqwest::StatusCode::NOT_FOUND => {
-                        tracing::info!("Heartbeat 404 — ré-enregistrement…");
+                        tracing::info!("Heartbeat 404 - ré-enregistrement…");
                         register_with_core(&http2, &settings2).await;
                     }
                     Ok(r) if r.status() == reqwest::StatusCode::FORBIDDEN => {
-                        tracing::info!("Heartbeat 403 — module désactivé, attente…");
+                        tracing::info!("Heartbeat 403 - module désactivé, attente…");
                     }
                     Ok(r)  => tracing::warn!(status = %r.status(), "Heartbeat réponse inattendue"),
                     Err(e) => tracing::warn!(error = %e, "Heartbeat erreur réseau"),

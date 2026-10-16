@@ -9,7 +9,7 @@ import type { PsdRect } from '../types.ts'
 
 /**
  * Tight bounding box of non-zero alpha in a document-sized RGBA buffer.
- * Returns null when the layer is fully transparent — such a layer is written
+ * Returns null when the layer is fully transparent - such a layer is written
  * with `rect = {0,0,0,0}` and empty channels, which is legal and far lighter
  * than a document-sized transparent flat.
  */

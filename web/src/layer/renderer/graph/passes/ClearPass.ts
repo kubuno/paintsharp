@@ -2,7 +2,7 @@
 //
 // `vec4(0)` is the correct identity in a premultiplied pipeline: it is both the
 // transparent colour and the neutral element of `source-over`. In straight
-// alpha it would not be — the colour of a fully transparent texel is undefined
+// alpha it would not be - the colour of a fully transparent texel is undefined
 // there, which is one of the reasons the working space is premultiplied.
 
 import { beginDraw } from './types.ts'

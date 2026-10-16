@@ -30,7 +30,7 @@ export interface AdjustmentDef {
   defaults: AdjustmentParams
   /** Menu group, in Photoshop's order; separators are drawn between groups. */
   group: 'fill' | 'tonal' | 'color' | 'mono'
-  /** False while the editor cannot render it — the entry shows but stays disabled. */
+  /** False while the editor cannot render it - the entry shows but stays disabled. */
   implemented: boolean
 }
 
@@ -79,7 +79,7 @@ export const defaultAdjustment = (kind: AdjustmentKind): AdjustmentValue => {
   return { kind, p: [...def.defaults.p] as AdjustmentParams['p'], color: [...def.defaults.color] as AdjustmentParams['color'] }
 }
 
-/** Reads a node's adjustment value defensively — documents may predate this. */
+/** Reads a node's adjustment value defensively - documents may predate this. */
 export function readAdjustment(raw: unknown): AdjustmentValue | null {
   if (!raw || typeof raw !== 'object') return null
   const v = raw as Partial<AdjustmentValue>

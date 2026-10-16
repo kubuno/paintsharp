@@ -2,14 +2,14 @@
 //! them in the console.
 //!
 //! Declared by `module.toml`'s `[[settings]]` blocks, stored in `core.settings`,
-//! and read back here through `/internal/modules/paintsharp/settings` — a module
+//! and read back here through `/internal/modules/paintsharp/settings` - a module
 //! owns its own schema and cannot read the core's tables, and a background
 //! refresher has no user token for the public config route. The module is named
 //! in the URL (not derived from the secret) so the read works whether the
 //! instance shares one master secret between modules or issues a derived one per
 //! module.
 //!
-//! Every field here is read by code that acts on it — a knob that changes
+//! Every field here is read by code that acts on it - a knob that changes
 //! nothing is worse than an absent one:
 //!   * `max_document_bytes`   → `services::content_files` (single write path of
 //!     every editor: Vertex, Apex, Layer, Motion, Keyframe, PdfWriter,
@@ -65,7 +65,7 @@ impl InstanceConfig {
         let d = Self::default();
 
         // An integer in a range. The console stores an `int` as a JSON number,
-        // but a value echoed from a text field can arrive as a string — accept
+        // but a value echoed from a text field can arrive as a string - accept
         // both, then range-check.
         let uint_in = |key: &str, min: u64, max: u64, fallback: u64| -> u64 {
             let v = settings.get(key);

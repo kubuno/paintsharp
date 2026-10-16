@@ -23,8 +23,8 @@ export function singleSelection(id: LayerId | null): LayerSelection {
 /**
  * The ANTICHAIN of the selection: when a group and one of its descendants are
  * both selected, structural operations must consider only the ancestor.
- * Without this, "delete" removes the child twice — once on its own, once with
- * its parent — and the second removal silently targets the wrong node.
+ * Without this, "delete" removes the child twice - once on its own, once with
+ * its parent - and the second removal silently targets the wrong node.
  *
  * Returned in display order (top first), which is also the order in which
  * grouping and reordering must preserve relative positions.

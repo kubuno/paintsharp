@@ -168,7 +168,7 @@ pub async fn delete_document(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>> {
     // `source_file_id` is deliberately NOT collected: that one is the PDF the user
-    // imported, which stays theirs. Only the editor's own file goes with the row —
+    // imported, which stays theirs. Only the editor's own file goes with the row -
     // keeping it would leave an orphan that no longer opens onto anything.
     let Some((source_path, file_id)) = store::delete_document(&state.db, id, user.id).await? else {
         return Err(PaintsharpError::NotFound(id.to_string()));
@@ -616,7 +616,7 @@ fn extract_page_size(doc: &lopdf::Document, page_id: lopdf::ObjectId) -> (f64, f
 #[derive(serde::Deserialize)]
 pub struct OpenByFileDto { pub file_id: uuid::Uuid }
 
-/// Ouvre l'entité liée à un fichier (.kb*) — utilisé par StartPage / « ouvrir avec ».
+/// Ouvre l'entité liée à un fichier (.kb*) - utilisé par StartPage / « ouvrir avec ».
 pub async fn open_by_file(
     State(state): State<AppState>,
     Extension(user): Extension<PaintsharpUser>,

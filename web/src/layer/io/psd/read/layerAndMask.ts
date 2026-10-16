@@ -2,9 +2,9 @@
  * PSD/PSB Layer & Mask Information section (spec §1.5, §4.3, §5.1).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
- * licensed under the GNU General Public License v3 or later — `read_layer_block()`
+ * licensed under the GNU General Public License v3 or later - `read_layer_block()`
  * and `read_layer_info()` in psd-load.c, plus the `ibm_pc_format` handling of
- * psd.h — and from Adobe's public "Photoshop File Formats Specification".
+ * psd.h - and from Adobe's public "Photoshop File Formats Specification".
  *
  * This is an independent TypeScript re-implementation; no GIMP source code was
  * copied. Kubuno is AGPLv3, compatible with the GPLv3 (GPLv3 §13).
@@ -79,7 +79,7 @@ export function readLayerAndMask(r: ByteReader, ctx: ReadCtx): LayerAndMaskResul
       layers = res.layers
       compositeHasAlpha = res.compositeHasAlpha
       // The section is padded to an even length, and the declared length is
-      // authoritative — never the cursor (spec §1.5).
+      // authoritative - never the cursor (spec §1.5).
       sr.seekTo(infoStart + layerInfoLength + (layerInfoLength % 2))
     }
   } catch (e) {
@@ -151,8 +151,8 @@ function readLayerInfo(
     if (r.pos <= before) break
   }
 
-  // Memory budget. Every layer keeps its OWN rectangle — we never expand a
-  // layer to the document size — but a hostile file could still declare
+  // Memory budget. Every layer keeps its OWN rectangle - we never expand a
+  // layer to the document size - but a hostile file could still declare
   // thousands of full-canvas layers, so the cumulative cost is checked here,
   // BEFORE anything is allocated.
   let budget = 0
@@ -167,7 +167,7 @@ function readLayerInfo(
   }
   ctx.budget.remaining = Math.min(ctx.budget.remaining, ctx.limits.MAX_TOTAL_LAYER_BYTES)
 
-  // ChannelImageData: no separator, no padding — advance by dataLength exactly.
+  // ChannelImageData: no separator, no padding - advance by dataLength exactly.
   for (const rec of records) {
     for (const ch of rec.channels) {
       ch.offset = r.pos
@@ -188,7 +188,7 @@ function readLayerInfo(
  * `ibm_pc_format` heuristic (spec §1.7): a handful of third-party writers emit
  * the Layer & Mask section little-endian.
  *
- * Looking at `layerCount` alone is not enough — a little-endian count of 3 reads
+ * Looking at `layerCount` alone is not enough - a little-endian count of 3 reads
  * as 768 big-endian, which is not "aberrant". So we PROBE: read the count plus
  * the first Layer Record header both ways and check that the rectangle is
  * ordered and bounded, that the channel count is sane, and that the blend-mode

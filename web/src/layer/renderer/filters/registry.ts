@@ -4,7 +4,7 @@
 // the same ids, the same i18n keys and the same slider ranges, so the UI can be
 // pointed at this registry without touching a single label. What changes is the
 // body: instead of a CPU closure, each record carries the pass list that runs it
-// on the GPU — or declares that it cannot run there, and why.
+// on the GPU - or declares that it cannot run there, and why.
 //
 // Routing (spec §9.1):
 //   'gpu'     point op, bounded kernel, or arbitrary gather  → fragment passes
@@ -120,7 +120,7 @@ export const GPU_FILTERS: readonly GpuFilterDef[] = [
   },
   {
     id: 'despeckle', group: 'noise', nameKey: 'filt_despeckle', backend: 'worker', space: 'perceptual',
-    params: [], reason: WHY.sort + '; radius 1 (9 elements) IS portable as a sorting network — candidate for a GPU fast path',
+    params: [], reason: WHY.sort + '; radius 1 (9 elements) IS portable as a sorting network - candidate for a GPU fast path',
   },
   {
     id: 'dust', group: 'noise', nameKey: 'filt_dust', backend: 'worker', space: 'perceptual',
@@ -334,7 +334,7 @@ export function nonPortableFilters(): readonly { id: string; backend: 'worker' |
     .map(f => ({ id: f.id, backend: f.backend as 'worker' | 'hybrid', reason: f.reason ?? 'unspecified' }))
 }
 
-/** Coverage counters — used by `inventory.md` and by the diagnostics panel. */
+/** Coverage counters - used by `inventory.md` and by the diagnostics panel. */
 export function filterCoverage(): { total: number; gpu: number; worker: number; hybrid: number } {
   return {
     total: GPU_FILTERS.length,

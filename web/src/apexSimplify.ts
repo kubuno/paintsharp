@@ -3,7 +3,7 @@
  * change the shape (within a pixel tolerance).
  *
  *  - Collinear pruning: an anchor sitting on the straight line between its two
- *    line-segment neighbours carries no information — removed, no handles added.
+ *    line-segment neighbours carries no information - removed, no handles added.
  *  - Curve merging (Schneider): two adjacent Bézier segments joining smoothly
  *    at an anchor are refitted as ONE cubic (tangent directions preserved,
  *    handle lengths solved by least squares); the anchor is removed only when
@@ -25,7 +25,7 @@ function norm(a: V): V | null {
 }
 
 // Cubic control polygon for the segment between two anchors. A missing handle
-// means a straight leg — its control point sits at the 1/3 chord position, so
+// means a straight leg - its control point sits at the 1/3 chord position, so
 // the cubic degenerates to the exact line.
 function cubicOf(a: PathPoint, b: PathPoint): [V, V, V, V] {
   const c1: V = a.hOut ? { x: a.x + a.hOut[0], y: a.y + a.hOut[1] }
@@ -43,7 +43,7 @@ function evalCubic(c: [V, V, V, V], t: number): V {
   }
 }
 
-// True when B lies on the straight run A—C (all legs are lines) within eps.
+// True when B lies on the straight run A-C (all legs are lines) within eps.
 function collinearDrop(A: PathPoint, B: PathPoint, C: PathPoint, eps: number): boolean {
   if (A.hOut || B.hIn || B.hOut || C.hIn) return false
   const ac = sub(C, A)
@@ -59,7 +59,7 @@ function collinearDrop(A: PathPoint, B: PathPoint, C: PathPoint, eps: number): b
 // deviates more than eps.
 function tryMerge(A: PathPoint, B: PathPoint, C: PathPoint, eps: number):
   { hOut: [number, number]; hIn: [number, number] } | null {
-  // Direction of travel arriving at / leaving B — a kink there is a feature.
+  // Direction of travel arriving at / leaving B - a kink there is a feature.
   const inB = norm(B.hIn ? { x: -B.hIn[0], y: -B.hIn[1] } : sub(B, A))
   const outB = norm(B.hOut ? { x: B.hOut[0], y: B.hOut[1] } : sub(C, B))
   if (!inB || !outB || dot(inB, outB) < 0.985) return null   // > ~10°: keep the corner
@@ -103,7 +103,7 @@ function tryMerge(A: PathPoint, B: PathPoint, C: PathPoint, eps: number):
   } else {
     alpha = beta = total / 3                     // singular: heuristic fallback
   }
-  // Retrograde or wild handles produce loops — reject instead of clamping.
+  // Retrograde or wild handles produce loops - reject instead of clamping.
   if (alpha <= 0 || beta <= 0 || alpha > total * 2 || beta > total * 2) return null
 
   const cand: [V, V, V, V] = [

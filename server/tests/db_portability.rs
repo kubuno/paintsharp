@@ -1,5 +1,5 @@
 //! Runs PaintSharp's own migrations and its pool-only store services against a
-//! real server of **each** engine, from a single compiled binary — the proof
+//! real server of **each** engine, from a single compiled binary - the proof
 //! that the engine is a run-time choice, not a build-time one.
 //!
 //! * SQLite always runs (a temp file, no server).

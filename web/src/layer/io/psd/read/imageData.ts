@@ -1,5 +1,5 @@
 /*
- * PSD/PSB Image Data section — the flattened composite preview (spec §1.8).
+ * PSD/PSB Image Data section - the flattened composite preview (spec §1.8).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
  * GPLv3+ (psd-load.c, merged-image handling) and from Adobe's public
@@ -22,7 +22,7 @@ import type {
  * Decodes the composite. Channels are planar and follow the colour model order
  * (RGB: R, G, B, [A], [extra alphas]).
  *
- * Returns null when the section is missing or unusable — never throws: a
+ * Returns null when the section is missing or unusable - never throws: a
  * document without a preview is still perfectly importable.
  */
 export async function readImageData(

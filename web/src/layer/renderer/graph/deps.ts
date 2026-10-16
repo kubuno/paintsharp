@@ -14,13 +14,13 @@
 //   1. This folder compiles and is fully unit-testable on its own, against test
 //      doubles (see `graph-tests/`), before `gl/` and `tiles/` exist.
 //   2. When the real `GLDevice` / `TileCache` land, they satisfy these
-//      interfaces structurally — TypeScript checks the fit at the wiring point
+//      interfaces structurally - TypeScript checks the fit at the wiring point
 //      (`Renderer.create`), not here.
 //
 // Everything below is deliberately minimal: only what the graph actually calls.
 
 // ---------------------------------------------------------------------------
-// Geometry — a local mirror of `tiles/geometry.ts` (spec §3.2)
+// Geometry - a local mirror of `tiles/geometry.ts` (spec §3.2)
 // ---------------------------------------------------------------------------
 
 /** Half-open rectangle in document pixels: [x0,x1) x [y0,y1). */
@@ -33,7 +33,7 @@ export interface Rect {
 
 /** Render / cache granularity (spec §3.1). */
 export const TILE_SIZE = 256
-/** Invalidation granularity — 8x8 chunks per tile (spec §3.1). */
+/** Invalidation granularity - 8x8 chunks per tile (spec §3.1). */
 export const CHUNK_SIZE = 32
 
 /** Tile address: level 0 = full resolution, level L = 2^L doc pixels per texel. */
@@ -83,7 +83,7 @@ export function tileRect(key: TileKey, tileSize = TILE_SIZE): Rect {
 }
 
 // ---------------------------------------------------------------------------
-// Étage 4 — GPU abstraction (`gl/`, spec §11.2)
+// Étage 4 - GPU abstraction (`gl/`, spec §11.2)
 // ---------------------------------------------------------------------------
 
 /** Spec §4.5. Working space is linear premultiplied; `rgba8` is the fallback. */
@@ -97,7 +97,7 @@ export const BYTES_PER_TEXEL: Record<WorkingFormat, number> = {
 }
 
 export interface GLCapsLike {
-  /** Format actually probed as renderable — never assumed (spec §4.5). */
+  /** Format actually probed as renderable - never assumed (spec §4.5). */
   readonly working: WorkingFormat
   /** `EXT_float_blend`: hardware blending onto a float render target. */
   readonly floatBlend: boolean
@@ -156,7 +156,7 @@ export interface GLDeviceLike {
   /**
    * Compile+link once per `key`, then return the cached program. `key` must
    * fully determine the source, so callers hash their `#define` permutation
-   * into it. Returns null on compile failure — the graph then skips the pass
+   * into it. Returns null on compile failure - the graph then skips the pass
    * rather than throwing inside a frame.
    */
   program(key: string, vertex: string, fragment: string): ProgramLike | null
@@ -185,7 +185,7 @@ export interface GLDeviceLike {
 }
 
 // ---------------------------------------------------------------------------
-// Étage 2 — tiling (`tiles/`, spec §3)
+// Étage 2 - tiling (`tiles/`, spec §3)
 // ---------------------------------------------------------------------------
 
 export interface DirtyRegionLike {
@@ -228,20 +228,20 @@ export interface LayerSourceLike {
   maskTileAt(maskLayerId: string, key: TileKey): WebGLTexture | null
   /** Non-empty bounding box in document pixels, or null for an empty layer. */
   bboxOf(layerId: string): Rect | null
-  /** Coarsest LOD level built for a layer — the thumbnail pass starts there. */
+  /** Coarsest LOD level built for a layer - the thumbnail pass starts there. */
   coarsestLevel(layerId: string): number
 }
 
 export type PixelFormat = 'rgba8-srgb' | 'rgba8-linear' | 'rgba16f-linear' | 'rgba32f-linear'
 
 /**
- * Write side of layer storage. The graph never uses it — only the Renderer
+ * Write side of layer storage. The graph never uses it - only the Renderer
  * façade does, to satisfy `writeLayerRect` / `readLayerRect`.
  */
 export interface LayerStoreLike extends LayerSourceLike {
   writeRect(layerId: string, r: Rect, px: ArrayBufferView, fmt: PixelFormat): void
   readRect(layerId: string, r: Rect, fmt: PixelFormat): Promise<ArrayBufferView>
-  /** Tiles this layer owns, coarsest level first — the thumbnail source. */
+  /** Tiles this layer owns, coarsest level first - the thumbnail source. */
   tilesOf(layerId: string, level: number): TileKey[]
   dispose(): void
 }

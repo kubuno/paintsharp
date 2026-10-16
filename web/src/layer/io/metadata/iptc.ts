@@ -6,7 +6,7 @@
 // bit 15 set introduces a 4-byte extended length. The block is usually wrapped in an
 // 8BIM resource 0x0404 (JPEG APP13 `Photoshop 3.0\0`, TIFF tags 34377/33723).
 //
-// Text is Latin-1 unless dataset 1:90 declares `%G` (UTF-8) — respecting that is what
+// Text is Latin-1 unless dataset 1:90 declares `%G` (UTF-8) - respecting that is what
 // stops accented captions from turning to mojibake.
 
 import type { IptcData } from './types'

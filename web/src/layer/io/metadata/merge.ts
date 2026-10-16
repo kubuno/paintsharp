@@ -2,7 +2,7 @@
 //
 // The same logical field lives in three places and they contradict each other constantly.
 // The industry convention (Metadata Working Group) is XMP > IPTC > EXIF, and that order
-// is applied here — documented and testable rather than re-decided at each call site.
+// is applied here - documented and testable rather than re-decided at each call site.
 
 import { EXIF_TAG, exifString } from './exif'
 import { IPTC_FIELD, iptcValue, iptcValues } from './iptc'

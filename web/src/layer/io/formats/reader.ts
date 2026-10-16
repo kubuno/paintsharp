@@ -51,7 +51,7 @@ export class ByteReader {
     }
   }
 
-  /** True when the range is readable — for optional/best-effort reads. */
+  /** True when the range is readable - for optional/best-effort reads. */
   has(off: number, len: number): boolean {
     return Number.isFinite(off) && Number.isFinite(len) && off >= 0 && len >= 0 && off + len <= this.bytes.length
   }

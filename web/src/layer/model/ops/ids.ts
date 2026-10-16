@@ -22,7 +22,7 @@ export function isLayerId(v: unknown): v is LayerId {
   return typeof v === 'string' && v.length > 0
 }
 
-/** Deterministic 32-bit hash of an id — the `dissolve` seed, and dedup keys. */
+/** Deterministic 32-bit hash of an id - the `dissolve` seed, and dedup keys. */
 export function hashId(id: string): number {
   let h = 2166136261 >>> 0
   for (let i = 0; i < id.length; i++) {

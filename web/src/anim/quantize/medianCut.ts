@@ -2,7 +2,7 @@
 //
 // Chosen over NeuQuant because DETERMINISM is a functional requirement here: an
 // animation shares ONE global palette, so a non-deterministic quantiser yields
-// a byte-different file for identical content on every export — no caching, no
+// a byte-different file for identical content on every export - no caching, no
 // regression test by output comparison, and a confusing experience. Median cut
 // picks good boundaries but mediocre representatives; three Lloyd passes over
 // the 32768 histogram bins (not over n pixels) close the quality gap with
@@ -90,7 +90,7 @@ export function medianCutPalette(hist: Histogram, maxColors: number): { rgb: Uin
     const dr = bx.rMax - bx.rMin
     const dg = bx.gMax - bx.gMin
     const db = bx.bMax - bx.bMin
-    // Longest axis wins; on a tie prefer R, then G, then B — fixed order.
+    // Longest axis wins; on a tie prefer R, then G, then B - fixed order.
     const axis = dr >= dg && dr >= db ? 0 : dg >= db ? 1 : 2
     const key = axis === 0 ? br : axis === 1 ? bg : bb
 

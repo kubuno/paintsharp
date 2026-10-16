@@ -6,14 +6,14 @@
 //
 // An animated WebP is not another format; it is the same VP8 / VP8L bitstream
 // packed inside `ANMF` instead of directly under `RIFF/WEBP`. So each frame is
-// rendered to a canvas, handed to `convertToBlob('image/webp')` — the browser's
-// own libwebp, in native code — and the resulting chunks are copied byte for
+// rendered to a canvas, handed to `convertToBlob('image/webp')` - the browser's
+// own libwebp, in native code - and the resulting chunks are copied byte for
 // byte into an `ANMF`. No re-encoding, no extra loss, ~200 lines, and the
 // quality of libwebp because it IS libwebp.
 //
 // What we give up is libwebp's inter-frame prediction (`WebPAnimEncoder`'s
 // kmin/kmax key-frame logic). We get most of it back at the CONTAINER level by
-// encoding only the sub-rectangle that changes, with B = 0 and D = 0 — which is
+// encoding only the sub-rectangle that changes, with B = 0 and D = 0 - which is
 // what libwebp does at that level too. On fixed-background content, i.e. nearly
 // everything authored in an image editor, the gap is small.
 //
@@ -92,7 +92,7 @@ export function extractStillChunks(bytes: Uint8Array): StillChunks {
     if (c.fourCC !== 'ALPH' && c.fourCC !== 'VP8 ' && c.fourCC !== 'VP8L') continue
     if (c.fourCC === 'ALPH') hasAlpha = true
     if (c.fourCC === 'VP8L') lossless = true
-    // Copy the chunk whole — header, payload and odd-size padding.
+    // Copy the chunk whole - header, payload and odd-size padding.
     parts.push(bytes.subarray(c.start - 8, c.end + ((c.end - c.start) & 1)))
   }
   if (parts.length === 0) throw new Error('WebP carries no image chunk')
@@ -155,7 +155,7 @@ export async function encodeWebpAnim(
   }
 
   const anim = new Uint8Array(6)
-  writeU32(anim, 0, 0) // background colour (B, G, R, A) — left at zero
+  writeU32(anim, 0, 0) // background colour (B, G, R, A) - left at zero
   const loop = Math.max(0, Math.min(0xffff, resolved.loop))
   anim[4] = loop & 0xff
   anim[5] = (loop >> 8) & 0xff

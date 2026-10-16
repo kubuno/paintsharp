@@ -1,4 +1,4 @@
-// Layer model — the internal, enriched representation of a Paintsharp/Layer document.
+// Layer model - the internal, enriched representation of a Paintsharp/Layer document.
 //
 // Attribution
 // -----------
@@ -300,7 +300,7 @@ export interface DropShadow extends EffectBase {
   antiAliased: boolean
   /** 0..1. */
   noise: number
-  /** "Layer knocks out drop shadow" — Photoshop default: true. */
+  /** "Layer knocks out drop shadow" - Photoshop default: true. */
   layerKnocksOut: boolean
 }
 
@@ -324,9 +324,9 @@ export interface OuterGlow extends EffectBase {
   size: number
   contour: ContourSpec
   antiAliased: boolean
-  /** 0..1 — which part of the contour maps to the edge. */
+  /** 0..1 - which part of the contour maps to the edge. */
   range: number
-  /** 0..1 — gradient dithering. */
+  /** 0..1 - gradient dithering. */
   jitter: number
   noise: number
 }
@@ -574,9 +574,9 @@ export interface LayerBase {
 
   // Visibility and compositing
   visible: boolean
-  /** 0..255 in memory (0..100 on the wire — see `./schema/`). */
+  /** 0..255 in memory (0..100 on the wire - see `./schema/`). */
   opacity: number
-  /** 0..255. Fill opacity — does NOT affect layer styles. */
+  /** 0..255. Fill opacity - does NOT affect layer styles. */
   fillOpacity: number
   blendMode: BlendMode
   /** Clipped to the alpha of the sibling below (the clipping base). */
@@ -697,7 +697,7 @@ export type LayerKind = Layer['kind']
  * A partial update of a layer. `Partial<Layer>` cannot be used: `Layer` is a
  * discriminated union, so `Partial` distributes over it and a patch touching
  * only base fields fails to match any member. A patch carries base fields plus,
- * optionally, kind-specific ones — the caller is responsible for applying it to
+ * optionally, kind-specific ones - the caller is responsible for applying it to
  * a node of the right kind.
  */
 export type LayerPatch = Partial<LayerBase> & { readonly [k: string]: unknown }

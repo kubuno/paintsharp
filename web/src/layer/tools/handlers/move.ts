@@ -10,7 +10,7 @@
 //   • Ctrl/⌘    → move the active PATH (GIMP_TRANSFORM_TYPE_PATH)
 //
 // Plus, from the same file:
-//   • pick-a-layer: Alt is taken, so picking is on the secondary button — the
+//   • pick-a-layer: Alt is taken, so picking is on the secondary button - the
 //     topmost layer with a non-transparent pixel under the cursor becomes active
 //     (GIMP's `move_current = FALSE` / Photoshop's auto-select).
 //   • Shift during the drag constrains to the horizontal or vertical axis.
@@ -154,7 +154,7 @@ function statusFor(target: Target, dx: number, dy: number): string {
 const handler: ToolHandler = {
   onDown(ctx, p) {
     // Secondary button picks the topmost layer under the cursor and does not
-    // start a drag — GIMP's "pick a layer" mode, Photoshop's auto-select.
+    // start a drag - GIMP's "pick a layer" mode, Photoshop's auto-select.
     if (p.button === 2) {
       const hit = pickLayer(ctx, p.x, p.y)
       ctx.setStatus(hit ? `⌖ ${ctx.layerById(hit)?.name ?? hit}` : null)
@@ -251,7 +251,7 @@ const handler: ToolHandler = {
 
     if (st.target === 'layer' && st.layerId && st.snapshot) {
       // Undo BEFORE the write, over the union of the vacated and the occupied
-      // area — a move dirties both.
+      // area - a move dirties both.
       const b = alphaBounds(st.snapshot, ctx.docW, ctx.docH)
       const idx = Math.round(st.dx), idy = Math.round(st.dy)
       if (b) {

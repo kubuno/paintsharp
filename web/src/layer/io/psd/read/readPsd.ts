@@ -1,5 +1,5 @@
 /*
- * PSD/PSB reader orchestration — pass 1 (structure) and pass 2 (pixels).
+ * PSD/PSB reader orchestration - pass 1 (structure) and pass 2 (pixels).
  *
  * Derived from the GIMP PSD plug-in (file-psd), Copyright 2007 John Marshall,
  * licensed under the GNU General Public License v3 or later (psd-load.c), and

@@ -1,7 +1,7 @@
-// ApexQuickVector — a small, self-contained vector painter "provided by Apex".
+// ApexQuickVector - a small, self-contained vector painter "provided by Apex".
 //
 // Companion to LayerQuickPaint (raster): instead of pixels it builds smooth vector
-// strokes (freehand pen → midpoint-quadratic smoothing) that stay editable —
+// strokes (freehand pen → midpoint-quadratic smoothing) that stay editable -
 // select / move / delete / recolour individual strokes. On every change it commits
 // BOTH a rasterised PNG (so Keyframe can render frames uniformly) AND the vector
 // path list (so re-opening a frame restores full editability).

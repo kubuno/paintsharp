@@ -13,7 +13,7 @@
 //     including its OMEGA_G / OMEGA_D weighting, its diagonal weight table, its
 //     direction-value table and its "gradient becomes cost through 255 - g" rule.
 //     The dynamic-programming sweep of `find_optimal_path()` is replaced by a
-//     Dijkstra search over the same cost function — same result, simpler to keep
+//     Dijkstra search over the same cost function - same result, simpler to keep
 //     correct in a single-threaded browser.
 //
 //   * quick select ports the region-growing core of GIMP's bucket fill
@@ -54,7 +54,7 @@ function clampBox(x0: number, y0: number, x1: number, y1: number, w: number, h: 
 
 /**
  * Pixels the automatic tools sample. The active layer when it has a texture,
- * else the topmost visible raster layer that does — a tool must degrade rather
+ * else the topmost visible raster layer that does - a tool must degrade rather
  * than throw when the user is sitting on a group or an adjustment layer.
  */
 function sampleSource(ctx: ToolContext): Uint8Array | null {
@@ -255,7 +255,7 @@ export function rasterisePolygon(pts: Pt[], w: number, h: number): Uint8Array {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cost map — port of GIMP's gimptilehandleriscissors.c
+// Cost map - port of GIMP's gimptilehandleriscissors.c
 //
 // 3×3 smoothing, then a Sobel pair; per pixel the strongest response across the
 // four channels wins (GIMP does the same over R'G'B'A). Byte 0 is the gradient
@@ -289,7 +289,7 @@ export function buildGradientMap(px: Uint8Array, docW: number, docH: number, box
   const at = (x: number, y: number, c: number): number =>
     px[(clamp(y, 0, docH - 1) * docW + clamp(x, 0, docW - 1)) * 4 + c]
 
-  // Pass 1 — GIMP's blur_32 kernel: centre 24, neighbours 1, divisor 32.
+  // Pass 1 - GIMP's blur_32 kernel: centre 24, neighbours 1, divisor 32.
   // The interior takes a branch-free path with plain index arithmetic; only the
   // rows and columns that need document clamping go through `at()`.
   const blur = new Uint8Array(w * h * 4)
@@ -322,7 +322,7 @@ export function buildGradientMap(px: Uint8Array, docW: number, docH: number, box
     }
   }
 
-  // Pass 2 — Sobel pair, strongest channel wins, u8-clamped exactly like GIMP
+  // Pass 2 - Sobel pair, strongest channel wins, u8-clamped exactly like GIMP
   // (its convolution stores the derivative in a byte around 128). Only interior
   // pixels are evaluated, so every tap is in range: no clamping needed.
   const bStride = w * 4
@@ -362,7 +362,7 @@ export function buildGradientMap(px: Uint8Array, docW: number, docH: number, box
  * Lazily-built document-wide cost map.
  *
  * GIMP never computes the whole map either: its `GimpTileHandlerIscissors`
- * validates tiles on demand as the wire visits them. Same idea here — building
+ * validates tiles on demand as the wire visits them. Same idea here - building
  * a 3 MP map up front costs seconds, while the handful of 128 px tiles a
  * gesture actually walks costs milliseconds. Tiles are computed with a two
  * pixel margin that is then discarded, so a tile seam never shows up as a fake
@@ -425,7 +425,7 @@ export class LazyCostMap implements GradientMap {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Least-cost path — port of gimpiscissorstool.c's cost model
+// Least-cost path - port of gimpiscissorstool.c's cost model
 // ─────────────────────────────────────────────────────────────────────────────
 
 const OMEGA_D = 0.2
@@ -610,7 +610,7 @@ export function leastCostPath(map: GradientMap, from: Pt, to: Pt): Pt[] {
 
 /**
  * Nudges a point onto the strongest edge within `radius`, weighting candidates
- * by 1 / (1 + distance) — GIMP's `find_max_gradient()` and its distance table.
+ * by 1 / (1 + distance) - GIMP's `find_max_gradient()` and its distance table.
  */
 export function snapToEdge(map: GradientMap, x: number, y: number, radius: number): Pt {
   const cx = clamp(Math.round(x), 0, map.w - 1)
@@ -634,7 +634,7 @@ export function snapToEdge(map: GradientMap, x: number, y: number, radius: numbe
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Contiguous region growing — port of gimppickable-contiguous-region.cc
+// Contiguous region growing - port of gimppickable-contiguous-region.cc
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -662,7 +662,7 @@ function pixelCoverage(px: Uint8Array, i: number, ref: Int32Array, threshold: nu
 
 /**
  * Four-connected region growing from `seeds`, bounded by `box` and by
- * `maxPixels`. Uses an explicit stack — no recursion, so a full-page region can
+ * `maxPixels`. Uses an explicit stack - no recursion, so a full-page region can
  * never blow the JS stack. Writes graded coverage into `out` (document-sized)
  * and returns how many pixels it added.
  */
@@ -752,7 +752,7 @@ function unbindKeys(): void {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1 & 2 — single row / single column marquee
+// 1 & 2 - single row / single column marquee
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface BandState { mode: SelectMode; pos: number }
@@ -827,7 +827,7 @@ registerTool('marquee-row', makeBandTool(false))
 registerTool('marquee-column', makeBandTool(true))
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3 — polygonal lasso
+// 3 - polygonal lasso
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Screen-space radius, in px, of the "click the first vertex to close" target. */
@@ -914,10 +914,10 @@ const polyTool = ((): ToolHandler => {
 registerTool('lasso-poly', polyTool)
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4 — magnetic lasso (GIMP "Intelligent Scissors")
+// 4 - magnetic lasso (GIMP "Intelligent Scissors")
 //
 // The option bar carries "width", "contrast" and "frequency", but `ToolContext`
-// does not (yet) hand tool option VALUES to a handler — so the live tunable is
+// does not (yet) hand tool option VALUES to a handler - so the live tunable is
 // the brush size, which maps naturally onto the search width; contrast and
 // frequency use the defaults declared in `toolDefs.ts`. The moment the contract
 // grows a `values` field these three constants are the only thing to swap.
@@ -1088,14 +1088,14 @@ const magneticTool = ((): ToolHandler => {
 registerTool('lasso-magnetic', magneticTool)
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5 — quick select
+// 5 - quick select
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Colour distance, 0..255, that still belongs to the painted region. */
 const QUICK_BASE_TOLERANCE = 30
 /** Region growth stays inside this many brush radii around the dab. */
 const QUICK_REACH = 6
-/** Hard ceiling on pixels visited per dab — bounds a pathological flood. */
+/** Hard ceiling on pixels visited per dab - bounds a pathological flood. */
 const QUICK_MAX_PIXELS = 600_000
 
 interface QuickState {
@@ -1241,7 +1241,7 @@ const quickSelectTool = ((): ToolHandler => {
 registerTool('quick-select', quickSelectTool)
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6 — object select
+// 6 - object select
 //
 // HONEST DISCLAIMER: this is NOT semantic segmentation. There is no model here
 // and nothing understands what a "subject" is. What the tool does is classical
@@ -1287,7 +1287,7 @@ function morph(src: Uint8Array, w: number, h: number, grow: boolean): Uint8Array
   return out
 }
 
-/** 3×3 box blur — turns the binary subject edge into a one-pixel soft rim. */
+/** 3×3 box blur - turns the binary subject edge into a one-pixel soft rim. */
 function soften(src: Uint8Array, w: number, h: number): Uint8Array {
   const out = new Uint8Array(src.length)
   for (let y = 0; y < h; y++) {
@@ -1347,7 +1347,7 @@ export function segmentObject(px: Uint8Array, w: number, h: number, box: Box): U
   }
   const sigma = Math.sqrt(variance / n)
 
-  // Adaptive thresholds — deliberately generous on colour, strict on edges.
+  // Adaptive thresholds - deliberately generous on colour, strict on edges.
   const globalTol = clamp(3 * sigma + 20, 24, 110)
   const localTol = clamp(sigma + 10, 10, 48)
   const gradTol = clamp(mgrad * 2 + 30, 30, 170)

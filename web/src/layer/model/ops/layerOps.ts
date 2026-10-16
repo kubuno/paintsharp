@@ -3,11 +3,11 @@
 // Design rule that makes them trustworthy: an operation never builds its result
 // tree directly. It emits a list of primitive command payloads and the result is
 // obtained by APPLYING them. The tree returned and the tree the history replays
-// are therefore the same object by construction — undo cannot drift from redo.
+// are therefore the same object by construction - undo cannot drift from redo.
 //
 // Nothing here touches pixels. When an operation needs a raster (merge, flatten,
 // rasterise), it calls the injected `rasterize` callback, which the editor wires
-// to the real compositor — the same one that draws the screen, so that "what I
+// to the real compositor - the same one that draws the screen, so that "what I
 // see is what gets merged". Tests inject a fake.
 
 import {
@@ -105,7 +105,7 @@ function rasterizeWith(ctx: LayerOpContext, req: RasterizeRequest): RasterSurfac
 /**
  * Accumulates primitive payloads while keeping a live view of the resulting
  * tree, so an operation can address nodes by id at any point without tracking
- * index shifts by hand — the classic source of off-by-one bugs in reordering.
+ * index shifts by hand - the classic source of off-by-one bugs in reordering.
  */
 class OpBuilder {
   readonly payloads: CommandPayload[] = []
@@ -425,7 +425,7 @@ export function opUngroup(ctx: LayerOpContext): LayerOpResult {
     if (!g || !path) continue
 
     // Properties that cannot be pushed down faithfully. The caller is expected
-    // to have offered "flatten the group instead" through ConfirmDialog — never
+    // to have offered "flatten the group instead" through ConfirmDialog - never
     // a browser `confirm()`.
     const lossy = g.blendMode !== 'pass-through' && g.blendMode !== 'normal'
     if (lossy || g.styles !== null) b.warn('ungroup.lossy')
@@ -474,7 +474,7 @@ export function opMergeDown(ctx: LayerOpContext): LayerOpResult {
   const b = new OpBuilder(ctx.tree)
 
   // The layer below is a GROUP: the top layer simply moves inside it, on top.
-  // (Photoshop parity — it is NOT a rasterising merge.)
+  // (Photoshop parity - it is NOT a rasterising merge.)
   if (below.kind === 'group' || below.kind === 'artboard') {
     const node = b.removeById(top.id)
     if (!node) return refuse(ctx, 'notFound')

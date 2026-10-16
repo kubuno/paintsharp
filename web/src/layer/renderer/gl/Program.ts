@@ -1,11 +1,11 @@
-// Stage 1 (GPU abstraction) — compiled program with a typed uniform cache.
+// Stage 1 (GPU abstraction) - compiled program with a typed uniform cache.
 //
 // `getUniformLocation` is a driver round-trip and the compositor calls into a
 // program once per layer per tile, so locations are resolved ONCE, at link time,
 // from the program's own active-uniform list. That list also carries the
 // declared GL type of every uniform, which is what lets `setUniforms` dispatch
 // correctly without the caller having to remember that `uMode` is an int and
-// `uOpacity` a float — the classic source of silent INVALID_OPERATION.
+// `uOpacity` a float - the classic source of silent INVALID_OPERATION.
 //
 // This is the clean re-implementation of the `uloc` WeakMap cache of the current
 // engine (layer/renderer/glUtils.ts): same idea, but eager, per-program, and
@@ -21,7 +21,7 @@ export interface ProgramOptions {
   readonly fragment: string
   /** `#define` permutations, injected right after the `#version` line. */
   readonly defines?: Readonly<Record<string, DefineValue>>
-  /** Source appended after the defines — the device injects its shared chunks. */
+  /** Source appended after the defines - the device injects its shared chunks. */
   readonly preamble?: string
   /**
    * Attribute names bound to locations 0, 1, … before linking. Pinning them is
@@ -68,7 +68,7 @@ export function composeSource(
   return src.slice(0, m[0].length) + lines.join('\n') + '\n' + src.slice(m[0].length)
 }
 
-/** Annotate a shader log with the offending source lines — GLSL logs are terse. */
+/** Annotate a shader log with the offending source lines - GLSL logs are terse. */
 function annotate(log: string, src: string): string {
   const lines = src.split('\n')
   return log.replace(/\b(\d+):(\d+)\b/g, (whole, _col: string, row: string) => {
@@ -93,7 +93,7 @@ export class GLProgram implements GLResource {
   private readonly fragmentSrc: string
 
   /**
-   * Not called directly — go through `GLDevice.createProgram`.
+   * Not called directly - go through `GLDevice.createProgram`.
    * @internal
    */
   constructor(
@@ -210,7 +210,7 @@ export class GLProgram implements GLResource {
     return this.attribs.get(name) ?? -1
   }
 
-  /** Names of every active uniform — used by tests and the diagnostics panel. */
+  /** Names of every active uniform - used by tests and the diagnostics panel. */
   uniformNames(): string[] {
     this.ensureLinked()
     return [...this.uniforms.keys()].filter(n => !n.endsWith('[0]'))
@@ -282,7 +282,7 @@ export class GLProgram implements GLResource {
     }
   }
 
-  /** Full source actually sent to the driver — for shader-error triage. */
+  /** Full source actually sent to the driver - for shader-error triage. */
   sources(): { vertex: string; fragment: string } {
     return { vertex: this.vertexSrc, fragment: this.fragmentSrc }
   }
